@@ -1,0 +1,58 @@
+name: Online Release Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "network/**"
+      - "backend/**"
+      - "gameplay/network/**"
+      - "gameplay/world/**"
+      - "tools/**"
+      - "tests/online_*"
+      - "project.godot"
+      - "export_presets.cfg"
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validation tools
+        run: |
+          python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+      - name: Install Godot 4.6.3 and export templates
+        run: tools/install_godot_ci.sh
+      - name: Static release validation
+        run: |
+          python tools/validate_online_release.py
+          gdlint $(find . -name '*.gd' -type f | sort)
+          gdformat --check $(find . -name '*.gd' -type f | sort)
+      - name: Typecheck Rivet control plane
+        working-directory: backend/rivet-control
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+      - name: Build dedicated server
+        run: tools/build_dedicated_server.sh
+      - name: Build container image
+        run: docker build -f backend/game-server/Dockerfile -t colony-dominion-server:${{ github.sha }} .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colony-dedicated-server
+          path: |
+            build/server/colony-dominion-server.x86_64
+            build/server/colony-dominion-server.pck
+          if-no-files-found: error

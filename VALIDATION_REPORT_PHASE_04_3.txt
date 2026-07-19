@@ -1,0 +1,20 @@
+COLONY DOMINION.IO — PHASE 04.3 VALIDATION
+Date: 2026-07-18
+Engine target: Godot 4.6.3
+
+PASS  GDScript/resources: 36 scripts + 15 resources, 0 errors, 0 warnings
+PASS  res:// references: 0 missing references after wildcard exclusions
+PASS  PNG integrity: 36/36 images decoded
+PASS  Visual restore: 25/25 unit, prop, resource and structure hashes match the uploaded Phase 04 originals
+PASS  Scheduler model: 30 FPS input produces 60 bucket steps/second, preserving 20 Hz per minion
+PASS  Stall guard: a 0.50 s stall is capped at 6 catch-up steps and excess backlog is discarded/telemetrized
+PASS  Freed-object safety: spatial index and entity resolution use validated instance IDs
+PASS  Pool lifecycle: inactive unit/projectile/prop/resource nodes are detached and freed on scene exit
+PASS  Chunk policy: client=local interest, dedicated server=all active interests, predicted WARM residency is hard-capped
+PASS  Network hardening: peer/snapshot cleanup, remote-human command path, projectile team attribution, Android INTERNET permission
+
+RUNTIME PENDING
+Godot 4.6.3 is not installed in this validation environment, so the six headless tests and Android profiler captures were not executed here. Run the commands in PHASE_04_3_VISUAL_SMOOTHING_PRODUCTION_HARDENING.md before calling the build production-ready.
+
+HONEST RELEASE VERDICT
+The known crash, visual downscale regression, low-FPS scheduler defect and visible swarm stepping have code-level fixes and static gates. The build is not claimed to be perfect or production-certified until a real Android 360-minion battle, 20-minute soak test and future ENet packet-loss/reconnect suite pass.

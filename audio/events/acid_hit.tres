@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"acid_hit"
+stream_paths = PackedStringArray("res://audio/sfx/combat/acid_hit_01.wav", "res://audio/sfx/combat/acid_hit_02.wav", "res://audio/sfx/combat/acid_hit_03.wav")
+bus = &"Combat"
+positional = true
+volume_db_min = -8
+volume_db_max = -5
+pitch_min = 0.92
+pitch_max = 1.08
+max_instances = 5
+cooldown_seconds = 0.05
+emitter_cooldown_seconds = 0.18
+max_distance = 1200.0
+priority = 58
+ducking_db = 1.2
+ducking_seconds = 0.16

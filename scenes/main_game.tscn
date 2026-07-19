@@ -1,0 +1,32 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://gameplay/match/match_controller.gd" id="1_match"]
+[ext_resource type="Script" path="res://gameplay/world/camera_controller.gd" id="2_camera"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="3_hud"]
+
+[node name="GameRoot" type="Node2D"]
+script = ExtResource("1_match")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Ground" type="Node2D" parent="World"]
+z_index = -4090
+
+[node name="Decorations" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="Resources" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="Structures" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="Units" type="Node2D" parent="World"]
+
+[node name="Projectiles" type="Node2D" parent="World"]
+
+[node name="PlayerCamera" type="Camera2D" parent="."]
+process_callback = 0
+script = ExtResource("2_camera")
+
+[node name="HUD" parent="." instance=ExtResource("3_hud")]

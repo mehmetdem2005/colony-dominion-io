@@ -1,0 +1,26 @@
+{
+  "terms": {
+    "version": "1.0.0-draft",
+    "required": true,
+    "acceptance_label": "Kullanım Koşulları'nı okudum ve kabul ediyorum.",
+    "path": "res://legal/terms_tr.md"
+  },
+  "community_rules": {
+    "version": "1.0.0-draft",
+    "required": true,
+    "acceptance_label": "Topluluk Kuralları'nı okudum ve kabul ediyorum.",
+    "path": "res://legal/community_rules_tr.md"
+  },
+  "privacy_notice": {
+    "version": "1.0.0-draft",
+    "required": true,
+    "acceptance_label": "Gizlilik ve KVKK Aydınlatma Metni'ni okudum.",
+    "path": "res://legal/privacy_kvkk_tr.md"
+  },
+  "analytics_consent": {
+    "version": "1.0.0-draft",
+    "required": false,
+    "acceptance_label": "İsteğe bağlı analiz verilerinin işlenmesine izin veriyorum.",
+    "path": "res://legal/analytics_consent_tr.md"
+  }
+}

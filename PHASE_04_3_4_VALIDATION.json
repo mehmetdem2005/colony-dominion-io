@@ -1,0 +1,46 @@
+{
+  "status": "ok_static_validation",
+  "phase": "04.3.4-ui-camera-visibility-hardening",
+  "godot_target": "4.6.3-stable",
+  "reviewed_videos": [
+    {
+      "name": "Screenrecorder-2026-07-18-22-52-28-810.mp4",
+      "duration_seconds": 16.308
+    },
+    {
+      "name": "Screenrecorder-2026-07-18-22-52-48-653.mp4",
+      "duration_seconds": 7.11
+    }
+  ],
+  "root_causes": [
+    "camera velocity look-ahead pushed the trailing swarm under the production HUD",
+    "full anti-aliased unit rings accumulated translucent edge pixels in dense overlap",
+    "minimap pulse and chunk alpha transitions introduced stepped temporal changes",
+    "fixed-pixel HUD layout ignored mobile safe areas and alternate landscape aspect ratios",
+    "global custom input controls lacked a modal interaction gate"
+  ],
+  "changed_runtime_files": 10,
+  "added_regression_tests": 1,
+  "gdscripts_checked": 49,
+  "gdscript_parser_errors": 0,
+  "blocking_lint_errors": 0,
+  "accepted_existing_lint_warnings": [
+    "gameplay/colony/colony_controller.gd:1214: max-file-lines",
+    "gameplay/world/world_stream_manager.gd:1197: max-file-lines"
+  ],
+  "resource_references_checked": 159,
+  "missing_resource_references": 0,
+  "png_files_verified": 36,
+  "wav_files_verified": 51,
+  "ogg_files_verified": 11,
+  "responsive_layout_scenarios_analysed": [
+    "1280x720",
+    "1600x720",
+    "1280x800",
+    "1024x600",
+    "960x540"
+  ],
+  "new_test": "res://tests/ui_camera_visibility_regression_test.gd",
+  "engine_runtime_test_executed": false,
+  "engine_runtime_test_reason": "Godot 4.6.3 executable is not installed in the build container and the official binary could not be materialized in this environment."
+}

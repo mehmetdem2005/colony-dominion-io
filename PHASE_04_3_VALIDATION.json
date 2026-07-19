@@ -1,0 +1,79 @@
+{
+  "phase": "04.3-visual-smoothing-production-hardening",
+  "engine_target": "Godot 4.6.3",
+  "validation_date": "2026-07-18",
+  "status": "static_validation_passed_runtime_pending",
+  "research_basis": [
+    "https://docs.godotengine.org/en/4.6/tutorials/physics/interpolation/using_physics_interpolation.html",
+    "https://docs.godotengine.org/en/4.6/tutorials/rendering/jitter_stutter.html",
+    "https://docs.godotengine.org/en/4.6/tutorials/performance/cpu_optimization.html",
+    "https://docs.godotengine.org/en/4.6/classes/class_canvasitem.html",
+    "https://docs.godotengine.org/en/4.6/tutorials/assets_pipeline/importing_images.html",
+    "https://docs.godotengine.org/en/4.6/tutorials/networking/high_level_multiplayer.html",
+    "https://docs.godotengine.org/en/4.6/tutorials/export/exporting_for_dedicated_servers.html"
+  ],
+  "static_analysis": {
+    "gdscript_files": 36,
+    "parsed_resources": 15,
+    "errors": 0,
+    "warnings": 0,
+    "missing_res_references": 0
+  },
+  "asset_validation": {
+    "png_files_decoded": 36,
+    "restored_original_hashes_checked": 25,
+    "restored_original_hash_mismatches": 0,
+    "selected_source_bytes": 5417760,
+    "selected_decoded_rgba8_bytes": 18775960,
+    "restored_decoded_memory_delta_bytes": 9947136,
+    "unit_texture_height_px": 512,
+    "resource_texture_max_dimension_px": 384,
+    "prop_texture_max_dimension_px": 512,
+    "structure_texture_max_dimension_px": 512,
+    "menu_background": "1280x720",
+    "canvas_filter": "LINEAR_WITH_MIPMAPS"
+  },
+  "scheduler_model": {
+    "target_minion_tick_hz": 20,
+    "bucket_count": 3,
+    "steps_for_one_second_at_30_fps": 60,
+    "expected_bucket_steps": 60,
+    "maximum_bucket_steps_per_frame": 6,
+    "half_second_stall_catchup_steps": 6,
+    "discarded_stall_backlog_seconds": 0.4
+  },
+  "architecture_gates": {
+    "physics_interpolation_enabled": true,
+    "interpolation_reset_on_spawn_pool_and_stream": true,
+    "visual_root_smoothing": true,
+    "independent_minion_callbacks": false,
+    "z_sort_world_step": 8,
+    "detached_inactive_pools": true,
+    "stable_entity_ids": true,
+    "freed_object_safe_spatial_index": true,
+    "snapshot_cache_cleanup": true,
+    "client_uses_local_interest_only": true,
+    "dedicated_server_uses_all_active_interests": true,
+    "predicted_warm_chunks_respect_resident_limit": true,
+    "logical_projectile_limit": 2048,
+    "android_internet_permission": true
+  },
+  "runtime_validation": {
+    "executed": false,
+    "reason": "Godot 4.6.3 executable is not installed in the validation environment",
+    "required_tests": [
+      "spatial_index_lifecycle_test.gd",
+      "network_entity_registry_test.gd",
+      "network_command_validator_test.gd",
+      "swarm_scheduler_cadence_test.gd",
+      "visual_quality_regression_test.gd",
+      "swarm_crowd_stress_test.gd"
+    ],
+    "device_gates": [
+      "360-minion close combat frame-time on a low or mid-range Android device",
+      "1-percent-low FPS and thermal throttling measurement",
+      "20-minute entity, snapshot and pool soak test",
+      "ENet latency, packet-loss and reconnect tests after transport implementation"
+    ]
+  }
+}

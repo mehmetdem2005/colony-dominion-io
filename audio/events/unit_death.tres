@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"unit_death"
+stream_paths = PackedStringArray("res://audio/sfx/units/death_01.wav", "res://audio/sfx/units/death_02.wav", "res://audio/sfx/units/death_03.wav")
+bus = &"Units"
+positional = true
+volume_db_min = -10
+volume_db_max = -6
+pitch_min = 0.9
+pitch_max = 1.08
+max_instances = 5
+cooldown_seconds = 0.07
+emitter_cooldown_seconds = 0.5
+max_distance = 1150.0
+priority = 60
+ducking_db = 1.0
+ducking_seconds = 0.18

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"ui_press"
+stream_paths = PackedStringArray("res://audio/sfx/ui/ui_press_01.wav", "res://audio/sfx/ui/ui_press_02.wav", "res://audio/sfx/ui/ui_press_03.wav")
+bus = &"UI"
+positional = false
+volume_db_min = -9
+volume_db_max = -6
+pitch_min = 0.96
+pitch_max = 1.04
+max_instances = 3
+cooldown_seconds = 0.035
+emitter_cooldown_seconds = 0.04
+max_distance = 1000.0
+priority = 35
+ducking_db = 0
+ducking_seconds = 0

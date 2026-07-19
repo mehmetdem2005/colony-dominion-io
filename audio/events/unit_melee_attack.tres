@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"unit_melee_attack"
+stream_paths = PackedStringArray("res://audio/sfx/combat/melee_01.wav", "res://audio/sfx/combat/melee_02.wav", "res://audio/sfx/combat/melee_03.wav", "res://audio/sfx/combat/melee_04.wav")
+bus = &"Combat"
+positional = true
+volume_db_min = -12
+volume_db_max = -8
+pitch_min = 0.88
+pitch_max = 1.14
+max_instances = 7
+cooldown_seconds = 0.035
+emitter_cooldown_seconds = 0.16
+max_distance = 950.0
+priority = 42
+ducking_db = 0
+ducking_seconds = 0

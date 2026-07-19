@@ -1,0 +1,23 @@
+{
+  "phase": "04.3.1-runtime-streaming-fixes",
+  "engine_target": "Godot 4.6.3",
+  "validation_date": "2026-07-18",
+  "status": "static_validation_passed_runtime_pending",
+  "fixed": {
+    "viewport_default_canvas_filter": 2,
+    "camera_process_callback": "physics",
+    "overlap_marker_alpha_accumulation": false,
+    "stable_z_sub_layers": 4,
+    "z_bucket_world_units": 16,
+    "z_hysteresis_world_units": 4,
+    "dormant_navigation_hz": 2,
+    "dormant_group_translation": true,
+    "dormant_requires_resident_chunk": false,
+    "unrelated_flee_navigation_blocked": true
+  },
+  "runtime_validation": {
+    "executed": false,
+    "reason": "Godot 4.6.3 executable is not installed in the validation environment",
+    "added_test": "tests/runtime_streaming_regression_test.gd"
+  }
+}

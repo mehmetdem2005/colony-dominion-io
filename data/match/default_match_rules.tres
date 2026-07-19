@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MatchRules" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/match/match_rules.gd" id="1_rules"]
+
+[resource]
+script = ExtResource("1_rules")
+match_duration_seconds = 1200.0
+unit_cap_per_colony = 72
+server_tick_rate = 20.0
+projectile_tick_rate = 30.0
+max_server_steps_per_frame = 6
+max_projectile_steps_per_frame = 5
+spatial_rebuild_interval = 0.12
+leaderboard_interval = 0.75
+simulation_tier_interval = 0.75
+audio_context_interval = 0.25
+audio_context_radius = 1700.0
+unit_pool_limit = 128
+projectile_pool_limit = 96
+max_visual_projectiles = 120
+max_logical_projectiles = 2048
+max_commands_per_second = 45
+command_journal_capacity = 240

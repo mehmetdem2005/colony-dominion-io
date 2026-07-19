@@ -1,0 +1,37 @@
+COLONY DOMINION.IO — PHASE 04.2 VALIDATION
+Date: 2026-07-18
+Target: Godot 4.6.3 / Android landscape / Mobile renderer
+
+PASS  GDScript static parse/type analysis: 33 scripts
+PASS  Analyzer warnings: 0
+PASS  Parsed scene/resource files: 15
+PASS  Referenced res:// paths missing: 0
+PASS  PNG decode: 36/36
+PASS  Unit/resource mobile texture ceiling: 256 px
+PASS  Prop/structure mobile texture ceiling: 384 px
+PASS  Menu background: 1280x720
+PASS  Minions use centralized three-bucket 20 Hz simulation
+PASS  Independent minion physics callbacks disabled
+PASS  Unit-to-unit physics collision pairs removed
+PASS  Team-bucket spatial queries enabled
+PASS  Unit and projectile pools bounded
+PASS  Visual projectile count bounded to 120; overflow is logical
+PASS  Resource respawn/focus centralized at 4 Hz
+PASS  Harvest inventory mutations batched at 5 Hz
+PASS  Stable entity registry rejects retired pooled IDs
+PASS  UI commands cross validated authority boundary
+PASS  Peer ownership, sequence, payload and rate checks present
+PASS  Multi-anchor chunk interest union implemented
+PASS  Headless scene and dedicated-server export preset present
+
+RUNTIME TEST STATUS
+Godot executable is unavailable in this environment, so the included Godot
+headless lifecycle/command/crowd tests could not be executed here. Run:
+
+  godot --headless --path . --script res://tests/spatial_index_lifecycle_test.gd
+  godot --headless --path . --script res://tests/network_entity_registry_test.gd
+  godot --headless --path . --script res://tests/network_command_validator_test.gd
+  godot --headless --path . --script res://tests/swarm_crowd_stress_test.gd
+
+The crowd test creates six colonies with 60 minions each and checks that no
+minion owns an independent physics callback before sampling 180 physics frames.

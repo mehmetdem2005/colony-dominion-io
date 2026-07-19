@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"queen_danger"
+stream_paths = PackedStringArray("res://audio/sfx/colony/queen_danger.wav")
+bus = &"UI"
+positional = false
+volume_db_min = -5
+volume_db_max = -3
+pitch_min = 1
+pitch_max = 1
+max_instances = 1
+cooldown_seconds = 2.0
+emitter_cooldown_seconds = 2.0
+max_distance = 1000.0
+priority = 100
+ducking_db = 6
+ducking_seconds = 0.8

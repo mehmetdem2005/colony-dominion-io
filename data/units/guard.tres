@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/units/unit_definition.gd" id="1_def"]
+[ext_resource type="Texture2D" path="res://assets/units/guard.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_def")
+texture = ExtResource("2_tex")
+unit_id = &"guard"
+display_name = "Muhafız"
+role = &"tank"
+max_health = 285.0
+move_speed = 130.0
+acceleration = 700.0
+attack_damage = 22.0
+attack_range = 45.0
+attack_interval = 1.0
+aggro_range = 220.0
+body_radius = 21.0
+sprite_world_size = 72.0
+formation_spacing = 55.0
+gather_rate = 0
+ranged = false
+spawn_time = 2.8
+score_value = 45
+cost_seed = 20
+cost_protein = 20
+cost_stone = 10

@@ -1,0 +1,49 @@
+{
+  "phase": "04.2-crowd-network-ready",
+  "engine_target": "Godot 4.6.3",
+  "validation_date": "2026-07-18",
+  "status": "static_validation_passed_runtime_pending",
+  "static_analysis": {
+    "gdscript_files": 33,
+    "scene_and_resource_files": 15,
+    "errors": 0,
+    "warnings": 0,
+    "analyzer": "@gdscript-analyzer/core"
+  },
+  "asset_validation": {
+    "png_files_decoded": 36,
+    "missing_res_references": 0,
+    "mobile_unit_and_resource_limit_px": 256,
+    "mobile_prop_and_structure_limit_px": 384,
+    "menu_background": "1280x720",
+    "selected_asset_source_bytes_before": 5417760,
+    "selected_asset_source_bytes_after": 3248481
+  },
+  "architecture_gates": {
+    "independent_minion_physics_callbacks": false,
+    "swarm_tick_hz": 20,
+    "swarm_bucket_count": 3,
+    "projectile_tick_hz": 30,
+    "max_visual_projectiles": 120,
+    "unit_pool_limit": 128,
+    "projectile_pool_limit": 96,
+    "resource_simulation_hz": 4,
+    "inventory_batch_hz": 5,
+    "stable_network_entity_ids": true,
+    "validated_authority_command_gate": true,
+    "peer_command_rate_limit_per_second": 45,
+    "multi_interest_chunk_streaming": true,
+    "headless_server_scene": true,
+    "dedicated_server_export_preset": true
+  },
+  "runtime_tests": {
+    "executed": false,
+    "reason": "Godot executable is not installed in the validation environment",
+    "included": [
+      "res://tests/spatial_index_lifecycle_test.gd",
+      "res://tests/network_entity_registry_test.gd",
+      "res://tests/network_command_validator_test.gd",
+      "res://tests/swarm_crowd_stress_test.gd"
+    ]
+  }
+}

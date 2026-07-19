@@ -1,0 +1,21 @@
+COLONY DOMINION.IO — PHASE 04.3.2 VALIDATION
+Date: 2026-07-18
+Engine target: Godot 4.6.3 Mobile renderer
+
+PASS  GDScript parser/linter validation
+PASS  39 GDScript files scanned
+PASS  139 res:// references checked
+PASS  0 missing project references
+PASS  36 PNG files decoded successfully
+PASS  0 duplicate function declarations
+PASS  Compact source dock geometry check
+PASS  Minimap is positioned directly beside the source dock
+PASS  Production dock width avoids right command controls
+PASS  Local obstacle avoidance module is referenced by ColonyUnit
+PASS  Runtime regression scripts included
+
+RUNTIME PENDING
+Godot 4.6.3 executable was not available in the validation container.
+Run:
+  godot --headless --path . --script res://tests/runtime_streaming_regression_test.gd
+  godot --headless --path . --script res://tests/ai_navigation_ui_regression_test.gd

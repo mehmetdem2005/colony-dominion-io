@@ -1,0 +1,16 @@
+COLONY DOMINION.IO — PHASE 04.3.1 VALIDATION
+Date: 2026-07-18
+Engine target: Godot 4.6.3
+
+PASS  project.godot Viewport default canvas filter changed from invalid enum sentinel 4 to valid LINEAR_WITH_MIPMAPS value 2
+PASS  PlayerCamera scene and controller explicitly use physics process callback
+PASS  CanvasItem scene texture_filter=4 values retained because they belong to the separate valid CanvasItem enum
+PASS  Overlap markers no longer use order-dependent translucent filled discs
+PASS  Unit render order uses stable entity sublayers plus Z-bucket hysteresis
+PASS  DORMANT NPC colonies receive chunk-independent 2 Hz group macro translation
+PASS  Dormant world-bound clamping preserves the colony group translation
+PASS  Close-threat bot movement no longer continues toward an unrelated resource goal
+PASS  New runtime_streaming_regression_test.gd covers configuration and dormant movement invariants
+
+RUNTIME PENDING
+Godot 4.6.3 is not installed in this environment. The added headless regression test and Android device run must be executed in Godot before production certification.

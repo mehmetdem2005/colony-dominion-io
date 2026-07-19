@@ -1,0 +1,23 @@
+Colony Dominion.io Phase 04.1 Validation
+Target: Godot 4.6.3 stable / Mobile renderer
+Date: 2026-07-18
+
+Static checks:
+- Godot 4.x GDScript analyzer: PASS (28 scripts, 0 errors, 0 warnings)
+- TSCN/TRES parser: PASS (14 files)
+- PNG decode: PASS (35 files)
+- res:// reference existence: PASS (99 occurrences, 62 unique paths, 0 missing)
+- class_name count: 23
+- Mobile renderer project setting: PASS
+- world bounds: 36000 x 24000
+- logical chunks: 30 x 20 = 600
+- active chunk radius: 1 (maximum 3 x 3 ACTIVE working set)
+- resident chunk limit: 18 (ACTIVE + WARM)
+- incremental build budget: 1400 microseconds / 5 entity steps per frame
+- object pool limits: 260 props / 120 resources
+- freed-object spatial index regression source: PRESENT
+
+Runtime note:
+- The container does not include the Godot executable, so the included Godot runtime regression test could not be executed here.
+- The package was validated through a Godot 4.x parser/type analyzer with an embedded engine model, TSCN/TRES parsing, resource-path checks, PNG decoding, and ZIP CRC.
+

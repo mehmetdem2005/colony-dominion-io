@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/units/unit_definition.gd" id="1_def"]
+[ext_resource type="Texture2D" path="res://assets/units/worker.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_def")
+texture = ExtResource("2_tex")
+unit_id = &"worker"
+display_name = "İşçi"
+role = &"worker"
+max_health = 58.0
+move_speed = 185.0
+acceleration = 1200.0
+attack_damage = 4.0
+attack_range = 34.0
+attack_interval = 1.1
+aggro_range = 80.0
+body_radius = 11.0
+sprite_world_size = 40.0
+formation_spacing = 34.0
+gather_rate = 4
+ranged = false
+spawn_time = 1.2
+score_value = 8
+cost_seed = 10

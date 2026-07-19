@@ -1,0 +1,9 @@
+.godot/
+build/
+backend/**/node_modules/
+backend/**/.env
+backend/**/*.tgz
+config/backend_config.local.json
+*.apk
+*.aab
+*.pck

@@ -1,0 +1,9 @@
+OPEN THIS PROJECT
+
+Import this exact file in Godot 4.6.3:
+colony-dominion-io-phase-05-3-online-production-completion/project.godot
+
+Expected startup marker:
+[Colony Dominion] Build: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
+
+Do not merge with Phase 05.2 or older directories.

@@ -1,0 +1,25 @@
+{
+  "phase": "05.3.1-live-deployment",
+  "build_id": "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION",
+  "protocol_version": 3,
+  "checks": {
+    "gdformat_files": 107,
+    "gdlint": "passed_with_project_style_exclusions",
+    "deployment_fixture": "passed",
+    "online_release_validator": "passed",
+    "runtime_res_references": 411,
+    "missing_runtime_references": 0,
+    "workflow_yaml": "passed",
+    "shell_syntax": "passed",
+    "python_compile": "passed",
+    "rivet_build_publisher_types": "passed_against_@rivet-gg/api_25.5.3",
+    "secret_scan": "passed",
+    "godot_engine_runtime": "not_run_in_this_environment",
+    "live_cloud_deployment": "not_run"
+  },
+  "notes": [
+    "Four legacy style-only gdlint rules are disabled; parser/import/headless tests remain in CI.",
+    "Staging must complete before production.",
+    "Production workflow requires explicit DEPLOY-PRODUCTION confirmation."
+  ]
+}

@@ -1,0 +1,15 @@
+COLONY DOMINION.IO — PHASE 04.3.3 AUDIO VALIDATION
+Status: OK
+Target: Godot 4.6.3 stable / Android arm64
+
+Audio events: 27
+Audio assets: 62 (SFX WAV=51, music OGG=6, ambience OGG=5)
+Audio bytes: 3085582
+Maximum decoded peak: 0.893835
+Maximum loop endpoint jump: 0.002373
+Resource references checked: 178
+GDScript files checked: 48
+Blocking GDScript lint errors: 0
+Accepted pre-existing line-budget warnings: 2
+
+Runtime note: Godot 4.6.3 executable was unavailable in the container, so the included headless regression test was not executed here.

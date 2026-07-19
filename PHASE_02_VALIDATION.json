@@ -1,0 +1,18 @@
+{
+  "png_count": 35,
+  "reference_count": 96,
+  "class_count": 18,
+  "ground_seam_lr_mae": 0.0,
+  "ground_seam_tb_mae": 0.0,
+  "world_size": [
+    36000,
+    24000
+  ],
+  "world_area_multiplier": 100,
+  "chunk_size": 1200,
+  "logical_chunks": [
+    30,
+    20
+  ],
+  "errors": []
+}

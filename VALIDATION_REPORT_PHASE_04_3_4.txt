@@ -1,0 +1,27 @@
+COLONY DOMINION.IO — PHASE 04.3.4 UI/CAMERA VISIBILITY HARDENING
+Status: STATIC VALIDATION OK
+Target: Godot 4.6.3 stable / Android landscape
+
+Videos reviewed: 2
+Runtime files changed: 10
+Regression tests added: 1
+GDScript files parsed: 49
+Parser errors: 0
+Blocking lint errors: 0
+Accepted pre-existing line-budget findings: 2
+Resource references checked: 159
+Missing references: 0
+PNG files verified: 36
+WAV files verified: 51
+OGG files verified: 11
+
+Resolved systems:
+- north-movement swarm/HUD occlusion
+- dense ant ring haze and order flicker
+- minimap pulse and chunk-opacity flashing
+- incorrect smoothed-camera minimap rectangle
+- fixed-layout safe-area/aspect-ratio defects
+- modal panel input leakage and held-joystick movement
+- resource focus alpha pulse
+
+Runtime note: the Godot 4.6.3 executable was unavailable in the container. Run the included headless regression test and the six-step Android acceptance sequence from PHASE_04_3_4_UI_CAMERA_VISIBILITY_HARDENING.md.

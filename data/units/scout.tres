@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/units/unit_definition.gd" id="1_def"]
+[ext_resource type="Texture2D" path="res://assets/units/scout.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_def")
+texture = ExtResource("2_tex")
+unit_id = &"scout"
+display_name = "İzci"
+role = &"flanker"
+max_health = 76.0
+move_speed = 260.0
+acceleration = 1600.0
+attack_damage = 13.0
+attack_range = 38.0
+attack_interval = 0.55
+aggro_range = 340.0
+body_radius = 12.0
+sprite_world_size = 46.0
+formation_spacing = 42.0
+gather_rate = 0
+ranged = false
+spawn_time = 1.4
+score_value = 18
+cost_seed = 12
+cost_nectar = 8

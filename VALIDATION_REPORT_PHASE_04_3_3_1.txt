@@ -1,0 +1,16 @@
+COLONY DOMINION.IO — PHASE 04.3.3.1 GDSCRIPT CONST HOTFIX
+Status: OK
+Target: Godot 4.6.3 stable / Android arm64
+
+Changed runtime files: 1
+Changed regression tests: 1
+Audio event paths checked: 27
+Audio event resources checked: 27
+SFX stream references checked: 51
+Music stems checked: 6
+Ambience stems checked: 5
+GDScript files checked: 48
+Blocking parse/lint errors: 0
+Accepted pre-existing line-budget findings: 2
+
+Runtime note: Godot 4.6.3 executable was unavailable in the container. The included headless audio regression test remains ready for execution on-device or in CI.

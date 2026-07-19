@@ -1,0 +1,26 @@
+COLONY DOMINION.IO — PHASE 04.4 VALIDATION
+Date: 2026-07-19
+Target: Godot 4.6.3.stable
+
+GDScript files: 63
+Scenes: 9
+Resources: 34
+Literal res:// references: 286
+Regression tests: 12
+PNG/WAV/OGG: 36/51/11
+Maximum script lines: 1000
+Scripts over 1000 lines: 0
+
+gdlint: PASS
+Architecture-file gdformat check: PASS
+Class-name uniqueness: PASS
+Literal resource reference existence: PASS
+Asset decode: PASS
+ZIP integrity: PASS
+Godot runtime/headless execution: NOT RUN (engine binary unavailable in environment)
+
+Run on device/CI:
+godot --headless --path . --script res://tests/production_architecture_foundation_test.gd
+
+Full suite:
+for test in tests/*_test.gd; do godot --headless --path . --script "res://$test" || exit 1; done

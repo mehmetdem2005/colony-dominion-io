@@ -1,0 +1,47 @@
+COLONY DOMINION.IO — PHASE 04.5 AAA BOUNDARY ARCHITECTURE
+Godot target: 4.6.3.stable
+Validation date: 2026-07-19
+
+VERDICT
+- Before: modularized monolith with high-centrality controllers
+- After: production modular monolith / AAA-ready foundation
+- Spaghetti: no
+- Complete AAA platform: not yet
+
+STATIC QUALITY GATES
+- GDScript files: 74
+- class_name declarations: 57
+- Scenes: 9
+- Resources: 34
+- Regression tests: 13
+- Literal res:// references checked: 344
+- Missing literal references: 0
+- Class dependency cycles: 0
+- Duplicate class_name declarations: 0
+- Scripts over 900 lines: 0
+- Largest script: gameplay/world/world_stream_manager.gd (888 lines)
+- gdlint: PASS
+- gdformat check, all scripts: PASS
+- PNG/WAV/OGG integrity: PASS
+- Duplicate audio event IDs: 0
+
+BOUNDARY GATES
+- Global match EventBus: removed
+- MatchController raw Input polling: removed
+- MatchController peer/rate-limit tables: removed
+- Gameplay dependency on ColonyHUD/ColonyMinimap: removed
+- ColonyController swarm bucket state: removed
+- ColonyController active gather workflow state: removed
+- Match-scoped event isolation: regression test added
+- Presentation adapter port: added
+
+ENGINE TEST STATUS
+The exact Godot 4.6.3 binary was not available in this execution environment. Engine parser, scene startup and headless regression tests were not claimed as executed.
+
+DEVICE/ENGINE COMMAND
+  godot --headless --path . --script res://tests/architecture_boundaries_test.gd
+
+FULL SUITE
+  for test in tests/*_test.gd; do
+    godot --headless --path . --script "res://$test" || exit 1
+  done

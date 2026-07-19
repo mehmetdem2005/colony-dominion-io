@@ -1,0 +1,31 @@
+{
+  "phase": "04_1_stability_advanced_streaming",
+  "target": "Godot 4.6.3 stable / Mobile renderer",
+  "gdscript_count": 28,
+  "gdscript_errors": 0,
+  "gdscript_warnings": 0,
+  "scene_resource_count": 14,
+  "scene_resource_parse_errors": 0,
+  "png_count": 35,
+  "png_errors": 0,
+  "res_reference_occurrences": 99,
+  "unique_res_references": 62,
+  "missing_res_references": [],
+  "runtime_test_included": "res://tests/spatial_index_lifecycle_test.gd",
+  "runtime_test_executed_in_container": false,
+  "runtime_test_blocker": "Godot executable is not installed in the container",
+  "assertions": {
+    "spatial_index_stores_instance_ids": true,
+    "freed_entries_resolve_without_object_cast": true,
+    "projectile_target_uses_instance_id": true,
+    "incremental_chunk_build_jobs": true,
+    "active_warm_chunk_residency": true,
+    "predictive_chunk_prefetch": true,
+    "resident_chunk_limit_18": true,
+    "stream_frame_budget_usec_1400": true,
+    "bounded_prop_and_resource_pools": true,
+    "chunk_local_resource_queries": true,
+    "inactive_resource_processing_disabled": true
+  }
+}
+

@@ -1,0 +1,26 @@
+{
+  "status": "ok",
+  "phase": "05.1.1-secure-deployment-bootstrap",
+  "godot_target": "4.6.3-stable",
+  "gdscript_files": 92,
+  "global_classes": 69,
+  "scene_files": 10,
+  "resource_files": 34,
+  "json_files": 23,
+  "literal_res_references": 370,
+  "unique_literal_res_references": 208,
+  "regression_tests": 16,
+  "supabase_migrations": 2,
+  "png_files": 36,
+  "wav_files": 51,
+  "ogg_files": 11,
+  "secret_shaped_values": 0,
+  "external_cloud_mutation_executed": false,
+  "external_cloud_mutation_reason": "Build runtime cannot resolve external Supabase/Rivet API domains.",
+  "typescript_validation": {
+    "phase_05_1_exact_rivetkit_2_3_4_contract": "passed previously",
+    "phase_05_1_1_changed_source_syntax": "passed with TypeScript 5.8.3",
+    "full_npm_install_in_current_runtime": "timed out on internal dependency registry"
+  },
+  "errors": []
+}

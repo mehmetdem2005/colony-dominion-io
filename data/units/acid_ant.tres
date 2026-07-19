@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/units/unit_definition.gd" id="1_def"]
+[ext_resource type="Texture2D" path="res://assets/units/acid_ant.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_def")
+texture = ExtResource("2_tex")
+unit_id = &"acid_ant"
+display_name = "Asit Karıncası"
+role = &"ranged"
+max_health = 88.0
+move_speed = 155.0
+acceleration = 850.0
+attack_damage = 17.0
+attack_range = 165.0
+attack_interval = 1.15
+aggro_range = 310.0
+body_radius = 14.0
+sprite_world_size = 54.0
+formation_spacing = 48.0
+gather_rate = 0
+ranged = true
+projectile_speed = 450.0
+spawn_time = 2.3
+score_value = 34
+cost_nectar = 20
+cost_protein = 10
+cost_leaf = 15

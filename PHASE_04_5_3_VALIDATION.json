@@ -1,0 +1,13 @@
+{
+  "phase": "04.5.3",
+  "gd_scripts": 77,
+  "scenes": 9,
+  "resources": 34,
+  "res_references": 214,
+  "global_classes": 58,
+  "issues": [],
+  "old_ground_effective_z": -210,
+  "old_disappearance_boundary_world_y": "-833 to -849 depending unit sublayer",
+  "new_ground_effective_z": -4089,
+  "new_northmost_unit_z": -2997
+}

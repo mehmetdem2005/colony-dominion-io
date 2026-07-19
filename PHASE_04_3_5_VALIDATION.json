@@ -1,0 +1,42 @@
+{
+  "status": "ok_static_validation_with_runtime_execution_required",
+  "phase": "04.3.5-deep-runtime-hardening",
+  "godot_target": "4.6.3-stable",
+  "platform_target": "Android landscape and dedicated server",
+  "runtime_files_changed": 29,
+  "regression_tests_added": 1,
+  "regression_tests_extended": 1,
+  "gdscripts_checked": 50,
+  "gdformat_changed_files_checked": 30,
+  "gdformat_failures": 0,
+  "gdscript_parser_errors": 0,
+  "blocking_lint_errors": 0,
+  "accepted_architecture_warnings": [
+    "gameplay/colony/colony_controller.gd: max-file-lines",
+    "gameplay/match/match_controller.gd: max-file-lines",
+    "gameplay/world/world_stream_manager.gd: max-file-lines"
+  ],
+  "scene_files_checked": 9,
+  "resource_files_checked": 33,
+  "literal_resource_references_checked": 329,
+  "missing_resource_references": 0,
+  "class_names_checked": 34,
+  "duplicate_class_names": 0,
+  "unit_definitions_checked": 6,
+  "audio_event_definitions_checked": 27,
+  "duplicate_audio_event_ids": 0,
+  "png_files_verified": 36,
+  "wav_files_verified": 51,
+  "ogg_files_verified": 11,
+  "decoded_wav_peak": 0.879944,
+  "new_test": "res://tests/deep_runtime_hardening_regression_test.gd",
+  "extended_test": "res://tests/network_command_validator_test.gd",
+  "engine_runtime_test_executed": false,
+  "engine_runtime_test_reason": "Godot 4.6.3 executable is not installed in the build container.",
+  "remaining_required_validation": [
+    "run every included headless regression test with Godot 4.6.3",
+    "30-minute Android dense-battle soak test",
+    "Android background/resume and focus-loss test",
+    "dedicated-server join/leave/rejoin and snapshot soak test"
+  ]
+}

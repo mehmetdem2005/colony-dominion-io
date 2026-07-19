@@ -1,0 +1,8 @@
+COLONY DOMINION.IO - START BUTTON FIX
+
+- Main menu start button now handles InputEventScreenTouch directly.
+- It no longer depends on emulate_mouse_from_touch.
+- Standard mouse/keyboard activation is still supported.
+- Scene change runs deferred, preventing scene-tree mutation during the input callback.
+- The menu shows a visible loading state and an explicit error message if the game scene cannot be loaded.
+- Target: Godot 4.6.3 Mobile renderer / Android landscape.

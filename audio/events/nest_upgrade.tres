@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"nest_upgrade"
+stream_paths = PackedStringArray("res://audio/sfx/ui/nest_upgrade.wav")
+bus = &"UI"
+positional = false
+volume_db_min = -5
+volume_db_max = -3
+pitch_min = 0.99
+pitch_max = 1.01
+max_instances = 1
+cooldown_seconds = 0.5
+emitter_cooldown_seconds = 0.5
+max_distance = 1000.0
+priority = 75
+ducking_db = 3
+ducking_seconds = 0.55

@@ -1,0 +1,18 @@
+{
+  "phase": "03-minimap-performance",
+  "status": "pass",
+  "png_count": 35,
+  "png_failures": [],
+  "res_reference_count": 96,
+  "missing_res_references": [],
+  "gdscript_file_count": 24,
+  "minimap_refresh_hz": 5.0,
+  "spatial_rebuild_hz": 8.33,
+  "spatial_cell_size": 256.0,
+  "active_chunk_grid": "3x3",
+  "retained_chunk_grid": "5x5 maximum",
+  "pairwise_collision_exceptions_remaining": 0,
+  "projectile_pool_enabled": true,
+  "formation_cache_enabled": true,
+  "leaderboard_node_reuse_enabled": true
+}

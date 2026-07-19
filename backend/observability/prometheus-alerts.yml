@@ -1,0 +1,32 @@
+groups:
+  - name: colony-dominion-online
+    rules:
+      - alert: ColonyServerNotReady
+        expr: colony_server_ready == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "Dedicated match server is not ready" }
+      - alert: ColonyServerTickDebt
+        expr: increase(colony_dropped_server_time_seconds[5m]) > 0.5
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "Server simulation is dropping fixed-step time" }
+      - alert: ColonyProjectileTickDebt
+        expr: increase(colony_dropped_projectile_time_seconds[5m]) > 0.5
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "Projectile simulation is dropping fixed-step time" }
+      - alert: ColonyAuthenticationRejectSpike
+        expr: increase(colony_auth_rejected_total[5m]) > 20
+        for: 1m
+        labels: { severity: warning }
+        annotations: { summary: "Join authentication rejection rate is elevated" }
+      - alert: ColonyMatchResultWriteFailure
+        expr: increase(colony_match_result_failures_total[10m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "A match result could not be persisted" }
+      - alert: ColonyChunkBudgetPressure
+        expr: colony_resident_chunks > 84
+        for: 30s
+        labels: { severity: warning }
+        annotations: { summary: "World streaming resident chunk budget exceeded" }

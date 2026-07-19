@@ -1,0 +1,16 @@
+PHASE 04 VALIDATION REPORT
+GDScript files: 25
+PNG files: 35
+res:// references checked: 97
+Missing res:// references: 0
+PNG errors: 0
+Architecture assertions:
+  swarm_manager_exists: PASS
+  auto_gather_disabled_default: PASS
+  gather_needs_commander_proximity: PASS
+  combat_leash_enabled: PASS
+  hard_recall_enabled: PASS
+  unit_uses_swarm_slots: PASS
+  hud_has_active_harvest: PASS
+  resource_focus_feedback: PASS
+  reinforcements_join_commander: PASS

@@ -1,0 +1,20 @@
+{
+  "environment": "production",
+  "build_id": "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION",
+  "protocol_version": 3,
+  "supabase_url": "https://YOUR_PROJECT.supabase.co",
+  "supabase_publishable_key": "sb_publishable_REPLACE_ME",
+  "rivet_control_base_url": "https://YOUR_CONTROL_PLANE.example.com",
+  "persist_refresh_token": true,
+  "region_probe_interval_seconds": 12.0,
+  "region_probe_timeout_seconds": 2.5,
+  "regions": [
+    {
+      "id": "eu",
+      "display_name": "Avrupa",
+      "short_name": "EU",
+      "probe_url": "https://eu.example.com/v1/health/ping",
+      "enabled": true
+    }
+  ]
+}

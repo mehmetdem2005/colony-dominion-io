@@ -1,0 +1,29 @@
+{
+  "status": "ok",
+  "phase": "04.3.3.1-gdscript-const-hotfix",
+  "godot_target": "4.6.3-stable",
+  "reported_errors_resolved": [
+    "audio_event_library.gd: EVENT_PATHS constant expression",
+    "audio_system.gd: dependent script compile failure",
+    "audio_system_regression_test.gd: REQUIRED_MUSIC constant expression",
+    "audio_system_regression_test.gd: REQUIRED_AMBIENCE constant expression",
+    "audio_system_regression_test.gd: EVENT_PATHS external member resolution"
+  ],
+  "changed_files": [
+    "audio/scripts/audio_event_library.gd",
+    "tests/audio_system_regression_test.gd"
+  ],
+  "audio_event_paths_checked": 27,
+  "audio_event_resources_checked": 27,
+  "sfx_stream_references_checked": 51,
+  "required_music_stems_checked": 6,
+  "required_ambience_stems_checked": 5,
+  "gdscripts_checked": 48,
+  "blocking_parse_or_lint_errors": 0,
+  "accepted_existing_lint_warnings": [
+    "gameplay/colony/colony_controller.gd:1214: max-file-lines",
+    "gameplay/world/world_stream_manager.gd:1197: max-file-lines"
+  ],
+  "engine_runtime_test_executed": false,
+  "engine_runtime_test_reason": "Godot 4.6.3 executable is not installed in this container."
+}

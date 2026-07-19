@@ -1,0 +1,187 @@
+class_name OnlineMatchClient
+extends Node2D
+
+const PROXY_SCRIPT := preload("res://gameplay/network/network_entity_proxy.gd")
+const WORLD_STREAM_SCRIPT := preload("res://gameplay/world/world_stream_manager.gd")
+
+var world_bounds := Rect2(-18000.0, -12000.0, 36000.0, 24000.0)
+var _world_stream: WorldStreamManager
+var _proxies: Dictionary = {}
+var _local_commander: NetworkEntityProxy = null
+var _movement_input := Vector2.ZERO
+var _joystick_input := Vector2.ZERO
+var _input_left: float = 0.0
+var _latest_player_state: Dictionary = {}
+var _leaving: bool = false
+
+@onready var ground_root: Node2D = $World/Ground
+@onready var decoration_root: Node2D = $World/Decorations
+@onready var resource_root: Node2D = $World/Resources
+@onready var entities_root: Node2D = $World/Entities
+@onready var camera: PlayerCameraController = $PlayerCamera
+@onready var hud: OnlineMatchHUD = $HUD
+
+
+func _ready() -> void:
+	if not GameTransport.is_authenticated():
+		push_error("Online match scene opened without an authenticated ENet session")
+		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+		return
+	GameSession.bind_match(self)
+	GameTransport.snapshot_received.connect(_on_snapshot_received)
+	GameTransport.player_state_received.connect(_on_player_state_received)
+	GameTransport.client_disconnected.connect(_on_disconnected)
+	GameTransport.reconnect_failed.connect(_on_reconnect_failed)
+	GameTransport.match_ended.connect(_on_match_ended)
+	hud.movement_changed.connect(_on_movement_changed)
+	hud.command_requested.connect(_on_command_requested)
+	hud.exit_requested.connect(_exit_to_menu)
+	camera.set_world_bounds(world_bounds)
+	camera.set_safe_frame_insets(Vector4(24.0, 96.0, 24.0, 208.0))
+	_world_stream = WORLD_STREAM_SCRIPT.new() as WorldStreamManager
+	add_child(_world_stream)
+	_world_stream.configure(
+		world_bounds, ground_root, decoration_root, resource_root, [], true, false
+	)
+	AudioSystem.enter_match()
+
+
+func _exit_tree() -> void:
+	if GameTransport.snapshot_received.is_connected(_on_snapshot_received):
+		GameTransport.snapshot_received.disconnect(_on_snapshot_received)
+	if GameTransport.player_state_received.is_connected(_on_player_state_received):
+		GameTransport.player_state_received.disconnect(_on_player_state_received)
+	AudioSystem.enter_menu()
+
+
+func _physics_process(delta: float) -> void:
+	var keyboard: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	_movement_input = (
+		keyboard.limit_length(1.0) if keyboard.length_squared() > 0.01 else _joystick_input
+	)
+	if is_instance_valid(_local_commander):
+		_local_commander.set_prediction_input(_movement_input)
+	_input_left -= delta
+	if _input_left <= 0.0:
+		_input_left = 1.0 / NetworkProtocol.INPUT_HZ
+		GameTransport.send_command(&"move", {"vector": _movement_input})
+	_handle_keyboard_commands()
+
+
+func _on_snapshot_received(snapshot: Dictionary) -> void:
+	var server_tick: int = int(snapshot.get("server_tick", -1))
+	var entities_variant: Variant = snapshot.get("entities", [])
+	if entities_variant is Array:
+		for entity_variant in entities_variant:
+			if not entity_variant is Dictionary:
+				continue
+			_apply_entity_snapshot(entity_variant as Dictionary, server_tick)
+	var resource_states: Variant = snapshot.get("resource_states", [])
+	if resource_states is Array and is_instance_valid(_world_stream):
+		_world_stream.apply_network_resource_states(resource_states as Array)
+	var despawned_variant: Variant = snapshot.get("despawned", PackedInt64Array())
+	if despawned_variant is PackedInt64Array:
+		for entity_id in despawned_variant as PackedInt64Array:
+			_remove_proxy(entity_id)
+	elif despawned_variant is Array:
+		for entity_id_variant in despawned_variant:
+			_remove_proxy(int(entity_id_variant))
+
+
+func _apply_entity_snapshot(data: Dictionary, server_tick: int) -> void:
+	var entity_id: int = int(data.get("id", 0))
+	if entity_id <= 0:
+		return
+	var proxy: NetworkEntityProxy = _proxies.get(entity_id) as NetworkEntityProxy
+	if not is_instance_valid(proxy):
+		proxy = PROXY_SCRIPT.new() as NetworkEntityProxy
+		entities_root.add_child(proxy)
+		proxy.configure(
+			entity_id, int(data.get("team", -1)), StringName(data.get("kind", &"worker"))
+		)
+		_proxies[entity_id] = proxy
+	proxy.apply_snapshot(data, server_tick)
+	var is_local: bool = (
+		int(data.get("team", -1)) == GameTransport.get_local_team_id()
+		and StringName(data.get("kind", &"")) == &"commander"
+	)
+	if is_local:
+		_bind_local_commander(proxy)
+
+
+func _bind_local_commander(proxy: NetworkEntityProxy) -> void:
+	if _local_commander == proxy:
+		return
+	if is_instance_valid(_local_commander):
+		_local_commander.set_local_commander(false)
+	_local_commander = proxy
+	_local_commander.set_local_commander(true)
+	camera.set_target(_local_commander)
+	if is_instance_valid(_world_stream):
+		_world_stream.set_interest_target(_local_commander)
+		_world_stream.prime_initial_area()
+
+
+func _remove_proxy(entity_id: int) -> void:
+	var proxy: NetworkEntityProxy = _proxies.get(entity_id) as NetworkEntityProxy
+	_proxies.erase(entity_id)
+	if not is_instance_valid(proxy):
+		return
+	if proxy == _local_commander:
+		_local_commander = null
+		camera.set_target(null)
+	proxy.queue_free()
+
+
+func _on_player_state_received(state: Dictionary) -> void:
+	_latest_player_state = state.duplicate(true)
+	hud.apply_player_state(state)
+
+
+func _on_movement_changed(value: Vector2) -> void:
+	_joystick_input = value.limit_length(1.0) if value.is_finite() else Vector2.ZERO
+
+
+func _on_command_requested(command_type: StringName, payload: Dictionary) -> void:
+	GameTransport.send_command(command_type, payload)
+
+
+func _handle_keyboard_commands() -> void:
+	if Input.is_action_just_pressed("attack_command"):
+		GameTransport.send_command(&"attack")
+	if Input.is_action_just_pressed("gather_command"):
+		GameTransport.send_command(&"gather")
+	if Input.is_action_just_pressed("rally_command"):
+		GameTransport.send_command(&"rally")
+	if Input.is_action_just_pressed("split_command"):
+		GameTransport.send_command(&"split")
+	if Input.is_action_just_pressed("spread_command"):
+		GameTransport.send_command(&"spread")
+	if Input.is_action_just_pressed("merge_command"):
+		GameTransport.send_command(&"merge")
+
+
+func _on_match_ended(winner_name: String) -> void:
+	hud.show_toast("Kazanan: %s" % winner_name)
+	_movement_input = Vector2.ZERO
+	await get_tree().create_timer(3.0, true, false, true).timeout
+	_exit_to_menu()
+
+
+func _on_disconnected(message: String) -> void:
+	hud.show_toast(message)
+
+
+func _on_reconnect_failed(message: String) -> void:
+	hud.show_toast(message)
+	await get_tree().create_timer(1.5, true, false, true).timeout
+	_exit_to_menu()
+
+
+func _exit_to_menu() -> void:
+	if _leaving:
+		return
+	_leaving = true
+	GameTransport.disconnect_from_game("Maçtan çıkıldı")
+	GameSession.clear()
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")

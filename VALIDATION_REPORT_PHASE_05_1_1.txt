@@ -1,0 +1,29 @@
+COLONY DOMINION.IO — PHASE 05.1.1 SECURE DEPLOYMENT BOOTSTRAP
+Status: STATIC VALIDATION OK
+Target: Godot 4.6.3 stable / Android arm64 / Linux dedicated server
+
+Godot scripts checked: 92
+Global classes checked: 69
+Scenes checked: 10
+Resources checked: 34
+Runtime res:// references checked: 370
+Regression tests present: 16
+Supabase migrations: 2
+PNG files checked: 36
+WAV files checked: 51
+OGG files checked: 11
+Secret-shaped values in artifact: 0
+Android config/legal export inclusion: OK
+Supabase RLS coverage: OK
+Deployment fixture test: OK
+TypeScript 05.1.1 changed-source syntax: OK
+RivetKit 2.3.4 exact API contract: validated in Phase 05.1
+
+External Supabase/Rivet mutation: NOT EXECUTED
+Reason: this build runtime cannot resolve external Supabase/Rivet API domains.
+No user token was written to a project file, report, manifest, or archive.
+
+Production boundary:
+- Supabase schema/auth/legal/profile foundation is prepared.
+- Rivet matchmaking control plane is prepared.
+- A protected game-server allocator and native Godot ENet transport remain Phase 05.3.

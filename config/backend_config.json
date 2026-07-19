@@ -1,0 +1,62 @@
+{
+  "environment": "development",
+  "build_id": "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION",
+  "protocol_version": 3,
+  "supabase_url": "",
+  "supabase_publishable_key": "",
+  "rivet_control_base_url": "",
+  "persist_refresh_token": true,
+  "region_probe_interval_seconds": 12.0,
+  "region_probe_timeout_seconds": 2.5,
+  "regions": [
+    {
+      "id": "eu",
+      "display_name": "Avrupa",
+      "short_name": "EU",
+      "probe_url": "",
+      "enabled": true
+    },
+    {
+      "id": "na-east",
+      "display_name": "Kuzey Amerika Doğu",
+      "short_name": "NA-E",
+      "probe_url": "",
+      "enabled": false
+    },
+    {
+      "id": "na-west",
+      "display_name": "Kuzey Amerika Batı",
+      "short_name": "NA-W",
+      "probe_url": "",
+      "enabled": false
+    },
+    {
+      "id": "sa",
+      "display_name": "Güney Amerika",
+      "short_name": "SA",
+      "probe_url": "",
+      "enabled": false
+    },
+    {
+      "id": "asia",
+      "display_name": "Asya",
+      "short_name": "ASIA",
+      "probe_url": "",
+      "enabled": false
+    },
+    {
+      "id": "oceania",
+      "display_name": "Okyanusya",
+      "short_name": "OCE",
+      "probe_url": "",
+      "enabled": false
+    },
+    {
+      "id": "africa",
+      "display_name": "Afrika",
+      "short_name": "AF",
+      "probe_url": "",
+      "enabled": false
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+name: Deploy Online Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY-PRODUCTION
+        required: true
+        type: string
+
+concurrency:
+  group: colony-online-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirmation == 'DEPLOY-PRODUCTION' }}
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
+      RIVET_ALLOCATOR_CLOUD_TOKEN: ${{ secrets.RIVET_ALLOCATOR_CLOUD_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      COLONY_PROJECT_NAME: ${{ vars.COLONY_PROJECT_NAME }}
+      RIVET_PROJECT: ${{ vars.RIVET_PROJECT }}
+      RIVET_ORG: ${{ vars.RIVET_ORG }}
+      RIVET_CONTROL_URL: ${{ vars.RIVET_CONTROL_URL }}
+      RIVET_ENVIRONMENT: production
+      RIVET_NAMESPACE: production
+      RIVET_GAME_SERVER_BUILD_TAG: colony-server-05-3-production
+      GAME_SERVER_IMAGE_TAG: colony-dominion-server:05.3.1-production
+      REGIONS_JSON: ${{ vars.REGIONS_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validation dependencies
+        run: python -m pip install gdtoolkit pglast pyyaml pillow
+      - name: Install Godot editor and export templates
+        run: tools/install_godot_ci.sh
+      - name: Validate and build dedicated server
+        run: tools/build_dedicated_server.sh
+      - name: Build and publish game-server image
+        run: |
+          IMAGE_TAG="$GAME_SERVER_IMAGE_TAG" tools/build_game_server_image.sh
+          tools/publish_rivet_game_server.sh
+      - name: Deploy production stack
+        run: |
+          tools/deploy_online_stack.sh \
+            --project-name "${COLONY_PROJECT_NAME:-colony.io}" \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --rivet-project "$RIVET_PROJECT" \
+            --rivet-environment "$RIVET_ENVIRONMENT" \
+            --game-server-build-tag "$RIVET_GAME_SERVER_BUILD_TAG"
+      - name: Build connected Android release candidate
+        run: |
+          "$GODOT_BIN" --headless --path . --editor --quit
+          "$GODOT_BIN" --headless --path . --export-debug "Android" build/colony-dominion-production-rc.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colony-production-release-candidate
+          if-no-files-found: error
+          path: |
+            build/colony-dominion-production-rc.apk
+            build/server/colony-dominion-server.x86_64
+            build/server/colony-dominion-server.pck
+            deployment/last_deployment.json
+            config/backend_config.json

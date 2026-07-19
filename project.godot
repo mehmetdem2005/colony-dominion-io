@@ -1,0 +1,102 @@
+config_version=5
+
+[application]
+config/name="Colony Dominion.io 05.3 Online Production"
+config/description="Top-down 2D ant colony io strategy game"
+config/version="05.3"
+config/icon="res://assets/ui/app_icon.png"
+run/main_scene="res://scenes/boot.tscn"
+config/features=PackedStringArray("4.6", "Mobile")
+boot_splash/bg_color=Color(0.12, 0.08, 0.03, 1)
+run/max_fps=60
+run/max_fps.mobile=60
+
+[autoload]
+AudioSystem="*res://audio/scripts/audio_system.gd"
+UnitCatalog="*res://autoload/unit_catalog.gd"
+GameSession="*res://autoload/game_session.gd"
+NetworkSession="*res://autoload/network_session.gd"
+GameTransport="*res://network/game_transport.gd"
+OnlineServices="*res://autoload/online_services.gd"
+NetworkStatusOverlay="*res://ui/network_status_overlay.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+window/energy_saving/keep_screen_on=true
+window/vsync/vsync_mode=1
+
+[rendering]
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/canvas_textures/default_texture_filter=2
+environment/defaults/default_clear_color=Color(0.20, 0.13, 0.05, 1)
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=4
+common/physics_interpolation=true
+
+[input_devices]
+pointing/emulate_mouse_from_touch=false
+pointing/emulate_touch_from_mouse=false
+
+[input]
+move_up={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":87), Object(InputEventKey,"physical_keycode":4194320)]
+}
+move_down={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":83), Object(InputEventKey,"physical_keycode":4194322)]
+}
+move_left={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":65), Object(InputEventKey,"physical_keycode":4194319)]
+}
+move_right={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":68), Object(InputEventKey,"physical_keycode":4194321)]
+}
+attack_command={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":32)]
+}
+rally_command={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":82)]
+}
+gather_command={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":71)]
+}
+
+split_command={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":81)]
+}
+spread_command={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":70)]
+}
+merge_command={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":69)]
+}
+
+[layer_names]
+2d_physics/layer_1="Unit Bodies"
+2d_physics/layer_2="Commander Bodies"
+2d_physics/layer_3="Structures"
+2d_physics/layer_4="Combat Sensors"
+2d_physics/layer_5="Reserved Gameplay"
+2d_physics/layer_6="Reserved Network Views"
+2d_physics/layer_7="World Obstacles"
+2d_physics/layer_8="Resource Sensors"

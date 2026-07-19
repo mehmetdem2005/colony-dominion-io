@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/colony/nest.gd" id="1_nest"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_nest"]
+resource_local_to_scene = true
+radius = 74.0
+
+[node name="Nest" type="StaticBody2D"]
+y_sort_enabled = true
+script = ExtResource("1_nest")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture_filter = 4
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_nest")

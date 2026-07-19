@@ -1,0 +1,38 @@
+COLONY DOMINION.IO — PHASE 04.3.5 DEEP RUNTIME HARDENING
+Status: STATIC VALIDATION OK; GODOT RUNTIME EXECUTION REQUIRED
+Target: Godot 4.6.3 stable / Android landscape / dedicated server
+
+Runtime files changed: 29
+Regression tests added: 1
+Regression tests extended: 1
+GDScript files checked: 50
+Changed GDScript formatting failures: 0
+Parser errors: 0
+Blocking lint errors: 0
+Accepted architecture line-budget findings: 3
+Scenes checked: 9
+Resources checked: 33
+Literal res:// references checked: 329
+Missing resource references: 0
+Class names checked: 34
+Duplicate class names: 0
+Unit definitions checked: 6
+Audio event definitions checked: 27
+Duplicate audio event IDs: 0
+PNG files verified: 36
+WAV files verified: 51
+OGG files verified: 11
+Decoded WAV peak: 0.879944
+
+Primary hardened systems:
+- pooled commander/camera lifecycle and commander respawn retry
+- atomic production queue completion
+- atomic chunk build/residency/collision activation
+- finite-number validation across movement, damage, projectiles, resources, snapshots and audio
+- bounded server/projectile/resource catch-up
+- network entity collision, peer assignment, rate-state and snapshot cleanup
+- scaled Canvas hit testing and modal input reset
+- SFX/UI pool history, duplicate event rejection and hard limiter migration
+
+Runtime limitation:
+The Godot 4.6.3 executable is unavailable in this container. Static validation cannot prove driver, physics-order, Android lifecycle or long-session timing behavior. Run all included tests and the device/server soak matrix in PHASE_04_3_5_DEEP_RUNTIME_HARDENING.md.

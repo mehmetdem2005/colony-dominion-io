@@ -1,0 +1,82 @@
+{
+  "status": "ok",
+  "phase": "04.3.3-production-audio-system",
+  "godot_target": "4.6.3-stable",
+  "audio_event_count": 27,
+  "unique_event_ids": 27,
+  "audio_file_count": 62,
+  "wav_sfx_count": 51,
+  "ogg_music_count": 6,
+  "ogg_ambience_count": 5,
+  "audio_total_bytes": 3085582,
+  "maximum_sample_peak": 0.893835,
+  "maximum_loop_endpoint_jump": 0.002373,
+  "music_stems": [
+    [
+      "colony_base.ogg",
+      24.0
+    ],
+    [
+      "colony_combat.ogg",
+      24.0
+    ],
+    [
+      "colony_critical.ogg",
+      24.0
+    ],
+    [
+      "colony_growth.ogg",
+      24.0
+    ],
+    [
+      "colony_tension.ogg",
+      24.0
+    ],
+    [
+      "menu_theme.ogg",
+      24.0
+    ]
+  ],
+  "ambience_stems": [
+    [
+      "ant_swarm_loop.ogg",
+      18.0
+    ],
+    [
+      "dry_loop.ogg",
+      18.0
+    ],
+    [
+      "forest_loop.ogg",
+      18.0
+    ],
+    [
+      "meadow_loop.ogg",
+      18.0
+    ],
+    [
+      "rocky_loop.ogg",
+      18.0
+    ]
+  ],
+  "resource_references_checked": 178,
+  "gdscripts_checked": 48,
+  "architecture_checks": {
+    "AudioSystem autoload": true,
+    "Android VIBRATE permission": true,
+    "AudioListener2D": true,
+    "World SFX pool 22": true,
+    "UI SFX pool 6": true,
+    "Master limiter": true,
+    "Persistent ConfigFile": true,
+    "Headless disable": true
+  },
+  "accepted_existing_lint_warnings": [
+    "gameplay/colony/colony_controller.gd:1214: Error: Max allowed file lines num (1000) exceeded (max-file-lines)",
+    "gameplay/world/world_stream_manager.gd:1197: Error: Max allowed file lines num (1000) exceeded (max-file-lines)"
+  ],
+  "engine_runtime_test_executed": false,
+  "engine_runtime_test_reason": "Godot 4.6.3 executable is not installed in this container.",
+  "warnings": [],
+  "errors": []
+}

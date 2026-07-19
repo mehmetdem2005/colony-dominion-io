@@ -1,0 +1,54 @@
+{
+  "phase": "04.4",
+  "name": "Production Architecture Foundation",
+  "godot_target": "4.6.3.stable",
+  "validation_date": "2026-07-19",
+  "results": {
+    "gdscript_files": 63,
+    "scene_files": 9,
+    "resource_files": 34,
+    "literal_res_references": 286,
+    "png_files": 36,
+    "wav_files": 51,
+    "ogg_files": 11,
+    "regression_tests": 12,
+    "maximum_gdscript_lines": 1000,
+    "scripts_over_1000_lines": 0,
+    "gdlint": "pass",
+    "architecture_files_gdformat": "pass",
+    "class_name_duplicates": 0,
+    "missing_literal_res_references": 0,
+    "asset_decode": "pass",
+    "zip_integrity": "pass",
+    "godot_runtime_tests": "not_run_engine_binary_unavailable"
+  },
+  "new_architecture_services": [
+    "FixedStepClock",
+    "MatchRules",
+    "ColonyUnitPool",
+    "ProjectileSystem",
+    "AuthoritativeCommandJournal",
+    "NetworkSnapshotBuilder",
+    "RuntimeInvariantMonitor",
+    "ColonyBotBrain",
+    "ResourceCostFormatter",
+    "WorldContentCatalog",
+    "WorldResidencyPlanner",
+    "WorldObjectPool"
+  ],
+  "largest_scripts": {
+    "gameplay/colony/colony_controller.gd": 1000,
+    "ui/hud.gd": 999,
+    "gameplay/world/world_stream_manager.gd": 985,
+    "gameplay/match/match_controller.gd": 863,
+    "gameplay/units/unit.gd": 767,
+    "gameplay/colony/colony_bot_brain.gd": 371,
+    "audio/scripts/audio_system.gd": 346,
+    "ui/minimap.gd": 296
+  },
+  "runtime_test_command": "godot --headless --path . --script res://tests/production_architecture_foundation_test.gd",
+  "notes": [
+    "Static validation cannot replace running the project with the exact Godot engine binary.",
+    "The official Godot 4.6.3 Linux binary download was attempted but the execution environment blocked artifact download."
+  ]
+}

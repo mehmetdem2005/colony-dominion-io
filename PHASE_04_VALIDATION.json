@@ -1,0 +1,19 @@
+{
+  "phase": "04_commander_swarm_active_harvest",
+  "gdscript_count": 25,
+  "png_count": 35,
+  "res_references_checked": 97,
+  "missing_res_references": [],
+  "png_errors": [],
+  "assertions": {
+    "swarm_manager_exists": true,
+    "auto_gather_disabled_default": true,
+    "gather_needs_commander_proximity": true,
+    "combat_leash_enabled": true,
+    "hard_recall_enabled": true,
+    "unit_uses_swarm_slots": true,
+    "hud_has_active_harvest": true,
+    "resource_focus_feedback": true,
+    "reinforcements_join_commander": true
+  }
+}

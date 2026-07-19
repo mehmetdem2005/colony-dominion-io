@@ -1,0 +1,26 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://gameplay/network/online_match_client.gd" id="1_client"]
+[ext_resource type="Script" path="res://gameplay/world/camera_controller.gd" id="2_camera"]
+[ext_resource type="Script" path="res://ui/online_match_hud.gd" id="3_hud"]
+
+[node name="OnlineMatchRoot" type="Node2D"]
+script = ExtResource("1_client")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Ground" type="Node2D" parent="World"]
+z_index = -4090
+
+[node name="Decorations" type="Node2D" parent="World"]
+
+[node name="Resources" type="Node2D" parent="World"]
+
+[node name="Entities" type="Node2D" parent="World"]
+
+[node name="PlayerCamera" type="Camera2D" parent="."]
+process_callback = 0
+script = ExtResource("2_camera")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("3_hud")

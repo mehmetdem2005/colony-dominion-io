@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/units/unit_definition.gd" id="1_def"]
+[ext_resource type="Texture2D" path="res://assets/units/soldier.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_def")
+texture = ExtResource("2_tex")
+unit_id = &"soldier"
+display_name = "Asker"
+role = &"frontline"
+max_health = 125.0
+move_speed = 175.0
+acceleration = 1050.0
+attack_damage = 19.0
+attack_range = 42.0
+attack_interval = 0.76
+aggro_range = 250.0
+body_radius = 16.0
+sprite_world_size = 58.0
+formation_spacing = 45.0
+gather_rate = 0
+ranged = false
+spawn_time = 1.8
+score_value = 22
+cost_seed = 15
+cost_protein = 8

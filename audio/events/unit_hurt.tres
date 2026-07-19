@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioEventDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://audio/scripts/audio_event_definition.gd" id="1_event"]
+
+[resource]
+script = ExtResource("1_event")
+event_id = &"unit_hurt"
+stream_paths = PackedStringArray("res://audio/sfx/units/hurt_01.wav", "res://audio/sfx/units/hurt_02.wav", "res://audio/sfx/units/hurt_03.wav")
+bus = &"Units"
+positional = true
+volume_db_min = -12
+volume_db_max = -8
+pitch_min = 0.9
+pitch_max = 1.12
+max_instances = 6
+cooldown_seconds = 0.045
+emitter_cooldown_seconds = 0.2
+max_distance = 1000.0
+priority = 48
+ducking_db = 0
+ducking_seconds = 0

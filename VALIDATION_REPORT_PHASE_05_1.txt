@@ -1,0 +1,14 @@
+COLONY DOMINION.IO — PHASE 05.1 ONLINE FOUNDATION
+Target: Godot 4.6.3 / Android arm64 / Rivet / Supabase
+
+Validation gates:
+- GDScript parser and linter
+- Resource-reference integrity
+- Android export runtime-file inclusion
+- Client-secret scan
+- Supabase migration/RLS contract scan
+- Rivet control-plane TypeScript typecheck against RivetKit 2.3.4 API types
+- PNG/WAV/OGG integrity
+- ZIP integrity
+
+Real cloud deployment and live ENet gameplay are not claimed in this phase because external projects and credentials have not been supplied.

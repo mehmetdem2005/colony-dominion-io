@@ -1,0 +1,47 @@
+{
+  "phase": "04.3.2-npc-ui-obstacle-avoidance",
+  "engine_target": "Godot 4.6.3 Mobile",
+  "validation_date": "2026-07-18",
+  "status": "static_validation_passed_runtime_pending",
+  "npc_activity": {
+    "active_decision_interval_seconds": [0.34, 0.56],
+    "active_patrol_radius_world_units": [420, 1450],
+    "active_goal_hold_seconds": [3.5, 7.5],
+    "dormant_navigation_hz": 4,
+    "dormant_speed_scale": 0.88,
+    "full_tier_radius": 2200,
+    "reduced_tier_radius": 4600
+  },
+  "obstacle_avoidance": {
+    "module": "gameplay/units/local_obstacle_avoidance.gd",
+    "ray_count": 3,
+    "query_refresh_seconds": [0.10, 0.16],
+    "side_hold_seconds": 0.72,
+    "stuck_detection": true,
+    "collision_remainder_slide": true
+  },
+  "mobile_ui": {
+    "resource_dock_size": [142, 224],
+    "minimap_dock_size": [224, 224],
+    "production_dock_width": 662,
+    "production_vertical_budget": 156,
+    "production_card_size": [122, 108],
+    "cost_icon_size": [20, 20]
+  },
+  "static_validation": {
+    "gdlint": "passed",
+    "gdscript_files": 39,
+    "png_files": 36,
+    "resource_references_checked": 139,
+    "missing_resource_references": 0,
+    "duplicate_functions": 0
+  },
+  "runtime_validation": {
+    "executed": false,
+    "reason": "Godot 4.6.3 executable is not installed in the validation environment",
+    "tests": [
+      "tests/runtime_streaming_regression_test.gd",
+      "tests/ai_navigation_ui_regression_test.gd"
+    ]
+  }
+}
