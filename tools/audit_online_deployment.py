@@ -72,7 +72,10 @@ def main() -> int:
     workflow_text = workflow.read_text(encoding="utf-8") if workflow.is_file() else ""
     if "SUPABASE_SECRET_KEY" in workflow_text:
         findings.append(finding("error", "EXCESS_SECRET_SCOPE", "Supabase-only workflow receives an unnecessary backend secret", str(workflow)))
-    if "deploy_supabase_staging.py --preflight-only" not in workflow_text:
+    if not re.search(
+        r"deploy_supabase_staging\.py[\s\\]+--project-name[\s\S]*?--preflight-only",
+        workflow_text,
+    ):
         findings.append(finding("error", "PREFLIGHT_MISSING", "Supabase workflow lacks a non-mutating API preflight", str(workflow)))
 
     config = root / "config" / "backend_config.json"
