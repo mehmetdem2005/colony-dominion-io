@@ -3,13 +3,15 @@ name: Full Online Branch Validation
 on:
   push:
     branches: [full-online-completion]
+    paths-ignore:
+      - "deployment/status/full-online-branch-validation.json"
 
 concurrency:
   group: full-online-branch-validation
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -20,6 +22,8 @@ jobs:
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -37,9 +41,11 @@ jobs:
         run: tools/install_godot_ci.sh
 
       - name: Validate release architecture
+        id: architecture
         run: python tools/validate_online_release.py
 
       - name: Typecheck and build Rivet runtime
+        id: typescript
         working-directory: backend/rivet-control
         run: |
           set -euo pipefail
@@ -48,6 +54,7 @@ jobs:
           npm run build
 
       - name: Lint and format GDScript
+        id: gdscript
         shell: bash
         run: |
           set -euo pipefail
@@ -63,9 +70,11 @@ jobs:
           gdformat --check "${files[@]}"
 
       - name: Parse, test and export dedicated server
+        id: godot
         run: tools/build_dedicated_server.sh
 
       - name: Build embedded Godot Rivet image
+        id: docker
         run: |
           set -euo pipefail
           docker build \
@@ -94,3 +103,54 @@ jobs:
             build/full-online-container.txt
             build/full-online-godot-version.txt
             build/server/
+
+      - name: Persist validation status
+        if: always()
+        env:
+          ARCHITECTURE_OUTCOME: ${{ steps.architecture.outcome }}
+          TYPESCRIPT_OUTCOME: ${{ steps.typescript.outcome }}
+          GDSCRIPT_OUTCOME: ${{ steps.gdscript.outcome }}
+          GODOT_OUTCOME: ${{ steps.godot.outcome }}
+          DOCKER_OUTCOME: ${{ steps.docker.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          steps = {
+              "architecture": os.environ.get("ARCHITECTURE_OUTCOME", "unknown"),
+              "typescript": os.environ.get("TYPESCRIPT_OUTCOME", "unknown"),
+              "gdscript": os.environ.get("GDSCRIPT_OUTCOME", "unknown"),
+              "godot": os.environ.get("GODOT_OUTCOME", "unknown"),
+              "docker": os.environ.get("DOCKER_OUTCOME", "unknown"),
+          }
+          success = all(value == "success" for value in steps.values())
+          payload = {
+              "success": success,
+              "validated_sha": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "recorded_at": datetime.now(timezone.utc).isoformat(),
+              "steps": steps,
+              "provider": "rivet_only",
+              "protocol_version": 4,
+              "max_players": 10,
+          }
+          Path("deployment/status/full-online-branch-validation.json").write_text(
+              json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin full-online-completion
+          git rebase origin/full-online-completion
+          git add deployment/status/full-online-branch-validation.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Record full-online branch validation status"
+          git push origin HEAD:full-online-completion
