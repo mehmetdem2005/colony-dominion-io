@@ -64,38 +64,102 @@ jobs:
           import re
           from pathlib import Path
 
+          # Rivet CLI-compatible token normalization. The CLI accepts an opaque,
+          # non-empty token and delegates validity to /tokens/api/inspect.
           raw_token = os.environ.get("RAW_RIVET_CLOUD_TOKEN", "")
+
+          def unquote(value: str) -> str:
+              value = value.strip()
+              if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                  return value[1:-1].strip()
+              return value
+
+          token = ""
+          stripped = raw_token.strip()
+
+          # Accept JSON copied from Connect, assignment lines, or a direct token.
+          if stripped.startswith(("{", "[")):
+              try:
+                  parsed = json.loads(stripped)
+              except json.JSONDecodeError:
+                  parsed = None
+
+              def find_token(value):
+                  if isinstance(value, dict):
+                      for key in ("RIVET_CLOUD_TOKEN", "rivet_cloud_token", "token"):
+                          candidate = value.get(key)
+                          if isinstance(candidate, str) and candidate.strip():
+                              return candidate
+                      for child in value.values():
+                          candidate = find_token(child)
+                          if candidate:
+                              return candidate
+                  elif isinstance(value, list):
+                      for child in value:
+                          candidate = find_token(child)
+                          if candidate:
+                              return candidate
+                  return ""
+
+              if parsed is not None:
+                  token = find_token(parsed)
+
+          if not token:
+              assignment = re.search(
+                  r"(?m)^\s*(?:export\s+)?RIVET_CLOUD_TOKEN\s*=\s*(.+?)\s*$",
+                  raw_token,
+              )
+              if assignment:
+                  token = assignment.group(1)
+
+          if not token:
+              # Prefer known current and legacy dashboard forms when Connect text
+              # contains surrounding prose.
+              known = list(dict.fromkeys(
+                  re.findall(
+                      r"cloud_api_[A-Za-z0-9._~+/=-]+|cloud\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}",
+                      raw_token,
+                  )
+              ))
+              if len(known) == 1:
+                  token = known[0]
+
+          if not token and stripped and not any(ch.isspace() for ch in stripped):
+              token = stripped
+
+          token = unquote(token)
+          if not token:
+              raise SystemExit("RIVET_CLOUD_TOKEN is empty after normalization")
+          if any(ch.isspace() for ch in token):
+              raise SystemExit("RIVET_CLOUD_TOKEN contains whitespace after normalization")
+          if len(token) < 16:
+              raise SystemExit("RIVET_CLOUD_TOKEN is unexpectedly short")
+
+          if token.startswith("cloud_api_"):
+              token_family = "cloud_api"
+          elif token.startswith("cloud.") and token.count(".") == 3:
+              token_family = "cloud_jwt"
+          else:
+              token_family = "opaque"
+
           diagnostic = {
               "raw_length": len(raw_token),
-              "contains_cloud_api_marker": "cloud_api_" in raw_token,
+              "normalized_length": len(token),
+              "token_family": token_family,
               "looks_like_assignment": "RIVET_CLOUD_TOKEN" in raw_token and "=" in raw_token,
-              "looks_like_json": raw_token.lstrip().startswith(("{", "[")),
-              "looks_like_jwt": raw_token.strip().count(".") == 2,
+              "looks_like_json": stripped.startswith(("{", "[")),
               "contains_whitespace": any(ch.isspace() for ch in raw_token),
+              "validation_authority": "rivet_cloud_tokens_api_inspect",
           }
-
-          candidates = list(dict.fromkeys(re.findall(
-              r"cloud_api_[A-Za-z0-9._~+/=-]+",
-              raw_token,
-          )))
-          diagnostic["cloud_api_candidate_count"] = len(candidates)
           Path("build/rivet-staging/token-diagnostic.json").write_text(
               json.dumps(diagnostic, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
           )
 
-          if len(candidates) != 1:
-              raise SystemExit(
-                  "RIVET_CLOUD_TOKEN must contain exactly one cloud_api_ token. "
-                  "Copy the RIVET_CLOUD_TOKEN value from Rivet Dashboard > Connect > Rivet Cloud."
-              )
-          token = candidates[0]
-          if len(token) < 24:
-              raise SystemExit("Extracted Rivet Cloud token is unexpectedly short")
-
           print(f"::add-mask::{token}")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"RIVET_CLOUD_TOKEN={token}\n")
+          print(f"Rivet token normalized; family={token_family}; API inspection is authoritative")
 
           raw_regions = os.environ.get("REGIONS_JSON", "").strip()
           if not raw_regions:
