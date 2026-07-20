@@ -1,0 +1,62 @@
+name: Fix Rivet Universal WebSocket Type
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'full-online-completion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: full-online-completion
+          fetch-depth: 0
+
+      - name: Apply exact UniversalWebSocket typing fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/rivet-control/src/game-server-actor.ts")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'import { actor } from "rivetkit";':
+                  'import { actor, type UniversalWebSocket } from "rivetkit";',
+              'sockets: Set<WebSocket>;':
+                  'sockets: Set<UniversalWebSocket>;',
+              'function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void }, downstream: WebSocket, upstream: WebSocket, runtime: GameRuntime): void {':
+                  'function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void }, downstream: UniversalWebSocket, upstream: WebSocket, runtime: GameRuntime): void {',
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new)
+              elif new not in text:
+                  raise SystemExit(f"Expected source fragment was not found: {old}")
+          path.write_text(text, encoding="utf-8")
+          PY
+          grep -q 'type UniversalWebSocket' backend/rivet-control/src/game-server-actor.ts
+          grep -q 'Set<UniversalWebSocket>' backend/rivet-control/src/game-server-actor.ts
+          grep -q 'downstream: UniversalWebSocket' backend/rivet-control/src/game-server-actor.ts
+
+      - name: Commit exact type fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/rivet-control/src/game-server-actor.ts
+          git commit -m "Type Rivet gateway sockets as UniversalWebSocket"
+          git push origin HEAD:full-online-completion
