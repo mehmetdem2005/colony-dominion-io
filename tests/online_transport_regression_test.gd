@@ -52,8 +52,8 @@ func _run() -> void:
 		failures.append("Transport must expose four independent channels")
 	if NetworkProtocol.MAX_SNAPSHOT_ENTITIES > 160:
 		failures.append("Mobile snapshot budget is too large")
-	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 6:
-		failures.append("Protocol player capacity differs from the six colony match")
+	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
+		failures.append("Protocol player capacity differs from the ten-colony match")
 	if NetworkProtocol.RECONNECT_GRACE_SECONDS < 60.0:
 		failures.append("Reconnect reservation is shorter than 60 seconds")
 	if NetworkProtocol.SERVER_JOIN_TIMEOUT_SECONDS < 60.0:
