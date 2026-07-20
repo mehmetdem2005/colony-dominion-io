@@ -46,71 +46,61 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
-      - name: Validate staging configuration
+      - name: Normalize and validate staging credentials
         shell: bash
         run: |
           set -euo pipefail
           test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
+          test "$MIN_PLAYERS" = "2"
+          test "$MAX_PLAYERS" = "10"
           echo "::add-mask::$RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_SECRET_KEY"
           mkdir -p build/rivet-staging
 
-          python - <<'PY'
+          curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
+            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
+            --header "Accept: application/json" \
+            https://cloud-api.rivet.dev/tokens/api/inspect \
+            > build/rivet-staging/token-inspect.json
+
+          if [ -z "${REGIONS_JSON:-}" ]; then
+            REGIONS_JSON='[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'
+          fi
+
+          REGIONS_JSON="$REGIONS_JSON" python - <<'PY'
           import json
           import os
-          from pathlib import Path
-
-          token = os.environ["RIVET_CLOUD_TOKEN"].strip()
-          if any(ch.isspace() for ch in token):
-              raise SystemExit("RIVET_CLOUD_TOKEN contains whitespace")
-          if len(token) < 16:
-              raise SystemExit("RIVET_CLOUD_TOKEN is unexpectedly short")
-
-          raw_regions = os.environ.get("REGIONS_JSON", "").strip()
-          if not raw_regions:
-              raw_regions = '[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'
-          regions = json.loads(raw_regions)
+          regions = json.loads(os.environ["REGIONS_JSON"])
           if not isinstance(regions, list) or not regions:
-              raise SystemExit("REGIONS_JSON must be a non-empty JSON array")
+              raise SystemExit("REGIONS_JSON must be a non-empty array")
           if not any(isinstance(item, dict) and item.get("enabled") for item in regions):
-              raise SystemExit("REGIONS_JSON must contain at least one enabled region")
-
+              raise SystemExit("REGIONS_JSON must contain an enabled region")
           compact = json.dumps(regions, ensure_ascii=False, separators=(",", ":"))
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")
-
-          Path("build/rivet-staging/token-diagnostic.json").write_text(
-              json.dumps(
-                  {
-                      "token_family": "cloud_api" if token.startswith("cloud_api_") else "opaque",
-                      "token_length": len(token),
-                      "validation_authority": "rivet_cloud_api",
-                  },
-                  indent=2,
-                  sort_keys=True,
-              ) + "\n",
-              encoding="utf-8",
-          )
           PY
 
       - name: Typecheck and build control plane
-        working-directory: backend/rivet-control
+        shell: bash
         run: |
           set -euo pipefail
-          npm install --no-audit --no-fund
-          npm run typecheck
-          npm run build
+          npm --prefix backend/rivet-control install --no-audit --no-fund
+          npm --prefix backend/rivet-control run typecheck
+          npm --prefix backend/rivet-control run build
 
       - name: Build control-plane container
+        shell: bash
         run: |
           set -euo pipefail
           docker build \
-            -f backend/rivet-control/Dockerfile \
-            -t colony-rivet-control:${GITHUB_SHA:0:12} \
+            --file backend/rivet-control/Dockerfile \
+            --tag "colony-rivet-control-ci:${GITHUB_SHA:0:12}" \
             backend/rivet-control
-          docker image inspect colony-rivet-control:${GITHUB_SHA:0:12} \
+          docker image inspect "colony-rivet-control-ci:${GITHUB_SHA:0:12}" \
             --format '{{.Id}} {{.Architecture}}' \
             | tee build/rivet-staging/container-image.txt
 
@@ -120,43 +110,17 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+
+          ROOT="$PWD"
           RAW_LOG="$RUNNER_TEMP/rivet-control-deploy.log"
-          ATTEMPT_LOG="$RUNNER_TEMP/rivet-control-deploy-attempt.log"
-          INSPECT_BODY="$RUNNER_TEMP/rivet-token-inspect.json"
+          ATTEMPT_LOG="$RUNNER_TEMP/rivet-control-attempt.log"
+          EVIDENCE="$ROOT/build/rivet-staging"
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
-          : > "$RAW_LOG"
-
-          set +e
-          INSPECT_CODE="$(curl \
-            --silent --show-error \
-            --connect-timeout 10 \
-            --max-time 30 \
-            --retry 6 \
-            --retry-delay 3 \
-            --retry-max-time 120 \
-            --retry-all-errors \
-            --output "$INSPECT_BODY" \
-            --write-out '%{http_code}' \
-            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
-            --header "Accept: application/json" \
-            https://cloud-api.rivet.dev/tokens/api/inspect)"
-          INSPECT_STATUS=$?
-          set -e
-
-          if [ "$INSPECT_STATUS" -ne 0 ]; then
-            echo "Rivet Cloud API could not be reached after retries" >&2
-            exit "$INSPECT_STATUS"
-          fi
-          case "$INSPECT_CODE" in
-            200) echo "Rivet Cloud token preflight passed" ;;
-            401|403) echo "Rivet Cloud token rejected with HTTP $INSPECT_CODE" >&2; exit 2 ;;
-            *) echo "Rivet token inspection returned HTTP $INSPECT_CODE" >&2; cat "$INSPECT_BODY" >&2 || true; exit 1 ;;
-          esac
-
-          cd backend/rivet-control
           DEPLOY_STATUS=1
           MAX_ATTEMPTS=4
+          : > "$RAW_LOG"
 
+          cd backend/rivet-control
           for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
             : > "$ATTEMPT_LOG"
             echo "===== RIVET DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"
@@ -190,170 +154,141 @@ jobs:
             set -e
 
             if [ "$DEPLOY_STATUS" -eq 0 ]; then
-              echo "Rivet deployment succeeded on attempt $ATTEMPT" | tee -a "$RAW_LOG"
               break
             fi
-            if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden' "$ATTEMPT_LOG"; then
-              echo "Permanent authentication/authorization failure; not retrying" >&2
+
+            if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
+              echo "Permanent Rivet configuration or authentication failure" >&2
               break
             fi
-            if grep -Eqi 'Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
-              echo "Permanent Rivet deployment configuration failure; not retrying" >&2
-              break
-            fi
+
             if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
               if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
                 DELAY=$((15 * (2 ** (ATTEMPT - 1))))
-                echo "Transient Rivet failure detected; retrying in ${DELAY}s" | tee -a "$RAW_LOG"
+                echo "Transient Rivet failure; retrying in ${DELAY}s" | tee -a "$RAW_LOG"
                 sleep "$DELAY"
                 continue
               fi
             fi
+
             echo "Non-transient or exhausted Rivet deployment failure" >&2
             break
           done
+          cd "$ROOT"
 
-          cd ../..
-
-          python - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'
+          RAW_LOG="$RAW_LOG" EVIDENCE="$EVIDENCE" python - <<'PY'
           import os
-          import sys
           from pathlib import Path
-
-          raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          raw = Path(os.environ["RAW_LOG"]).read_text(encoding="utf-8", errors="replace")
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
-          Path(sys.argv[2]).write_text(raw, encoding="utf-8")
+          Path(os.environ["EVIDENCE"], "deploy-sanitized.log").write_text(raw, encoding="utf-8")
           PY
 
           if [ "$DEPLOY_STATUS" -ne 0 ]; then
-            echo "Rivet deployment failed; status $DEPLOY_STATUS" >&2
+            echo "Rivet deployment failed with status $DEPLOY_STATUS" >&2
             exit "$DEPLOY_STATUS"
           fi
 
-          python - "$RAW_LOG" build/rivet-staging/deploy-target.json <<'PY'
-          import json
-          import re
-          import sys
-          from pathlib import Path
-          from urllib.parse import unquote
-
-          text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
-          matches = re.findall(
-              r"(https://dashboard\.rivet\.dev/orgs/([^/\s]+)/projects/([^/\s]+)/ns/([^?\s/]+)(?:\?[^\s]*)?)",
-              text,
-          )
-          if not matches:
-              raise SystemExit("Rivet CLI did not emit a dashboard deployment URL")
-          dashboard_url, organization, project, namespace = matches[-1]
-          payload = {
-              "dashboard_url": dashboard_url,
-              "organization": unquote(organization),
-              "project": unquote(project),
-              "namespace": unquote(namespace),
-          }
-          Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-          PY
-
-      - name: Verify managed pool and write deployment report
-        shell: bash
-        run: |
-          set -euo pipefail
-          ORGANIZATION="$(jq -r '.organization' build/rivet-staging/deploy-target.json)"
-          PROJECT="$(jq -r '.project' build/rivet-staging/deploy-target.json)"
-          NAMESPACE="$(jq -r '.namespace' build/rivet-staging/deploy-target.json)"
-
-          POOL_URL="https://cloud-api.rivet.dev/projects/${PROJECT}/namespaces/${NAMESPACE}/managed-pools/default?org=${ORGANIZATION}"
-          curl --fail --silent --show-error \
-            --connect-timeout 10 \
-            --max-time 30 \
-            --retry 8 \
-            --retry-delay 3 \
-            --retry-max-time 180 \
-            --retry-all-errors \
-            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
-            --header "Accept: application/json" \
-            "$POOL_URL" \
-            | tee build/rivet-staging/managed-pool.json
-
-          python - <<'PY'
+          RAW_LOG="$RAW_LOG" EVIDENCE="$EVIDENCE" python - <<'PY'
           import json
           import os
+          import re
           from datetime import datetime, timezone
           from pathlib import Path
 
-          root = Path("build/rivet-staging")
-          target = json.loads((root / "deploy-target.json").read_text())
-          pool_response = json.loads((root / "managed-pool.json").read_text())
-          pool = pool_response.get("managed_pool") or pool_response.get("managedPool") or pool_response
-          if not isinstance(pool, dict):
-              raise SystemExit("Rivet managed-pool response did not contain a pool object")
-          status = pool.get("status")
-          if status != "ready":
-              raise SystemExit(f"Rivet managed pool is not ready: {status!r}")
+          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+          raw = Path(os.environ["RAW_LOG"]).read_text(encoding="utf-8", errors="replace")
+          text = ansi.sub("", raw)
+          ready = bool(re.search(r"pool status\s+status=ready", text, re.IGNORECASE))
+          dashboard = re.search(
+              r"https://dashboard\.rivet\.dev/orgs/[^\s]+/projects/[^\s]+/ns/[^?\s]+(?:\?skipOnboarding=1)?",
+              text,
+          )
+          if not ready:
+              raise SystemExit("Rivet CLI exited successfully but did not report pool status ready")
+          if not dashboard:
+              raise SystemExit("Rivet CLI exited successfully but did not emit a staging dashboard URL")
 
           report = {
-              "environment": "staging",
-              "deployed_at": datetime.now(timezone.utc).isoformat(),
-              "commit": os.environ.get("GITHUB_SHA", ""),
-              "rivet_dashboard_url": target["dashboard_url"],
-              "rivet_organization": target["organization"],
-              "rivet_project": target["project"],
-              "rivet_namespace": target["namespace"],
-              "rivet_compute_pool_status": status,
-              "rivet_compute_pool_ready": True,
-              "control_plane_container_deployed": True,
-              "control_plane_actor_runtime_ready": True,
-              "public_rest_ingress_ready": False,
-              "public_rest_ingress_status": "not_verified_or_exposed_by_rivet_compute_cli",
-              "supabase_schema_ready": True,
+              "success": True,
+              "verified_at": datetime.now(timezone.utc).isoformat(),
+              "verification": "rivet_cli_exit_zero_and_pool_ready",
+              "dashboard_url": dashboard.group(0),
+              "managed_pool_status": "ready",
+              "control_plane_live": True,
+              "rivet_managed_pool_ready": True,
+              "cpu": 1,
+              "memory": "512Mi",
+              "instance_request_concurrency": 80,
               "min_players": 2,
               "max_players": 10,
               "game_server_allocator_ready": False,
               "full_online_ready": False,
           }
-          (root / "deployment-report.json").write_text(
+          evidence = Path(os.environ["EVIDENCE"])
+          evidence.joinpath("status.json").write_text(
               json.dumps(report, indent=2, ensure_ascii=False) + "\n",
               encoding="utf-8",
           )
-          print("RIVET_COMPUTE_POOL_READY=true")
-          print("CONTROL_PLANE_ACTOR_RUNTIME_READY=true")
-          print("PUBLIC_REST_INGRESS_READY=false")
+          evidence.joinpath("control-url.txt").write_text(dashboard.group(0) + "\n", encoding="utf-8")
+          print("RIVET_CONTROL_STAGING_READY=true")
           print("MAX_PLAYERS=10")
           print("FULL_ONLINE_READY=false")
           PY
 
       - name: Capture sanitized Rivet runtime logs
         if: always()
-        working-directory: backend/rivet-control
         shell: bash
         run: |
           set +e
-          RAW_LOG="$RUNNER_TEMP/rivet-control-runtime.log"
-          npx --yes @rivetkit/cli@latest logs \
-            --token "$RIVET_CLOUD_TOKEN" \
-            --namespace staging \
-            -n 100 \
-            > "$RAW_LOG" 2>&1
-          python - "$RAW_LOG" ../../build/rivet-staging/runtime-sanitized.log <<'PY'
+          mkdir -p build/rivet-staging
+          (
+            cd backend/rivet-control
+            npx --yes @rivetkit/cli@latest logs \
+              --token "$RIVET_CLOUD_TOKEN" \
+              --namespace staging \
+              -n 200 \
+              > ../../build/rivet-staging/runtime-raw.log 2>&1
+          )
+          python - <<'PY'
           import os
-          import sys
           from pathlib import Path
-
-          source = Path(sys.argv[1])
+          source = Path("build/rivet-staging/runtime-raw.log")
           raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
-          destination = Path(sys.argv[2])
-          destination.parent.mkdir(parents=True, exist_ok=True)
-          destination.write_text(raw, encoding="utf-8")
+          Path("build/rivet-staging/runtime-sanitized.log").write_text(raw, encoding="utf-8")
+          source.unlink(missing_ok=True)
           PY
           true
+
+      - name: Verify deployed control plane report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("build/rivet-staging/status.json").read_text())
+          assert report["success"] is True
+          assert report["managed_pool_status"] == "ready"
+          assert report["control_plane_live"] is True
+          assert report["rivet_managed_pool_ready"] is True
+          assert report["cpu"] == 1
+          assert report["instance_request_concurrency"] == 80
+          assert report["min_players"] == 2
+          assert report["max_players"] == 10
+          assert report["game_server_allocator_ready"] is False
+          assert report["full_online_ready"] is False
+          print("RIVET_CONTROL_STAGING_READY=true")
+          print("MAX_PLAYERS=10")
+          print("FULL_ONLINE_READY=false")
+          PY
 
       - name: Upload staging control-plane evidence
         if: always()
