@@ -2,5 +2,5 @@ validation_target=RIVET_ONLY_FULL_ONLINE
 protocol=4
 max_players=10
 external_hosting=false
-triggered_at=2026-07-20T22:10:00+03:00
-validator=full-online-scoped-validation
+triggered_at=2026-07-20T22:17:00+03:00
+validator=full-online-typescript-diagnostics
