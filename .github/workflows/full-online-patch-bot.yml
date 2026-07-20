@@ -230,7 +230,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VALIDATED_SHA="$(git rev-parse HEAD)"
+          export VALIDATED_SHA="$(git rev-parse HEAD)"
           mkdir -p deployment/status
           python - <<'PY'
           import json
