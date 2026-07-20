@@ -17,4 +17,9 @@ case "${CONTROL_PORT:-7001}" in *[!0-9]*|'') echo "invalid CONTROL_PORT" >&2; ex
 case "${MAX_PLAYERS:-6}" in *[!0-9]*|'') echo "invalid MAX_PLAYERS" >&2; exit 64;; esac
 case "${EXPECTED_PLAYERS:-2}" in *[!0-9]*|'') echo "invalid EXPECTED_PLAYERS" >&2; exit 64;; esac
 
-exec /usr/bin/tini -- /app/colony-dominion-server.x86_64 --headless --server "$@"
+GODOT_BIN="${GODOT_BIN:-/usr/local/bin/godot}"
+PCK_PATH="${GODOT_PCK_PATH:-/app/colony-dominion-server.pck}"
+[ -x "$GODOT_BIN" ] || { echo "Godot runtime is not executable: $GODOT_BIN" >&2; exit 64; }
+[ -s "$PCK_PATH" ] || { echo "Godot PCK is missing: $PCK_PATH" >&2; exit 64; }
+
+exec /usr/bin/tini -- "$GODOT_BIN" --headless --main-pack "$PCK_PATH" --server "$@"
