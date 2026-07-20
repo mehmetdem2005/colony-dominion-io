@@ -49,10 +49,32 @@ jobs:
         run: tools/install_godot_ci.sh
       - name: Validate online release architecture
         run: python tools/validate_online_release.py
-      - name: Lint GDScript
-        run: gdlint $(find . -name '*.gd' -type f | sort)
-      - name: Verify GDScript formatting
-        run: gdformat --check $(find . -name '*.gd' -type f | sort)
+      - name: Lint project GDScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t gd_files < <(
+            find . -type f -name '*.gd' \
+              -not -path './.godot/*' \
+              -not -path './.godot-bin/*' \
+              -not -path './build/*' \
+              | sort
+          )
+          test "${#gd_files[@]}" -gt 0
+          gdlint "${gd_files[@]}"
+      - name: Verify project GDScript formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t gd_files < <(
+            find . -type f -name '*.gd' \
+              -not -path './.godot/*' \
+              -not -path './.godot-bin/*' \
+              -not -path './build/*' \
+              | sort
+          )
+          test "${#gd_files[@]}" -gt 0
+          gdformat --check "${gd_files[@]}"
       - name: Run deployment bootstrap regression
         run: python tools/test_deploy_online_stack.py
       - name: Typecheck Rivet control plane
