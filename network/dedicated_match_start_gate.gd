@@ -70,5 +70,8 @@ static func is_server_mode() -> bool:
 
 
 static func read_int_environment(name: String, fallback: int, minimum: int, maximum: int) -> int:
+	var effective_maximum: int = maximum
+	if name == "MAX_PLAYERS" or name == "EXPECTED_PLAYERS":
+		effective_maximum = mini(maximum, NetworkProtocol.DEFAULT_MAX_PLAYERS)
 	var value: String = OS.get_environment(name)
-	return clampi(int(value), minimum, maximum) if value.is_valid_int() else fallback
+	return clampi(int(value), minimum, effective_maximum) if value.is_valid_int() else fallback
