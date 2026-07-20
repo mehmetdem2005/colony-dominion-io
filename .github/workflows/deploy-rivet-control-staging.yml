@@ -28,6 +28,7 @@ jobs:
     permissions:
       contents: read
     env:
+      RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       REGIONS_JSON: ${{ vars.REGIONS_JSON }}
@@ -45,116 +46,27 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
-      - name: Normalize and validate staging credentials
+      - name: Validate staging configuration
         shell: bash
-        env:
-          RAW_RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
         run: |
           set -euo pipefail
-          test -n "$RAW_RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
+          test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
-          echo "::add-mask::$RAW_RIVET_CLOUD_TOKEN"
+          echo "::add-mask::$RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_SECRET_KEY"
           mkdir -p build/rivet-staging
 
           python - <<'PY'
           import json
           import os
-          import re
           from pathlib import Path
 
-          raw_token = os.environ.get("RAW_RIVET_CLOUD_TOKEN", "")
-
-          def unquote(value: str) -> str:
-              value = value.strip()
-              if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-                  return value[1:-1].strip()
-              return value
-
-          token = ""
-          stripped = raw_token.strip()
-
-          if stripped.startswith(("{", "[")):
-              try:
-                  parsed = json.loads(stripped)
-              except json.JSONDecodeError:
-                  parsed = None
-
-              def find_token(value):
-                  if isinstance(value, dict):
-                      for key in ("RIVET_CLOUD_TOKEN", "rivet_cloud_token", "token"):
-                          candidate = value.get(key)
-                          if isinstance(candidate, str) and candidate.strip():
-                              return candidate
-                      for child in value.values():
-                          candidate = find_token(child)
-                          if candidate:
-                              return candidate
-                  elif isinstance(value, list):
-                      for child in value:
-                          candidate = find_token(child)
-                          if candidate:
-                              return candidate
-                  return ""
-
-              if parsed is not None:
-                  token = find_token(parsed)
-
-          if not token:
-              assignment = re.search(
-                  r"(?m)^\s*(?:export\s+)?RIVET_CLOUD_TOKEN\s*=\s*(.+?)\s*$",
-                  raw_token,
-              )
-              if assignment:
-                  token = assignment.group(1)
-
-          if not token:
-              known = list(dict.fromkeys(
-                  re.findall(
-                      r"cloud_api_[A-Za-z0-9._~+/=-]+|cloud\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}",
-                      raw_token,
-                  )
-              ))
-              if len(known) == 1:
-                  token = known[0]
-
-          if not token and stripped and not any(ch.isspace() for ch in stripped):
-              token = stripped
-
-          token = unquote(token)
-          if not token:
-              raise SystemExit("RIVET_CLOUD_TOKEN is empty after normalization")
+          token = os.environ["RIVET_CLOUD_TOKEN"].strip()
           if any(ch.isspace() for ch in token):
-              raise SystemExit("RIVET_CLOUD_TOKEN contains whitespace after normalization")
+              raise SystemExit("RIVET_CLOUD_TOKEN contains whitespace")
           if len(token) < 16:
               raise SystemExit("RIVET_CLOUD_TOKEN is unexpectedly short")
-
-          if token.startswith("cloud_api_"):
-              token_family = "cloud_api"
-          elif token.startswith("cloud.") and token.count(".") == 3:
-              token_family = "cloud_jwt"
-          else:
-              token_family = "opaque"
-
-          diagnostic = {
-              "raw_length": len(raw_token),
-              "normalized_length": len(token),
-              "token_family": token_family,
-              "looks_like_assignment": "RIVET_CLOUD_TOKEN" in raw_token and "=" in raw_token,
-              "looks_like_json": stripped.startswith(("{", "[")),
-              "contains_whitespace": any(ch.isspace() for ch in raw_token),
-              "validation_authority": "rivet_cloud_tokens_api_inspect",
-          }
-          Path("build/rivet-staging/token-diagnostic.json").write_text(
-              json.dumps(diagnostic, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-
-          print(f"::add-mask::{token}")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
-              output.write(f"RIVET_CLOUD_TOKEN={token}\n")
-          print(f"Rivet token normalized; family={token_family}; API inspection is authoritative")
 
           raw_regions = os.environ.get("REGIONS_JSON", "").strip()
           if not raw_regions:
@@ -164,10 +76,20 @@ jobs:
               raise SystemExit("REGIONS_JSON must be a non-empty JSON array")
           if not any(isinstance(item, dict) and item.get("enabled") for item in regions):
               raise SystemExit("REGIONS_JSON must contain at least one enabled region")
+
           compact = json.dumps(regions, ensure_ascii=False, separators=(",", ":"))
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")
-          print("Rivet staging credentials and region configuration are structurally valid")
+
+          diagnostic = {
+              "token_family": "cloud_api" if token.startswith("cloud_api_") else "opaque",
+              "token_length": len(token),
+              "validation_authority": "https://cloud-api.rivet.dev/tokens/api/inspect",
+          }
+          Path("build/rivet-staging/token-diagnostic.json").write_text(
+              json.dumps(diagnostic, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
           PY
 
       - name: Typecheck and build control plane
@@ -197,16 +119,21 @@ jobs:
           set -uo pipefail
           RAW_LOG="$RUNNER_TEMP/rivet-control-deploy.log"
           ATTEMPT_LOG="$RUNNER_TEMP/rivet-control-deploy-attempt.log"
+          INSPECT_BODY="$RUNNER_TEMP/rivet-token-inspect.json"
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
           : > "$RAW_LOG"
 
-          echo "Preflighting Rivet Cloud token with retry support"
+          echo "Preflighting Rivet Cloud token"
           set +e
           INSPECT_CODE="$(curl \
             --silent --show-error \
-            --connect-timeout 10 --max-time 30 \
-            --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
-            --output "$RUNNER_TEMP/rivet-token-inspect.json" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --retry 6 \
+            --retry-delay 3 \
+            --retry-max-time 120 \
+            --retry-all-errors \
+            --output "$INSPECT_BODY" \
             --write-out '%{http_code}' \
             --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
             --header "Accept: application/json" \
@@ -215,18 +142,21 @@ jobs:
           set -e
 
           if [ "$INSPECT_STATUS" -ne 0 ]; then
-            echo "Rivet token inspection could not reach Cloud API after retries" >&2
+            echo "Rivet Cloud API could not be reached after retries" >&2
             exit "$INSPECT_STATUS"
           fi
+
           case "$INSPECT_CODE" in
-            200) echo "Rivet Cloud token preflight passed" ;;
+            200)
+              echo "Rivet Cloud token preflight passed"
+              ;;
             401|403)
               echo "Rivet Cloud token rejected with HTTP $INSPECT_CODE" >&2
               exit 2
               ;;
             *)
-              echo "Rivet token inspection returned unexpected HTTP $INSPECT_CODE" >&2
-              cat "$RUNNER_TEMP/rivet-token-inspect.json" >&2 || true
+              echo "Rivet token inspection returned HTTP $INSPECT_CODE" >&2
+              cat "$INSPECT_BODY" >&2 || true
               exit 1
               ;;
           esac
@@ -248,8 +178,9 @@ jobs:
               --yes \
               --image colony-rivet-control \
               --tag "${GITHUB_SHA:0:12}" \
-              --cpu 0.25 \
+              --cpu 1 \
               --memory 512Mi \
+              --instance-request-concurrency 80 \
               --min-scale 0 \
               --max-scale 1 \
               --max-concurrent-actors 1000 \
@@ -272,11 +203,16 @@ jobs:
             fi
 
             if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden' "$ATTEMPT_LOG"; then
-              echo "Permanent Rivet authentication/authorization failure; not retrying" >&2
+              echo "Permanent authentication/authorization failure; not retrying" >&2
               break
             fi
 
-            if grep -Eqi '503 Service Unavailable|502 Bad Gateway|504 Gateway Timeout|429 Too Many Requests|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
+            if grep -Eqi 'Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
+              echo "Permanent Rivet deployment configuration failure; not retrying" >&2
+              break
+            fi
+
+            if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
               if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
                 DELAY=$((15 * (2 ** (ATTEMPT - 1))))
                 echo "Transient Rivet failure detected; retrying in ${DELAY}s" | tee -a "$RAW_LOG"
@@ -306,7 +242,7 @@ jobs:
           PY
 
           if [ "$DEPLOY_STATUS" -ne 0 ]; then
-            echo "Rivet deployment failed after controlled retries; status $DEPLOY_STATUS" >&2
+            echo "Rivet deployment failed; status $DEPLOY_STATUS" >&2
             exit "$DEPLOY_STATUS"
           fi
 
@@ -322,7 +258,6 @@ jobs:
           ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
           text = ansi.sub("", Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace"))
           urls = re.findall(r"https://[^\s<>'\"]+", text)
-          candidates = []
           blocked_hosts = {
               "github.com",
               "npmjs.com",
@@ -332,6 +267,7 @@ jobs:
               "dashboard.rivet.dev",
               "registry.rivet.dev",
           }
+          candidates = []
           for raw in reversed(urls):
               raw = raw.rstrip(".,);]}")
               parts = urlsplit(raw)
@@ -342,10 +278,10 @@ jobs:
                   candidates.append(origin)
 
           if not candidates:
-              raise SystemExit("No deploy endpoint URL was emitted by Rivet CLI")
+              raise SystemExit("No deployment endpoint URL was emitted by Rivet CLI")
 
           deadline = time.time() + 360
-          last_error = "no deployment URL candidates responded"
+          last_error = "no deployment endpoint responded"
           while time.time() < deadline:
               for origin in candidates:
                   try:
@@ -362,6 +298,7 @@ jobs:
                   except (urllib.error.URLError, TimeoutError, OSError) as exc:
                       last_error = f"{origin}: {exc}"
               time.sleep(5)
+
           raise SystemExit(f"Could not verify deployed control-plane endpoint: {last_error}")
           PY
 
