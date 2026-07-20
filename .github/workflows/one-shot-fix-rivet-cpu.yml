@@ -1,6 +1,7 @@
 name: One-shot Fix Rivet CPU
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
