@@ -3,6 +3,7 @@ extends SceneTree
 const REQUIRED_RESOURCES: Array[String] = [
 	"res://network/network_protocol.gd",
 	"res://network/game_transport.gd",
+	"res://network/rivet_game_transport.gd",
 	"res://network/dedicated_server_health.gd",
 	"res://gameplay/network/network_entity_proxy.gd",
 	"res://gameplay/network/online_match_client.gd",
@@ -24,8 +25,10 @@ func _run() -> void:
 	var future_assignment := {
 		"match_id": "00000000-0000-0000-0000-000000000001",
 		"server_id": "server-test",
-		"host": "127.0.0.1",
-		"port": 7000,
+		"transport": NetworkProtocol.TRANSPORT_WEBSOCKET,
+		"websocket_url": "wss://api.rivet.dev/gateway/test@token/websocket/",
+		"host": "api.rivet.dev",
+		"port": 443,
 		"join_ticket": "0123456789abcdef0123456789abcdef",
 		"region_id": "eu",
 		"region_name": "Avrupa",
@@ -35,7 +38,11 @@ func _run() -> void:
 	}
 	var validation: Dictionary = NetworkProtocol.validate_assignment(future_assignment)
 	if not bool(validation.get("ok", false)):
-		failures.append("Valid assignment was rejected")
+		failures.append("Valid Rivet WebSocket assignment was rejected")
+	future_assignment["websocket_url"] = "https://api.rivet.dev/not-websocket"
+	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
+		failures.append("Non-WebSocket Rivet endpoint was accepted")
+	future_assignment["websocket_url"] = "wss://api.rivet.dev/gateway/test@token/websocket/"
 	future_assignment["protocol_version"] = NetworkProtocol.VERSION + 1
 	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
 		failures.append("Protocol mismatch was accepted")
@@ -49,7 +56,7 @@ func _run() -> void:
 		failures.append("Assignment without server identity was accepted")
 	future_assignment["server_id"] = "server-test"
 	if NetworkProtocol.ENET_CHANNEL_COUNT < 4:
-		failures.append("Transport must expose four independent channels")
+		failures.append("Transport must expose four logical channels")
 	if NetworkProtocol.MAX_SNAPSHOT_ENTITIES > 160:
 		failures.append("Mobile snapshot budget is too large")
 	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:

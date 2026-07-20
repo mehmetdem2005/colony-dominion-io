@@ -13,10 +13,12 @@ const REQUIRED_RESOURCES: Array[String] = [
 	"res://network/supabase_data_client.gd",
 	"res://network/region_probe_service.gd",
 	"res://network/rivet_matchmaking_client.gd",
+	"res://network/rivet_game_transport.gd",
 	"res://network/legal_acceptance_store.gd",
 	"res://autoload/network_session.gd",
 	"res://autoload/game_session.gd",
 	"res://autoload/online_services.gd",
+	"res://autoload/rivet_online_services.gd",
 	"res://legal/legal_manifest.json",
 	"res://config/backend_config.json",
 ]
@@ -42,6 +44,8 @@ func _run() -> void:
 		var regions_variant: Variant = config.get("regions", [])
 		if not regions_variant is Array or (regions_variant as Array).size() < 7:
 			_failures.append("Client region catalog must expose all seven geographic groups")
+		if int(config.get("protocol_version", 0)) != 4:
+			_failures.append("Client configuration is not pinned to protocol 4")
 		var config_lower: String = config_text.to_lower()
 		for forbidden in [
 			"service_role", "sb_secret_", "database_password", "rivet_allocator_token"
@@ -53,10 +57,14 @@ func _run() -> void:
 
 	var project_text: String = FileAccess.get_file_as_string("res://project.godot")
 	for autoload_name in [
-		"NetworkSession", "GameSession", "OnlineServices", "NetworkStatusOverlay"
+		"NetworkSession", "GameSession", "GameTransport", "OnlineServices", "NetworkStatusOverlay"
 	]:
 		if not project_text.contains("%s=" % autoload_name):
 			_failures.append("Missing online autoload: %s" % autoload_name)
+	if not project_text.contains("rivet_game_transport.gd"):
+		_failures.append("Rivet game transport is not active")
+	if not project_text.contains("rivet_online_services.gd"):
+		_failures.append("Rivet assignment validator is not active")
 
 	var export_text: String = FileAccess.get_file_as_string("res://export_presets.cfg")
 	if not export_text.contains("permissions/internet=true"):
@@ -114,6 +122,8 @@ func _run() -> void:
 	)
 	if not package_text.contains('"rivetkit"'):
 		_failures.append("Rivet control plane is not pinned to RivetKit")
+	if package_text.contains('"@rivet-gg/api"'):
+		_failures.append("Legacy Rivet Build API SDK remains in the full-online runtime")
 	var auth_source: String = FileAccess.get_file_as_string(
 		"res://backend/rivet-control/src/auth.ts"
 	)
@@ -153,7 +163,7 @@ func _validate_offline_autoload_contract() -> void:
 
 func _finish() -> void:
 	if _failures.is_empty():
-		print("PHASE_05_2_ONLINE_RUNTIME_FOUNDATION_OK")
+		print("PHASE_05_4_RIVET_FULL_ONLINE_FOUNDATION_OK")
 		quit(0)
 		return
 	for failure in _failures:

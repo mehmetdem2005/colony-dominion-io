@@ -1,7 +1,7 @@
 class_name NetworkProtocol
 extends RefCounted
 
-const VERSION: int = 3
+const VERSION: int = 4
 const CHANNEL_CONTROL: int = 0
 const CHANNEL_SNAPSHOT: int = 1
 const CHANNEL_INPUT: int = 2
@@ -27,13 +27,18 @@ const DEFAULT_MAX_PLAYERS: int = 10
 const UNAUTHENTICATED_CONNECTION_HEADROOM: int = 8
 const ENET_CHANNEL_COUNT: int = 4
 
+const TRANSPORT_ENET: String = "enet"
+const TRANSPORT_WEBSOCKET: String = "websocket"
 const SERVER_PEER_ID: int = 1
 
 
 static func normalize_assignment(value: Dictionary) -> Dictionary:
+	var transport: String = String(value.get("transport", TRANSPORT_ENET)).strip_edges().to_lower()
 	return {
 		"match_id": String(value.get("match_id", "")).strip_edges(),
 		"server_id": String(value.get("server_id", "")).strip_edges(),
+		"transport": transport,
+		"websocket_url": String(value.get("websocket_url", "")).strip_edges(),
 		"host": String(value.get("host", "")).strip_edges(),
 		"port": clampi(int(value.get("port", 0)), 0, 65535),
 		"join_ticket": String(value.get("join_ticket", "")).strip_edges(),
@@ -47,14 +52,9 @@ static func normalize_assignment(value: Dictionary) -> Dictionary:
 
 static func validate_reconnect_assignment(value: Dictionary) -> Dictionary:
 	var assignment: Dictionary = normalize_assignment(value)
-	if String(assignment.get("match_id", "")).is_empty():
-		return {"ok": false, "error": "Maç kimliği eksik"}
-	if String(assignment.get("server_id", "")).is_empty():
-		return {"ok": false, "error": "Sunucu kimliği eksik"}
-	if String(assignment.get("host", "")).is_empty():
-		return {"ok": false, "error": "Sunucu adresi eksik"}
-	if int(assignment.get("port", 0)) <= 0:
-		return {"ok": false, "error": "Sunucu portu geçersiz"}
+	var common_error: String = _validate_assignment_endpoint(assignment)
+	if not common_error.is_empty():
+		return {"ok": false, "error": common_error}
 	if int(assignment.get("protocol_version", 0)) != VERSION:
 		return {"ok": false, "error": "Ağ protokol sürümü uyumsuz"}
 	return {"ok": true, "assignment": assignment}
@@ -62,14 +62,9 @@ static func validate_reconnect_assignment(value: Dictionary) -> Dictionary:
 
 static func validate_assignment(value: Dictionary) -> Dictionary:
 	var assignment: Dictionary = normalize_assignment(value)
-	if String(assignment.get("match_id", "")).is_empty():
-		return {"ok": false, "error": "Maç kimliği eksik"}
-	if String(assignment.get("server_id", "")).is_empty():
-		return {"ok": false, "error": "Sunucu kimliği eksik"}
-	if String(assignment.get("host", "")).is_empty():
-		return {"ok": false, "error": "Sunucu adresi eksik"}
-	if int(assignment.get("port", 0)) <= 0:
-		return {"ok": false, "error": "Sunucu portu geçersiz"}
+	var common_error: String = _validate_assignment_endpoint(assignment)
+	if not common_error.is_empty():
+		return {"ok": false, "error": common_error}
 	var join_ticket: String = String(assignment.get("join_ticket", ""))
 	if join_ticket.length() < 16 or join_ticket.length() > 256:
 		return {"ok": false, "error": "Bağlantı bileti geçersiz"}
@@ -78,6 +73,29 @@ static func validate_assignment(value: Dictionary) -> Dictionary:
 	if int(assignment.get("expires_at", 0)) <= int(Time.get_unix_time_from_system() * 1000.0):
 		return {"ok": false, "error": "Sunucu atamasının süresi doldu"}
 	return {"ok": true, "assignment": assignment}
+
+
+static func _validate_assignment_endpoint(assignment: Dictionary) -> String:
+	if String(assignment.get("match_id", "")).is_empty():
+		return "Maç kimliği eksik"
+	if String(assignment.get("server_id", "")).is_empty():
+		return "Sunucu kimliği eksik"
+	var transport: String = String(assignment.get("transport", TRANSPORT_ENET))
+	if transport == TRANSPORT_WEBSOCKET:
+		var websocket_url: String = String(assignment.get("websocket_url", ""))
+		if (
+			not websocket_url.begins_with("wss://")
+			and not (OS.is_debug_build() and websocket_url.begins_with("ws://"))
+		):
+			return "Rivet WebSocket adresi geçersiz"
+		return ""
+	if transport != TRANSPORT_ENET:
+		return "Desteklenmeyen ağ taşıma türü"
+	if String(assignment.get("host", "")).is_empty():
+		return "Sunucu adresi eksik"
+	if int(assignment.get("port", 0)) <= 0:
+		return "Sunucu portu geçersiz"
+	return ""
 
 
 static func make_command(

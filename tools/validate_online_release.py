@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_BUILD = "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"
-EXPECTED_PROTOCOL = 3
+EXPECTED_BUILD = "PHASE-05.4-RIVET-FULL-ONLINE"
+EXPECTED_PROTOCOL = 4
 
 
 class ValidationFailure(RuntimeError):
@@ -20,25 +20,47 @@ def require(condition: bool, message: str) -> None:
         raise ValidationFailure(message)
 
 
+def read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def require_markers(path: str, markers: tuple[str, ...]) -> None:
+    text = read(path)
+    for marker in markers:
+        require(marker in text, f"{path} marker missing: {marker}")
+
+
 def validate() -> dict[str, object]:
-    config = json.loads((ROOT / "config/backend_config.json").read_text(encoding="utf-8"))
+    config = json.loads(read("config/backend_config.json"))
     require(config.get("build_id") == EXPECTED_BUILD, "backend build id mismatch")
     require(config.get("protocol_version") == EXPECTED_PROTOCOL, "protocol version mismatch")
 
-    protocol = (ROOT / "network/network_protocol.gd").read_text(encoding="utf-8")
-    require("const VERSION: int = 3" in protocol, "GDScript protocol version mismatch")
+    protocol = read("network/network_protocol.gd")
+    require("const VERSION: int = 4" in protocol, "GDScript protocol version mismatch")
+    require("TRANSPORT_WEBSOCKET" in protocol, "WebSocket transport contract missing")
     require("RECONNECT_GRACE_SECONDS: float = 60.0" in protocol, "reconnect grace mismatch")
     require("MAX_SNAPSHOT_ENTITIES: int = 128" in protocol, "snapshot budget mismatch")
 
-    transport = (ROOT / "network/game_transport.gd").read_text(encoding="utf-8")
-    for marker in (
-        "DedicatedMatchStartGate",
-        "GAME_SERVER_AUTH_TOKEN",
-        "EXPECTED_PLAYERS",
-        "clear_persisted_reconnect_session",
-        "_rpc_match_ended",
-    ):
-        require(marker in transport, f"transport marker missing: {marker}")
+    require_markers(
+        "network/rivet_game_transport.gd",
+        (
+            "WebSocketMultiplayerPeer",
+            "NETWORK_TRANSPORT",
+            "create_server",
+            "create_client",
+            "_process_reconnect",
+        ),
+    )
+    require_markers(
+        "network/game_transport.gd",
+        (
+            "DedicatedMatchStartGate",
+            "GAME_SERVER_AUTH_TOKEN",
+            "EXPECTED_PLAYERS",
+            "clear_persisted_reconnect_session",
+            "_rpc_match_ended",
+        ),
+    )
 
     migrations = sorted((ROOT / "backend/supabase/migrations").glob("*.sql"))
     names = [path.name for path in migrations]
@@ -57,23 +79,72 @@ def validate() -> dict[str, object]:
     ):
         require(marker in ranked_sql, f"ranked SQL marker missing: {marker}")
 
-    registry = (ROOT / "backend/rivet-control/src/registry.ts").read_text(encoding="utf-8")
-    allocator = (ROOT / "backend/rivet-control/src/allocator.ts").read_text(encoding="utf-8")
-    server = (ROOT / "backend/rivet-control/src/server.ts").read_text(encoding="utf-8")
-    for marker in ("releaseMatch", "registerServerCredential", "queueTicketId"):
-        require(marker in registry, f"registry lifecycle marker missing: {marker}")
-    for marker in ("EXPECTED_PLAYERS", "GAME_SERVER_AUTH_TOKEN", "@rivet-gg/api"):
-        require(marker in allocator, f"allocator marker missing: {marker}")
-    for marker in ("authorizeServer", "/v1/internal/matches/result", "p_ranked"):
-        require(marker in server, f"control server marker missing: {marker}")
+    require_markers(
+        "backend/rivet-control/src/registry.ts",
+        ("releaseMatch", "registerServerCredential", "queueTicketId"),
+    )
+    require_markers(
+        "backend/rivet-control/src/runtime-registry.ts",
+        ("matchmaker", "gameServer", "maxIncomingMessageSize", "maxOutgoingMessageSize"),
+    )
+    require_markers(
+        "backend/rivet-control/src/game-server-actor.ts",
+        (
+            "spawn(",
+            "GODOT_PCK_PATH",
+            "onWebSocket",
+            "waitForGodotReady",
+            "stopRuntime",
+            "c.destroy()",
+        ),
+    )
+    require_markers(
+        "backend/rivet-control/src/rivet-native-allocator.ts",
+        ("gameServer.create", "getGatewayUrl", "websocketUrl", "MAX_PLAYERS = 10"),
+    )
+    require_markers(
+        "backend/rivet-control/src/server-full-online.ts",
+        (
+            "allocateRivetGameServer",
+            "runtimeRegistry.handler",
+            "Rivet full-online",
+            "maxPlayers",
+        ),
+    )
+    require_markers(
+        "backend/rivet-control/src/startup-canary.ts",
+        ("RIVET_GAME_ACTOR_CANARY_OK", "webSocket", "shutdown"),
+    )
 
-    export_text = (ROOT / "export_presets.cfg").read_text(encoding="utf-8")
+    dockerfile = read("backend/rivet-control/Dockerfile")
+    for marker in (
+        "GODOT_VERSION=4.6.3",
+        "GODOT_PCK_PATH=/app/game/colony-dominion-server.pck",
+        "COPY build/server/colony-dominion-server.pck",
+        "dist/bootstrap.js",
+    ):
+        require(marker in dockerfile, f"full-online Docker marker missing: {marker}")
+
+    project = read("project.godot")
+    require('GameTransport="*res://network/rivet_game_transport.gd"' in project, "Rivet transport autoload missing")
+    require('OnlineServices="*res://autoload/rivet_online_services.gd"' in project, "Rivet online services autoload missing")
+
+    export_text = read("export_presets.cfg")
     require('name="Dedicated Server"' in export_text, "dedicated export preset missing")
     require('permissions/internet=true' in export_text, "Android INTERNET permission missing")
     require("config/*.json,legal/*.json,legal/*.md" in export_text, "Android legal/config export filter missing")
+    require('version/name="0.5.4"' in export_text, "Android version mismatch")
+
+    forbidden_paths = (
+        ROOT / "deployment/oracle",
+        ROOT / "backend/external-allocator",
+    )
+    for path in forbidden_paths:
+        require(not path.exists(), f"forbidden external-hosting path exists: {path.relative_to(ROOT)}")
 
     secret_patterns = (
         re.compile(r"cloud\.eyJ[A-Za-z0-9_.-]+"),
+        re.compile(r"\bcloud_api_[A-Za-z0-9._~+/=-]{20,}"),
         re.compile(r"\bsbp_[A-Za-z0-9]{20,}"),
         re.compile(r"\bsb_secret_[A-Za-z0-9_-]{20,}"),
     )
@@ -95,8 +166,11 @@ def validate() -> dict[str, object]:
         "ok": True,
         "build_id": EXPECTED_BUILD,
         "protocol_version": EXPECTED_PROTOCOL,
+        "transport": "rivet_websocket",
+        "max_players": 10,
         "migrations": names,
         "text_files_scanned": scanned,
+        "external_hosting": False,
     }
 
 

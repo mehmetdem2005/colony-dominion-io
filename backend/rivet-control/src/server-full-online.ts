@@ -3,10 +3,10 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { createClient } from "rivetkit/client";
 import { z } from "zod";
-import { allocateGameServer } from "./allocator.js";
 import { requireSupabaseAuth, type AuthVariables } from "./auth.js";
-import { registry } from "./registry.js";
 import { findRegion, loadRegions } from "./regions.js";
+import { allocateRivetGameServer } from "./rivet-native-allocator.js";
+import { runtimeRegistry } from "./runtime-registry.js";
 import type {
   QueueStatus,
   ServerAssignment,
@@ -15,7 +15,7 @@ import type {
 
 const port = Number(process.env.RIVET_PORT ?? process.env.PORT ?? 3000);
 const baseUrl = process.env.INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`;
-const actorClient = createClient<typeof registry>(`${baseUrl}/api/rivet`);
+const actorClient = createClient<typeof runtimeRegistry>(`${baseUrl}/api/rivet`);
 const app = new Hono<{ Variables: AuthVariables }>();
 const regions = loadRegions();
 const minPlayers = readBoundedIntegerEnvironment("MIN_PLAYERS", 2, 1, 10);
@@ -48,12 +48,12 @@ const matchResultSchema = z.object({
   participants: z.array(
     z.object({
       player_id: z.string().uuid(),
-      team_id: z.number().int().min(0).max(31),
-      placement: z.number().int().min(1).max(32),
+      team_id: z.number().int().min(0).max(9),
+      placement: z.number().int().min(1).max(10),
       score: z.number().int().min(0),
       disconnected: z.boolean(),
     }),
-  ).max(32),
+  ).max(10),
 });
 
 const consumeSchema = z.object({
@@ -65,10 +65,10 @@ const consumeSchema = z.object({
   protocol_version: z.number().int().positive(),
 });
 
-app.all("/api/rivet/*", (c) => registry.handler(c.req.raw));
+app.all("/api/rivet/*", (c) => runtimeRegistry.handler(c.req.raw));
 
 app.get("/v1/health", (c) =>
-  c.json({ ok: true, service: "colony-dominion-rivet-control", now: Date.now() }),
+  c.json({ ok: true, service: "colony-dominion-rivet-full-online", now: Date.now() }),
 );
 app.get("/v1/health/config", (c) => {
   const checks = {
@@ -77,15 +77,8 @@ app.get("/v1/health/config", (c) => {
     protocol_version: requiredProtocolVersion > 0,
     per_server_auth: true,
     supabase_server_write: Boolean(supabaseSecretKey),
-    allocator: Boolean(
-      process.env.RIVET_ALLOCATOR_URL ||
-        process.env.DEV_GAME_SERVER_HOST ||
-        (process.env.RIVET_ALLOCATOR_CLOUD_TOKEN &&
-          process.env.RIVET_PROJECT &&
-          process.env.RIVET_ENVIRONMENT &&
-          process.env.RIVET_GAME_SERVER_BUILD_TAG &&
-          process.env.PUBLIC_CONTROL_BASE_URL),
-    ),
+    allocator: Boolean(process.env.GODOT_BIN && process.env.GODOT_PCK_PATH),
+    websocket_transport: true,
     regions: regions.some((region) => region.enabled),
   };
   return c.json({
@@ -95,6 +88,7 @@ app.get("/v1/health/config", (c) => {
       min_players: minPlayers,
       max_players: maxPlayers,
       queue_ttl_seconds: queueTtlMs / 1000,
+      transport: "rivet_websocket",
     },
   });
 });
@@ -243,6 +237,11 @@ app.post("/v1/internal/matches/result", async (c) => {
     true,
   );
   await actorInstance.releaseMatch(parsed.data.match_id, Date.now());
+  try {
+    await actorClient.gameServer.get([parsed.data.match_id]).shutdown("match_complete");
+  } catch (error) {
+    console.warn("Rivet game actor shutdown was not acknowledged", error);
+  }
   const resultBody = await rpcResponse.json().catch(() => ({ ok: true }));
   return c.json({ ok: true, result: resultBody });
 });
@@ -287,7 +286,11 @@ async function attemptAllocation(
     return;
   }
   try {
-    const allocation = await allocateGameServer(findRegion(regions, regionId), candidates);
+    const allocation = await allocateRivetGameServer(
+      actorClient,
+      findRegion(regions, regionId),
+      candidates,
+    );
     await actorInstance.registerServerCredential({
       matchId: allocation.assignment.matchId,
       serverId: allocation.assignment.serverId,
@@ -318,7 +321,7 @@ async function attemptAllocation(
     );
   } catch (error) {
     await actorInstance.restoreCandidates(regionId, candidates);
-    console.error("Game server allocation failed", error);
+    console.error("Rivet game actor allocation failed", error);
   }
 }
 
@@ -340,6 +343,8 @@ function toPublicAssignment(assignment: ServerAssignment): Record<string, unknow
   return {
     match_id: assignment.matchId,
     server_id: assignment.serverId,
+    transport: assignment.transport,
+    websocket_url: assignment.websocketUrl,
     host: assignment.host,
     port: assignment.port,
     join_ticket: assignment.joinTicket,
@@ -376,4 +381,4 @@ function hashAuthorization(authorization: string): string {
 }
 
 serve({ fetch: app.fetch, port });
-console.log(`Colony Dominion control plane listening on ${port}`);
+console.log(`Colony Dominion Rivet full-online control plane listening on ${port}`);

@@ -1,7 +1,7 @@
 {
   "environment": "development",
-  "build_id": "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION",
-  "protocol_version": 3,
+  "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
+  "protocol_version": 4,
   "supabase_url": "",
   "supabase_publishable_key": "",
   "rivet_control_base_url": "",
