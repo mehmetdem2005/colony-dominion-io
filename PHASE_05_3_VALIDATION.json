@@ -2,7 +2,7 @@
   "ok": true,
   "build_id": "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION",
   "protocol_version": 3,
-  "max_players": 6,
+  "max_players": 10,
   "gdscript_files": 107,
   "global_classes": 80,
   "scenes": 12,

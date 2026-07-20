@@ -7,6 +7,13 @@ on:
         description: Type DEPLOY-RIVET-STAGING
         required: true
         type: string
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-rivet-control-staging.yml"
+      - "backend/rivet-control/**"
+      - "backend/game-server/**"
+      - "network/network_protocol.gd"
 
 concurrency:
   group: colony-rivet-control-staging
@@ -14,49 +21,86 @@ concurrency:
 
 jobs:
   deploy-control:
-    if: ${{ inputs.confirmation == 'DEPLOY-RIVET-STAGING' }}
+    if: ${{ github.event_name == 'push' || inputs.confirmation == 'DEPLOY-RIVET-STAGING' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment: staging
     permissions:
       contents: read
     env:
-      RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       REGIONS_JSON: ${{ vars.REGIONS_JSON }}
       SUPPORTED_BUILD_ID: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
       PROTOCOL_VERSION: "3"
       MIN_PLAYERS: "2"
-      MAX_PLAYERS: "6"
+      MAX_PLAYERS: "10"
       QUEUE_TTL_SECONDS: "120"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
+          package-manager-cache: false
 
-      - name: Validate staging deployment inputs
+      - name: Normalize and validate staging credentials
         shell: bash
+        env:
+          RAW_RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
         run: |
           set -euo pipefail
-          test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
+          test -n "$RAW_RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
-          echo "::add-mask::$RIVET_CLOUD_TOKEN"
+          echo "::add-mask::$RAW_RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_SECRET_KEY"
           mkdir -p build/rivet-staging
 
           python - <<'PY'
           import json
           import os
+          import re
+          from pathlib import Path
 
-          raw = os.environ.get("REGIONS_JSON", "").strip()
-          if not raw:
-              raw = '[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'
-          regions = json.loads(raw)
+          raw_token = os.environ.get("RAW_RIVET_CLOUD_TOKEN", "")
+          diagnostic = {
+              "raw_length": len(raw_token),
+              "contains_cloud_api_marker": "cloud_api_" in raw_token,
+              "looks_like_assignment": "RIVET_CLOUD_TOKEN" in raw_token and "=" in raw_token,
+              "looks_like_json": raw_token.lstrip().startswith(("{", "[")),
+              "looks_like_jwt": raw_token.strip().count(".") == 2,
+              "contains_whitespace": any(ch.isspace() for ch in raw_token),
+          }
+
+          candidates = list(dict.fromkeys(re.findall(
+              r"cloud_api_[A-Za-z0-9._~+/=-]+",
+              raw_token,
+          )))
+          diagnostic["cloud_api_candidate_count"] = len(candidates)
+          Path("build/rivet-staging/token-diagnostic.json").write_text(
+              json.dumps(diagnostic, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          if len(candidates) != 1:
+              raise SystemExit(
+                  "RIVET_CLOUD_TOKEN must contain exactly one cloud_api_ token. "
+                  "Copy the RIVET_CLOUD_TOKEN value from Rivet Dashboard > Connect > Rivet Cloud."
+              )
+          token = candidates[0]
+          if len(token) < 24:
+              raise SystemExit("Extracted Rivet Cloud token is unexpectedly short")
+
+          print(f"::add-mask::{token}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"RIVET_CLOUD_TOKEN={token}\n")
+
+          raw_regions = os.environ.get("REGIONS_JSON", "").strip()
+          if not raw_regions:
+              raw_regions = '[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'
+          regions = json.loads(raw_regions)
           if not isinstance(regions, list) or not regions:
               raise SystemExit("REGIONS_JSON must be a non-empty JSON array")
           if not any(isinstance(item, dict) and item.get("enabled") for item in regions):
@@ -64,7 +108,7 @@ jobs:
           compact = json.dumps(regions, ensure_ascii=False, separators=(",", ":"))
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")
-          print("Rivet staging inputs are valid")
+          print("Rivet staging credentials and region configuration are structurally valid")
           PY
 
       - name: Typecheck and build control plane
@@ -75,16 +119,30 @@ jobs:
           npm run typecheck
           npm run build
 
+      - name: Build control-plane container
+        run: |
+          set -euo pipefail
+          docker build \
+            -f backend/rivet-control/Dockerfile \
+            -t colony-rivet-control:${GITHUB_SHA:0:12} \
+            backend/rivet-control
+          docker image inspect colony-rivet-control:${GITHUB_SHA:0:12} \
+            --format '{{.Id}} {{.Architecture}}' \
+            | tee build/rivet-staging/container-image.txt
+
       - name: Deploy control plane to Rivet Compute staging
+        id: deploy
         timeout-minutes: 15
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           RAW_LOG="$RUNNER_TEMP/rivet-control-deploy.log"
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
 
           cd backend/rivet-control
+          set +e
           npx --yes @rivetkit/cli@latest deploy \
+            --token "$RIVET_CLOUD_TOKEN" \
             --namespace staging \
             --dockerfile Dockerfile \
             --build-context . \
@@ -106,6 +164,8 @@ jobs:
             --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
             --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \
             2>&1 | tee "$RAW_LOG"
+          DEPLOY_STATUS=${PIPESTATUS[0]}
+          set -e
           cd ../..
 
           python - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'
@@ -113,13 +173,19 @@ jobs:
           import sys
           from pathlib import Path
 
-          raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          source = Path(sys.argv[1])
+          raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
           Path(sys.argv[2]).write_text(raw, encoding="utf-8")
           PY
+
+          if [ "$DEPLOY_STATUS" -ne 0 ]; then
+            echo "Rivet deployment command failed with status $DEPLOY_STATUS" >&2
+            exit "$DEPLOY_STATUS"
+          fi
 
           python - "$RAW_LOG" build/rivet-staging/control-url.txt <<'PY'
           import re
@@ -134,16 +200,17 @@ jobs:
           text = ansi.sub("", Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace"))
           urls = re.findall(r"https://[^\s<>'\"]+", text)
           candidates = []
+          blocked_hosts = {"github.com", "npmjs.com", "www.npmjs.com", "rivet.dev"}
           for raw in reversed(urls):
               raw = raw.rstrip(".,);]}")
               parts = urlsplit(raw)
-              if not parts.scheme or not parts.netloc:
+              if not parts.scheme or not parts.netloc or parts.hostname in blocked_hosts:
                   continue
               origin = f"{parts.scheme}://{parts.netloc}"
               if origin not in candidates:
                   candidates.append(origin)
 
-          deadline = time.time() + 180
+          deadline = time.time() + 240
           last_error = "no deployment URL candidates found"
           while time.time() < deadline:
               for origin in candidates:
@@ -172,13 +239,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
             "$RIVET_CONTROL_URL/v1/health" \
             | tee build/rivet-staging/health.json
-          curl --fail --silent --show-error \
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
             "$RIVET_CONTROL_URL/v1/health/config" \
             | tee build/rivet-staging/health-config.json
-          curl --fail --silent --show-error \
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
             "$RIVET_CONTROL_URL/v1/regions" \
             | tee build/rivet-staging/regions.json
 
@@ -193,14 +260,24 @@ jobs:
           config = json.loads((root / "health-config.json").read_text())
           regions = json.loads((root / "regions.json").read_text())
           checks = config.get("checks", {})
+          limits = config.get("limits", {})
 
           if health.get("ok") is not True:
               raise SystemExit("Control-plane health endpoint did not return ok=true")
-          for key in ("supabase_url", "supported_build_id", "protocol_version", "per_server_auth", "supabase_server_write", "regions"):
+          for key in (
+              "supabase_url",
+              "supported_build_id",
+              "protocol_version",
+              "per_server_auth",
+              "supabase_server_write",
+              "regions",
+          ):
               if checks.get(key) is not True:
                   raise SystemExit(f"Required control-plane check failed: {key}")
           if checks.get("allocator") is not False:
-              raise SystemExit("Allocator unexpectedly reports ready; dedicated-server hosting has not been approved")
+              raise SystemExit("Allocator unexpectedly reports ready before dedicated-server approval")
+          if limits.get("min_players") != 2 or limits.get("max_players") != 10:
+              raise SystemExit(f"Unexpected matchmaking limits: {limits}")
           if not isinstance(regions.get("regions"), list) or not regions["regions"]:
               raise SystemExit("No control-plane regions were returned")
 
@@ -212,6 +289,8 @@ jobs:
               "supabase_url": f"https://{os.environ['SUPABASE_PROJECT_REF']}.supabase.co",
               "control_plane_live": True,
               "supabase_schema_ready": True,
+              "min_players": 2,
+              "max_players": 10,
               "game_server_allocator_ready": False,
               "game_server_hosting_status": "blocked_pending_official_rivet_game_server_path",
               "full_online_ready": False,
@@ -224,6 +303,7 @@ jobs:
               encoding="utf-8",
           )
           print("RIVET_CONTROL_STAGING_LIVE")
+          print("MAX_PLAYERS=10")
           print("FULL_ONLINE_READY=false")
           PY
 
@@ -235,6 +315,7 @@ jobs:
           set +e
           RAW_LOG="$RUNNER_TEMP/rivet-control-runtime.log"
           npx --yes @rivetkit/cli@latest logs \
+            --token "$RIVET_CLOUD_TOKEN" \
             --namespace staging \
             -n 100 \
             > "$RAW_LOG" 2>&1
@@ -257,7 +338,7 @@ jobs:
 
       - name: Upload staging control-plane evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rivet-control-staging
           if-no-files-found: warn

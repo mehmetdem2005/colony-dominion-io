@@ -152,7 +152,7 @@ async function allocateDirectlyOnRivet(
         REGION_ID: region.id,
         BUILD_ID: players[0]?.buildId ?? "",
         PROTOCOL_VERSION: String(players[0]?.protocolVersion ?? 0),
-        MAX_PLAYERS: String(readPositiveInteger("MAX_PLAYERS", 6)),
+        MAX_PLAYERS: String(readPositiveInteger("MAX_PLAYERS", 10)),
         EXPECTED_PLAYERS: String(players.length),
         CONTROL_BASE_URL: controlBaseUrl,
         GAME_SERVER_AUTH_TOKEN: gameServerToken,

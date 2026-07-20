@@ -25,8 +25,8 @@ func _run() -> void:
 			failures.append("Missing production file: %s" % path)
 	if NetworkProtocol.VERSION != 3:
 		failures.append("Network protocol must be version 3")
-	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 6:
-		failures.append("Online capacity must match the six colony slots")
+	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
+		failures.append("Online capacity must match the ten colony slots")
 	var config: String = FileAccess.get_file_as_string("res://config/backend_config.json")
 	if not config.contains(BUILD_ID) or not config.contains('"protocol_version": 3'):
 		failures.append("Client backend configuration is not pinned to Phase 05.3")

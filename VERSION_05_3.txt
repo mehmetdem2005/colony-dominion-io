@@ -2,4 +2,4 @@ Colony Dominion.io
 Phase 05.3 Online Production Completion
 Build: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
 Protocol: 3
-Max players: 6
+Max players: 10

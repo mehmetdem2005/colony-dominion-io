@@ -7,6 +7,10 @@ on:
     paths:
       - "backend/rivet-control/**"
       - ".github/workflows/validate-rivet-control.yml"
+  pull_request:
+    paths:
+      - "backend/rivet-control/**"
+      - ".github/workflows/validate-rivet-control.yml"
 
 concurrency:
   group: validate-rivet-control-${{ github.ref }}
@@ -42,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           npx --yes @rivetkit/cli@latest deploy --help | tee ../../build-rivet-cli-help.txt
+          grep -q -- "--token" ../../build-rivet-cli-help.txt
           grep -q -- "--namespace" ../../build-rivet-cli-help.txt
           grep -q -- "--dockerfile" ../../build-rivet-cli-help.txt
           grep -q -- "--build-context" ../../build-rivet-cli-help.txt

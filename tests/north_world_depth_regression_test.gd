@@ -1,7 +1,7 @@
 extends SceneTree
 
 const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
-const GROUND_NODE_HEADER: String = "[node name=\"Ground\" type=\"Node2D\" parent=\"World\"]"
+const GROUND_NODE_HEADER: String = '[node name="Ground" type="Node2D" parent="World"]'
 
 const SAMPLE_WORLD_Y: Array[float] = [
 	-12000.0,

@@ -399,7 +399,7 @@ def deploy_rivet_control(
     env["SUPPORTED_BUILD_ID"] = build_id
     env["PROTOCOL_VERSION"] = str(protocol_version)
     env["MIN_PLAYERS"] = "2"
-    env["MAX_PLAYERS"] = "6"
+    env["MAX_PLAYERS"] = "10"
     env["QUEUE_TTL_SECONDS"] = "120"
     env["RIVET_PROJECT"] = project
     env["RIVET_ENVIRONMENT"] = environment
