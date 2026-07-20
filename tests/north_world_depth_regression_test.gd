@@ -1,6 +1,7 @@
 extends SceneTree
 
-const MAIN_SCENE := preload("res://scenes/main_game.tscn")
+const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
+const GROUND_NODE_HEADER: String = "[node name=\"Ground\" type=\"Node2D\" parent=\"World\"]"
 
 const SAMPLE_WORLD_Y: Array[float] = [
 	-12000.0,
@@ -19,17 +20,24 @@ func _init() -> void:
 
 
 func _run() -> void:
-	var match_scene: Node = MAIN_SCENE.instantiate()
-	var ground_root: Node2D = match_scene.get_node_or_null("World/Ground") as Node2D
-	if not is_instance_valid(ground_root):
-		match_scene.free()
+	var scene_text: String = FileAccess.get_file_as_string(MAIN_SCENE_PATH)
+	if scene_text.is_empty():
+		_fail("Main scene text could not be read")
+		return
+	var ground_header_index: int = scene_text.find(GROUND_NODE_HEADER)
+	if ground_header_index < 0:
 		_fail("Main scene is missing the world ground root")
 		return
-	if ground_root.z_index != WorldDepthPolicy.GROUND_ROOT_Z:
-		match_scene.free()
+	var next_node_index: int = scene_text.find("\n[node ", ground_header_index + 1)
+	if next_node_index < 0:
+		next_node_index = scene_text.length()
+	var ground_block: String = scene_text.substr(
+		ground_header_index, next_node_index - ground_header_index
+	)
+	var expected_ground_z: String = "z_index = %d" % WorldDepthPolicy.GROUND_ROOT_Z
+	if not ground_block.contains(expected_ground_z):
 		_fail("Main scene ground root is outside the reserved render band")
 		return
-	match_scene.free()
 
 	var ground_surface_z: int = (
 		WorldDepthPolicy.GROUND_ROOT_Z + WorldDepthPolicy.GROUND_SURFACE_LOCAL_Z
