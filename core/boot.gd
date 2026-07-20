@@ -3,7 +3,7 @@ extends Control
 const MAIN_MENU_SCENE_PATH: String = "res://scenes/main_menu.tscn"
 const SERVER_SCENE_PATH: String = "res://scenes/server_game.tscn"
 const SOAK_CLIENT_SCENE_PATH: String = "res://scenes/online_soak_client.tscn"
-const BUILD_ID: String = "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"
+const BUILD_ID: String = "PHASE-05.4-RIVET-FULL-ONLINE"
 
 
 func _ready() -> void:
