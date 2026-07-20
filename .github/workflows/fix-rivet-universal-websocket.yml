@@ -36,6 +36,10 @@ jobs:
                   'sockets: Set<UniversalWebSocket>;',
               'function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void }, downstream: WebSocket, upstream: WebSocket, runtime: GameRuntime): void {':
                   'function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void }, downstream: UniversalWebSocket, upstream: WebSocket, runtime: GameRuntime): void {',
+              'downstream.addEventListener("close", () => closeBoth(1000, "client_closed"), { once: true });':
+                  'downstream.addEventListener("close", () => closeBoth(1000, "client_closed"));',
+              'downstream.addEventListener("error", () => closeBoth(1011, "client_socket_error"), { once: true });':
+                  'downstream.addEventListener("error", () => closeBoth(1011, "client_socket_error"));',
           }
           for old, new in replacements.items():
               if old in text:
@@ -47,6 +51,8 @@ jobs:
           grep -q 'type UniversalWebSocket' backend/rivet-control/src/game-server-actor.ts
           grep -q 'Set<UniversalWebSocket>' backend/rivet-control/src/game-server-actor.ts
           grep -q 'downstream: UniversalWebSocket' backend/rivet-control/src/game-server-actor.ts
+          ! grep -q 'downstream.addEventListener("close".*once' backend/rivet-control/src/game-server-actor.ts
+          ! grep -q 'downstream.addEventListener("error".*once' backend/rivet-control/src/game-server-actor.ts
 
       - name: Commit exact type fix
         shell: bash
@@ -58,5 +64,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/rivet-control/src/game-server-actor.ts
-          git commit -m "Type Rivet gateway sockets as UniversalWebSocket"
+          git commit -m "Fix Rivet UniversalWebSocket listener signatures"
           git push origin HEAD:full-online-completion
