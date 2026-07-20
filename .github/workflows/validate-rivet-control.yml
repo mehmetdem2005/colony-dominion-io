@@ -1,0 +1,64 @@
+name: Validate Rivet Control Plane
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/rivet-control/**"
+      - ".github/workflows/validate-rivet-control.yml"
+
+concurrency:
+  group: validate-rivet-control-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install control-plane dependencies
+        working-directory: backend/rivet-control
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck and build control plane
+        working-directory: backend/rivet-control
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm run build
+
+      - name: Validate current Rivet CLI contract
+        working-directory: backend/rivet-control
+        run: |
+          set -euo pipefail
+          npx --yes @rivetkit/cli@latest deploy --help | tee ../../build-rivet-cli-help.txt
+          grep -q -- "--namespace" ../../build-rivet-cli-help.txt
+          grep -q -- "--dockerfile" ../../build-rivet-cli-help.txt
+          grep -q -- "--build-context" ../../build-rivet-cli-help.txt
+
+      - name: Build control-plane container
+        run: |
+          set -euo pipefail
+          docker build \
+            -f backend/rivet-control/Dockerfile \
+            -t colony-rivet-control:validation \
+            backend/rivet-control
+          docker image inspect colony-rivet-control:validation --format '{{.Id}} {{.Architecture}}'
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rivet-control-validation
+          if-no-files-found: warn
+          retention-days: 7
+          path: build-rivet-cli-help.txt
