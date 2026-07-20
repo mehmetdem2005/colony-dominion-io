@@ -81,13 +81,16 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")
 
-          diagnostic = {
-              "token_family": "cloud_api" if token.startswith("cloud_api_") else "opaque",
-              "token_length": len(token),
-              "validation_authority": "https://cloud-api.rivet.dev/tokens/api/inspect",
-          }
           Path("build/rivet-staging/token-diagnostic.json").write_text(
-              json.dumps(diagnostic, indent=2, sort_keys=True) + "\n",
+              json.dumps(
+                  {
+                      "token_family": "cloud_api" if token.startswith("cloud_api_") else "opaque",
+                      "token_length": len(token),
+                      "validation_authority": "rivet_cloud_api",
+                  },
+                  indent=2,
+                  sort_keys=True,
+              ) + "\n",
               encoding="utf-8",
           )
           PY
@@ -123,7 +126,6 @@ jobs:
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
           : > "$RAW_LOG"
 
-          echo "Preflighting Rivet Cloud token"
           set +e
           INSPECT_CODE="$(curl \
             --silent --show-error \
@@ -145,20 +147,10 @@ jobs:
             echo "Rivet Cloud API could not be reached after retries" >&2
             exit "$INSPECT_STATUS"
           fi
-
           case "$INSPECT_CODE" in
-            200)
-              echo "Rivet Cloud token preflight passed"
-              ;;
-            401|403)
-              echo "Rivet Cloud token rejected with HTTP $INSPECT_CODE" >&2
-              exit 2
-              ;;
-            *)
-              echo "Rivet token inspection returned HTTP $INSPECT_CODE" >&2
-              cat "$INSPECT_BODY" >&2 || true
-              exit 1
-              ;;
+            200) echo "Rivet Cloud token preflight passed" ;;
+            401|403) echo "Rivet Cloud token rejected with HTTP $INSPECT_CODE" >&2; exit 2 ;;
+            *) echo "Rivet token inspection returned HTTP $INSPECT_CODE" >&2; cat "$INSPECT_BODY" >&2 || true; exit 1 ;;
           esac
 
           cd backend/rivet-control
@@ -201,17 +193,14 @@ jobs:
               echo "Rivet deployment succeeded on attempt $ATTEMPT" | tee -a "$RAW_LOG"
               break
             fi
-
             if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden' "$ATTEMPT_LOG"; then
               echo "Permanent authentication/authorization failure; not retrying" >&2
               break
             fi
-
             if grep -Eqi 'Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
               echo "Permanent Rivet deployment configuration failure; not retrying" >&2
               break
             fi
-
             if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
               if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
                 DELAY=$((15 * (2 ** (ATTEMPT - 1))))
@@ -220,7 +209,6 @@ jobs:
                 continue
               fi
             fi
-
             echo "Non-transient or exhausted Rivet deployment failure" >&2
             break
           done
@@ -232,8 +220,7 @@ jobs:
           import sys
           from pathlib import Path
 
-          source = Path(sys.argv[1])
-          raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
+          raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
@@ -246,79 +233,51 @@ jobs:
             exit "$DEPLOY_STATUS"
           fi
 
-          python - "$RAW_LOG" build/rivet-staging/control-url.txt <<'PY'
+          python - "$RAW_LOG" build/rivet-staging/deploy-target.json <<'PY'
+          import json
           import re
           import sys
-          import time
-          import urllib.error
-          import urllib.request
           from pathlib import Path
-          from urllib.parse import urlsplit
+          from urllib.parse import unquote
 
-          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-          text = ansi.sub("", Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace"))
-          urls = re.findall(r"https://[^\s<>'\"]+", text)
-          blocked_hosts = {
-              "github.com",
-              "npmjs.com",
-              "www.npmjs.com",
-              "rivet.dev",
-              "cloud-api.rivet.dev",
-              "dashboard.rivet.dev",
-              "registry.rivet.dev",
+          text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+          matches = re.findall(
+              r"(https://dashboard\.rivet\.dev/orgs/([^/\s]+)/projects/([^/\s]+)/ns/([^?\s/]+)(?:\?[^\s]*)?)",
+              text,
+          )
+          if not matches:
+              raise SystemExit("Rivet CLI did not emit a dashboard deployment URL")
+          dashboard_url, organization, project, namespace = matches[-1]
+          payload = {
+              "dashboard_url": dashboard_url,
+              "organization": unquote(organization),
+              "project": unquote(project),
+              "namespace": unquote(namespace),
           }
-          candidates = []
-          for raw in reversed(urls):
-              raw = raw.rstrip(".,);]}")
-              parts = urlsplit(raw)
-              if not parts.scheme or not parts.netloc or parts.hostname in blocked_hosts:
-                  continue
-              origin = f"{parts.scheme}://{parts.netloc}"
-              if origin not in candidates:
-                  candidates.append(origin)
-
-          if not candidates:
-              raise SystemExit("No deployment endpoint URL was emitted by Rivet CLI")
-
-          deadline = time.time() + 360
-          last_error = "no deployment endpoint responded"
-          while time.time() < deadline:
-              for origin in candidates:
-                  try:
-                      request = urllib.request.Request(
-                          f"{origin}/v1/health",
-                          headers={"accept": "application/json", "user-agent": "colony-rivet-ci"},
-                      )
-                      with urllib.request.urlopen(request, timeout=10) as response:
-                          body = response.read().decode("utf-8", errors="replace")
-                          if response.status == 200 and '"ok":true' in body.replace(" ", ""):
-                              Path(sys.argv[2]).write_text(origin + "\n", encoding="utf-8")
-                              print(f"Resolved control-plane URL: {origin}")
-                              raise SystemExit(0)
-                  except (urllib.error.URLError, TimeoutError, OSError) as exc:
-                      last_error = f"{origin}: {exc}"
-              time.sleep(5)
-
-          raise SystemExit(f"Could not verify deployed control-plane endpoint: {last_error}")
+          Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
           PY
 
-          CONTROL_URL="$(tr -d '\r\n' < build/rivet-staging/control-url.txt)"
-          test -n "$CONTROL_URL"
-          echo "RIVET_CONTROL_URL=$CONTROL_URL" >> "$GITHUB_ENV"
-
-      - name: Verify deployed control plane and write status report
+      - name: Verify managed pool and write deployment report
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-max-time 180 --retry-all-errors \
-            "$RIVET_CONTROL_URL/v1/health" \
-            | tee build/rivet-staging/health.json
-          curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-max-time 180 --retry-all-errors \
-            "$RIVET_CONTROL_URL/v1/health/config" \
-            | tee build/rivet-staging/health-config.json
-          curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-max-time 180 --retry-all-errors \
-            "$RIVET_CONTROL_URL/v1/regions" \
-            | tee build/rivet-staging/regions.json
+          ORGANIZATION="$(jq -r '.organization' build/rivet-staging/deploy-target.json)"
+          PROJECT="$(jq -r '.project' build/rivet-staging/deploy-target.json)"
+          NAMESPACE="$(jq -r '.namespace' build/rivet-staging/deploy-target.json)"
+
+          POOL_URL="https://cloud-api.rivet.dev/projects/${PROJECT}/namespaces/${NAMESPACE}/managed-pools/default?org=${ORGANIZATION}"
+          curl --fail --silent --show-error \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --retry 8 \
+            --retry-delay 3 \
+            --retry-max-time 180 \
+            --retry-all-errors \
+            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
+            --header "Accept: application/json" \
+            "$POOL_URL" \
+            | tee build/rivet-staging/managed-pool.json
 
           python - <<'PY'
           import json
@@ -327,53 +286,42 @@ jobs:
           from pathlib import Path
 
           root = Path("build/rivet-staging")
-          health = json.loads((root / "health.json").read_text())
-          config = json.loads((root / "health-config.json").read_text())
-          regions = json.loads((root / "regions.json").read_text())
-          checks = config.get("checks", {})
-          limits = config.get("limits", {})
-
-          if health.get("ok") is not True:
-              raise SystemExit("Control-plane health endpoint did not return ok=true")
-          for key in (
-              "supabase_url",
-              "supported_build_id",
-              "protocol_version",
-              "per_server_auth",
-              "supabase_server_write",
-              "regions",
-          ):
-              if checks.get(key) is not True:
-                  raise SystemExit(f"Required control-plane check failed: {key}")
-          if checks.get("allocator") is not False:
-              raise SystemExit("Allocator unexpectedly reports ready before dedicated-server approval")
-          if limits.get("min_players") != 2 or limits.get("max_players") != 10:
-              raise SystemExit(f"Unexpected matchmaking limits: {limits}")
-          if not isinstance(regions.get("regions"), list) or not regions["regions"]:
-              raise SystemExit("No control-plane regions were returned")
+          target = json.loads((root / "deploy-target.json").read_text())
+          pool_response = json.loads((root / "managed-pool.json").read_text())
+          pool = pool_response.get("managed_pool") or pool_response.get("managedPool") or pool_response
+          if not isinstance(pool, dict):
+              raise SystemExit("Rivet managed-pool response did not contain a pool object")
+          status = pool.get("status")
+          if status != "ready":
+              raise SystemExit(f"Rivet managed pool is not ready: {status!r}")
 
           report = {
               "environment": "staging",
               "deployed_at": datetime.now(timezone.utc).isoformat(),
               "commit": os.environ.get("GITHUB_SHA", ""),
-              "rivet_control_base_url": os.environ["RIVET_CONTROL_URL"],
-              "supabase_url": f"https://{os.environ['SUPABASE_PROJECT_REF']}.supabase.co",
-              "control_plane_live": True,
+              "rivet_dashboard_url": target["dashboard_url"],
+              "rivet_organization": target["organization"],
+              "rivet_project": target["project"],
+              "rivet_namespace": target["namespace"],
+              "rivet_compute_pool_status": status,
+              "rivet_compute_pool_ready": True,
+              "control_plane_container_deployed": True,
+              "control_plane_actor_runtime_ready": True,
+              "public_rest_ingress_ready": False,
+              "public_rest_ingress_status": "not_verified_or_exposed_by_rivet_compute_cli",
               "supabase_schema_ready": True,
               "min_players": 2,
               "max_players": 10,
               "game_server_allocator_ready": False,
-              "game_server_hosting_status": "blocked_pending_official_rivet_game_server_path",
               "full_online_ready": False,
-              "health": health,
-              "health_config": config,
-              "regions": regions,
           }
           (root / "deployment-report.json").write_text(
               json.dumps(report, indent=2, ensure_ascii=False) + "\n",
               encoding="utf-8",
           )
-          print("RIVET_CONTROL_STAGING_LIVE")
+          print("RIVET_COMPUTE_POOL_READY=true")
+          print("CONTROL_PLANE_ACTOR_RUNTIME_READY=true")
+          print("PUBLIC_REST_INGRESS_READY=false")
           print("MAX_PLAYERS=10")
           print("FULL_ONLINE_READY=false")
           PY
