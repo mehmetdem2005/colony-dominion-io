@@ -1,0 +1,100 @@
+name: Full Online TypeScript Diagnostics
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'full-online-completion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: full-online-completion
+          fetch-depth: 0
+
+      - name: Detect diagnostic result commit
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(git log -1 --pretty=%s)" = "Record full-online TypeScript diagnostics" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v6
+        if: steps.detect.outputs.skip != 'true'
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Run strict TypeScript diagnostics
+        id: typescript
+        if: steps.detect.outputs.skip != 'true'
+        continue-on-error: true
+        working-directory: backend/rivet-control
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p ../../deployment/status
+          set +e
+          (
+            npm install --no-audit --no-fund
+            npm run typecheck
+            npm run build
+          ) > ../../deployment/status/full-online-typescript-diagnostics.log 2>&1
+          STATUS=$?
+          set -e
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          exit "$STATUS"
+
+      - name: Persist TypeScript diagnostics
+        if: always() && steps.detect.outputs.skip != 'true'
+        env:
+          TYPESCRIPT_OUTCOME: ${{ steps.typescript.outcome }}
+          TYPESCRIPT_STATUS: ${{ steps.typescript.outputs.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          log_path = Path("deployment/status/full-online-typescript-diagnostics.log")
+          raw = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+          lines = raw.splitlines()
+          if len(lines) > 500:
+              lines = lines[-500:]
+          log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          report = {
+              "success": os.environ.get("TYPESCRIPT_OUTCOME") == "success",
+              "outcome": os.environ.get("TYPESCRIPT_OUTCOME", "unknown"),
+              "exit_status": int(os.environ.get("TYPESCRIPT_STATUS") or -1),
+              "validated_sha": os.popen("git rev-parse HEAD").read().strip(),
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "recorded_at": datetime.now(timezone.utc).isoformat(),
+          }
+          Path("deployment/status/full-online-typescript-diagnostics.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deployment/status/full-online-typescript-diagnostics.*
+          git commit -m "Record full-online TypeScript diagnostics"
+          git push origin HEAD:full-online-completion
+
+          if [ "${{ steps.typescript.outcome }}" != "success" ]; then
+            exit 1
+          fi
