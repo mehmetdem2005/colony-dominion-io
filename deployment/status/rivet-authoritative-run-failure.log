@@ -1,0 +1,410 @@
+deploy	Deploy and verify through managed-pool API	﻿2026-07-20T17:09:01.3162403Z ##[group]Run set -euo pipefail
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3163136Z ^[[36;1mset -euo pipefail^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3163520Z ^[[36;1mRAW_LOG="$RUNNER_TEMP/rivet-authoritative-deploy.log"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3164044Z ^[[36;1mATTEMPT_LOG="$RUNNER_TEMP/rivet-authoritative-attempt.log"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3164766Z ^[[36;1mEVIDENCE="build/rivet-authoritative"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3165455Z ^[[36;1mRESULT="deployment/status/rivet-staging-authoritative.json"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3166117Z ^[[36;1m: > "$RAW_LOG"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3166496Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3166871Z ^[[36;1mif [ -z "${REGIONS_JSON:-}" ]; then^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3167832Z ^[[36;1m  REGIONS_JSON='[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3168706Z ^[[36;1mfi^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3168902Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3169234Z ^[[36;1mEFFECTIVE_REGIONS_JSON="$(REGIONS_JSON="$REGIONS_JSON" python - <<'PY'^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3169653Z ^[[36;1mimport json^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3169948Z ^[[36;1mimport os^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3170230Z ^[[36;1mregions = json.loads(os.environ["REGIONS_JSON"])^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3170818Z ^[[36;1mif not isinstance(regions, list) or not regions:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3171672Z ^[[36;1m    raise SystemExit("REGIONS_JSON must be a non-empty array")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3172196Z ^[[36;1mif not any(isinstance(item, dict) and item.get("enabled") for item in regions):^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3172735Z ^[[36;1m    raise SystemExit("REGIONS_JSON must contain an enabled region")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3173241Z ^[[36;1mprint(json.dumps(regions, ensure_ascii=False, separators=(",", ":")))^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3173626Z ^[[36;1mPY^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3173824Z ^[[36;1m)"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3174044Z ^[[36;1mtest -n "$EFFECTIVE_REGIONS_JSON"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3174338Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3174643Z ^[[36;1mSUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3175024Z ^[[36;1mDEPLOY_STATUS=1^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3175286Z ^[[36;1mMAX_ATTEMPTS=4^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3175509Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3175736Z ^[[36;1mcd backend/rivet-control^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3176039Z ^[[36;1mfor ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3176345Z ^[[36;1m  : > "$ATTEMPT_LOG"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3176800Z ^[[36;1m  echo "===== RIVET AUTHORITATIVE DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3177280Z ^[[36;1m  set +e^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3177530Z ^[[36;1m  npx --yes @rivetkit/cli@latest deploy \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3177859Z ^[[36;1m    --token "$RIVET_CLOUD_TOKEN" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3178163Z ^[[36;1m    --namespace staging \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3178438Z ^[[36;1m    --dockerfile Dockerfile \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3178718Z ^[[36;1m    --build-context . \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3178976Z ^[[36;1m    --yes \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3179227Z ^[[36;1m    --image colony-rivet-control \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3179536Z ^[[36;1m    --tag "${GITHUB_SHA:0:12}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3179810Z ^[[36;1m    --cpu 1 \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3180050Z ^[[36;1m    --memory 512Mi \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3180333Z ^[[36;1m    --instance-request-concurrency 80 \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3180640Z ^[[36;1m    --min-scale 0 \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3180884Z ^[[36;1m    --max-scale 1 \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3182047Z ^[[36;1m    --max-concurrent-actors 1000 \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3182406Z ^[[36;1m    --env "NODE_ENV=production" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3182734Z ^[[36;1m    --env "SUPABASE_URL=${SUPABASE_URL}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3183112Z ^[[36;1m    --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3183525Z ^[[36;1m    --env "SUPPORTED_BUILD_ID=${SUPPORTED_BUILD_ID}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3183909Z ^[[36;1m    --env "PROTOCOL_VERSION=${PROTOCOL_VERSION}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3184259Z ^[[36;1m    --env "MIN_PLAYERS=${MIN_PLAYERS}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3184576Z ^[[36;1m    --env "MAX_PLAYERS=${MAX_PLAYERS}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3185164Z ^[[36;1m    --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3185562Z ^[[36;1m    --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3185934Z ^[[36;1m    2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3186265Z ^[[36;1m  DEPLOY_STATUS=${PIPESTATUS[0]}^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3186545Z ^[[36;1m  set -e^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3186751Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3186974Z ^[[36;1m  if [ "$DEPLOY_STATUS" -eq 0 ]; then^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3187267Z ^[[36;1m    break^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3187476Z ^[[36;1m  fi^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3187672Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3188473Z ^[[36;1m  if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3189262Z ^[[36;1m    break^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3189469Z ^[[36;1m  fi^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3189666Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3190760Z ^[[36;1m  if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3192399Z ^[[36;1m    if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3192756Z ^[[36;1m      sleep $((15 * (2 ** (ATTEMPT - 1))))^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3193059Z ^[[36;1m      continue^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3193287Z ^[[36;1m    fi^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3193492Z ^[[36;1m  fi^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3193696Z ^[[36;1m  break^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3193895Z ^[[36;1mdone^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3194111Z ^[[36;1mcd ../..^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3194308Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3194584Z ^[[36;1mRAW_LOG="$RAW_LOG" EVIDENCE="$EVIDENCE" python - <<'PY'^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3194929Z ^[[36;1mimport os^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3195162Z ^[[36;1mfrom pathlib import Path^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3195576Z ^[[36;1mraw = Path(os.environ["RAW_LOG"]).read_text(encoding="utf-8", errors="replace")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3201209Z ^[[36;1mfor name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3201862Z ^[[36;1m    value = os.environ.get(name, "")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3202170Z ^[[36;1m    if value:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3202433Z ^[[36;1m        raw = raw.replace(value, "***")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3202917Z ^[[36;1mPath(os.environ["EVIDENCE"], "deploy-sanitized.log").write_text(raw, encoding="utf-8")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3203372Z ^[[36;1mPY^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3203577Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3203844Z ^[[36;1mtest "$DEPLOY_STATUS" -eq 0 || exit "$DEPLOY_STATUS"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3204183Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3204517Z ^[[36;1mRAW_LOG="$RAW_LOG" EVIDENCE="$EVIDENCE" RESULT="$RESULT" python - <<'PY'^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3204924Z ^[[36;1mimport json^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3205148Z ^[[36;1mimport os^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3205377Z ^[[36;1mimport re^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3205590Z ^[[36;1mimport time^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3205842Z ^[[36;1mimport urllib.error^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3206103Z ^[[36;1mimport urllib.parse^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3206361Z ^[[36;1mimport urllib.request^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3206657Z ^[[36;1mfrom datetime import datetime, timezone^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3206985Z ^[[36;1mfrom pathlib import Path^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3207247Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3207606Z ^[[36;1mraw_log = Path(os.environ["RAW_LOG"]).read_text(encoding="utf-8", errors="replace")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3208054Z ^[[36;1mmatch = re.search(^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3208469Z ^[[36;1m    r"https://dashboard\.rivet\.dev/orgs/([^/\s]+)/projects/([^/\s]+)/ns/([^?\s]+)",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3208917Z ^[[36;1m    raw_log,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3209132Z ^[[36;1m)^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3209329Z ^[[36;1mif match:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3209618Z ^[[36;1m    organization, project, namespace = match.groups()^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3210225Z ^[[36;1m    dashboard_url = match.group(0)^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3210519Z ^[[36;1melse:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3210916Z ^[[36;1m    inspect = json.loads(Path(os.environ["EVIDENCE"], "token-inspect.json").read_text())^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3211875Z ^[[36;1m    organization = inspect["organization"]^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3212225Z ^[[36;1m    project = inspect["project"]^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3212535Z ^[[36;1m    namespace = "staging-4x4s"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3212829Z ^[[36;1m    dashboard_url = (^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3213290Z ^[[36;1m        f"https://dashboard.rivet.dev/orgs/{organization}/projects/{project}/ns/{namespace}"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3213775Z ^[[36;1m    )^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3214094Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3214345Z ^[[36;1mendpoint = (^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3214626Z ^[[36;1m    "https://cloud-api.rivet.dev/projects/"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3214984Z ^[[36;1m    + urllib.parse.quote(project, safe="")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3215293Z ^[[36;1m    + "/namespaces/"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3215584Z ^[[36;1m    + urllib.parse.quote(namespace, safe="")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3216089Z ^[[36;1m    + "/managed-pools/default?org="^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3216530Z ^[[36;1m    + urllib.parse.quote(organization, safe="")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3216902Z ^[[36;1m)^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3217226Z ^[[36;1mtoken = os.environ["RIVET_CLOUD_TOKEN"]^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3217575Z ^[[36;1mevidence = Path(os.environ["EVIDENCE"])^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3217876Z ^[[36;1mlast = None^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3218102Z ^[[36;1mlast_error = ""^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3218334Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3218530Z ^[[36;1mfor _ in range(72):^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3218802Z ^[[36;1m    request = urllib.request.Request(^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3219109Z ^[[36;1m        endpoint,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3219355Z ^[[36;1m        headers={^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3219777Z ^[[36;1m            "Authorization": f"***",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3220129Z ^[[36;1m            "Accept": "application/json",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3220517Z ^[[36;1m            "User-Agent": "colony-rivet-authoritative",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3220865Z ^[[36;1m        },^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3221529Z ^[[36;1m    )^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3221767Z ^[[36;1m    try:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3222107Z ^[[36;1m        with urllib.request.urlopen(request, timeout=20) as response:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3222639Z ^[[36;1m            last = json.loads(response.read().decode("utf-8", errors="replace"))^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3223141Z ^[[36;1m        evidence.joinpath("managed-pool.json").write_text(^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3223581Z ^[[36;1m            json.dumps(last, indent=2, ensure_ascii=False) + "\n",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3223952Z ^[[36;1m            encoding="utf-8",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3224215Z ^[[36;1m        )^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3224482Z ^[[36;1m        status = str(last.get("status", "")).lower()^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3224814Z ^[[36;1m        if status == "ready":^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3225088Z ^[[36;1m            break^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3225344Z ^[[36;1m        if status == "error":^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3225758Z ^[[36;1m            raise SystemExit(f"Managed pool entered error state: {last.get('error')}")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3226242Z ^[[36;1m    except urllib.error.HTTPError as exc:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3226578Z ^[[36;1m        last_error = f"HTTP {exc.code}"^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3227097Z ^[[36;1m    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3227575Z ^[[36;1m        last_error = str(exc)^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3227865Z ^[[36;1m    time.sleep(5)^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3228107Z ^[[36;1melse:^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3228473Z ^[[36;1m    raise SystemExit(f"Managed pool did not reach ready: {last_error}; last={last}")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3228901Z ^[[36;1m^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3229138Z ^[[36;1mconfig = (last or {}).get("config", {})^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3229564Z ^[[36;1mresources = config.get("resources", {}) if isinstance(config, dict) else {}^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3230236Z ^[[36;1mpayload = {^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3230470Z ^[[36;1m    "success": True,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3230731Z ^[[36;1m    "phase": "complete",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3231467Z ^[[36;1m    "message": "Rivet deployment succeeded and managed pool reached ready",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3231959Z ^[[36;1m    "run_id": os.environ.get("GITHUB_RUN_ID", ""),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3232361Z ^[[36;1m    "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3232756Z ^[[36;1m    "commit": os.environ.get("GITHUB_SHA", ""),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3233150Z ^[[36;1m    "recorded_at": datetime.now(timezone.utc).isoformat(),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3233601Z ^[[36;1m    "deployment_verified_by": "cloud_api_managed_pool_status",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3233989Z ^[[36;1m    "organization": organization,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3234284Z ^[[36;1m    "project": project,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3234559Z ^[[36;1m    "cloud_namespace": namespace,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3234861Z ^[[36;1m    "dashboard_url": dashboard_url,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3235262Z ^[[36;1m    "managed_pool_status": str((last or {}).get("status", "")).lower(),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3235820Z ^[[36;1m    "control_plane_live": True,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3236118Z ^[[36;1m    "rivet_managed_pool_ready": True,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3236429Z ^[[36;1m    "cpu": resources.get("cpu", 1),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3236759Z ^[[36;1m    "memory": resources.get("memory", "512Mi"),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3237246Z ^[[36;1m    "instance_request_concurrency": resources.get("instanceRequestConcurrency", 80),^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3237707Z ^[[36;1m    "min_players": 2,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3237962Z ^[[36;1m    "max_players": 10,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3238257Z ^[[36;1m    "game_server_allocator_ready": False,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3238570Z ^[[36;1m    "full_online_ready": False,^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3238858Z ^[[36;1m}^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3239087Z ^[[36;1mPath(os.environ["RESULT"]).write_text(^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3239470Z ^[[36;1m    json.dumps(payload, indent=2, ensure_ascii=False) + "\n",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3239844Z ^[[36;1m    encoding="utf-8",^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3240094Z ^[[36;1m)^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3240339Z ^[[36;1mprint("RIVET_CONTROL_STAGING_READY=true")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3240660Z ^[[36;1mprint("MAX_PLAYERS=10")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3240934Z ^[[36;1mprint("FULL_ONLINE_READY=false")^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3241449Z ^[[36;1mPY^[[0m
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3301165Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3301559Z env:
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3301950Z   RIVET_CLOUD_TOKEN: ***
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3302317Z   SUPABASE_SECRET_KEY: ***
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3302595Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3302892Z   REGIONS_JSON: 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3303191Z   SUPPORTED_BUILD_ID: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3303557Z   PROTOCOL_VERSION: 3
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3303777Z   MIN_PLAYERS: 2
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3303990Z   MAX_PLAYERS: 10
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3304236Z   QUEUE_TTL_SECONDS: 120
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3304471Z ##[endgroup]
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:01.3677755Z ===== RIVET AUTHORITATIVE DEPLOY ATTEMPT 1/4 =====
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:05.2742737Z ^[[32m INFO^[[0m inspecting Rivet Cloud token
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:05.3953496Z ^[[32m INFO^[[0m enabling managed pool
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:11.4537378Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:13.5295310Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:15.6013615Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:17.6674012Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:19.7235921Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:21.8256694Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:23.8883774Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:25.9497463Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mready
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:25.9499105Z ^[[32m INFO^[[0m logging in to Rivet registry
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4177656Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4180448Z WARNING! Your credentials are stored unencrypted in '/home/runner/.docker/config.json'.
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4182623Z Configure a credential helper to remove this warning. See
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4183984Z https://docs.docker.com/go/credential-store/
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4184662Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4185319Z Login Succeeded
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4223628Z ^[[32m INFO^[[0m building Docker image
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.4226182Z ^[[32m INFO^[[0m running command ^[[3mcommand^[[0m^[[2m=^[[0mdocker buildx build --platform linux/amd64 --load . -f Dockerfile -t registry.rivet.dev/colony-rivet-control:b8fc04555254
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9935397Z #0 building with "default" instance using docker driver
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9942182Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9954040Z #1 [internal] load build definition from Dockerfile
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9954819Z #1 transferring dockerfile: 490B done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9955320Z #1 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9955850Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9956281Z #2 [auth] library/node:pull token for registry-1.docker.io
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9957288Z #2 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9957508Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:26.9958483Z #3 [internal] load metadata for docker.io/library/node:24-alpine
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.2420647Z #3 DONE 0.4s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3939111Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3939820Z #4 [internal] load .dockerignore
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3940504Z #4 transferring context: 104B done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3941374Z #4 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3941745Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3942305Z #5 [internal] load build context
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3943220Z #5 transferring context: 215.46kB done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3944080Z #5 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3944478Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3945610Z #6 [build 1/7] FROM docker.io/library/node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3948113Z #6 resolve docker.io/library/node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3950361Z #6 sha256:91d56b2d4e1cf23103d90b0b024c1f489c288f9c3aba1042dd7279503b367de6 6.52kB / 6.52kB done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3952357Z #6 sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65 20.97MB / 52.52MB 0.1s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3953846Z #6 sha256:57eb903fc7a4b0006b1253f877823b15c51433ccd41a20392812682211c46a6c 1.26MB / 1.26MB 0.1s done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3955113Z #6 sha256:21af007bacf625b557dda6dbce062088808612be54a955980b3d8efb8ea7d082 448B / 448B 0.0s done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3956343Z #6 sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd 3.87kB / 3.87kB done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.3957542Z #6 sha256:4ba75f835bb8802193e4c114572113d4b26f95f6f094f4b5229d2a77773e0afc 1.72kB / 1.72kB done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.5063296Z #6 sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65 52.52MB / 52.52MB 0.2s done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:27.5067546Z #6 extracting sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:29.2189016Z #6 extracting sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65 1.6s done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.4800881Z #6 extracting sha256:57eb903fc7a4b0006b1253f877823b15c51433ccd41a20392812682211c46a6c
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.5965026Z #6 extracting sha256:57eb903fc7a4b0006b1253f877823b15c51433ccd41a20392812682211c46a6c 0.1s done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.5971415Z #6 extracting sha256:21af007bacf625b557dda6dbce062088808612be54a955980b3d8efb8ea7d082 done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.5974164Z #6 DONE 3.3s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7881993Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7883964Z #7 [build 2/7] WORKDIR /app
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7884485Z #7 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7884683Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7885008Z #8 [build 3/7] COPY package*.json ./
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7885497Z #8 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7885721Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:30.7886322Z #9 [runtime 4/5] RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:35.5224397Z #9 4.885 npm warn deprecated prebuild-install@7.1.3: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:40.7741341Z #9 ...
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:40.7803696Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:40.7844404Z #10 [build 4/7] RUN npm install --no-audit --no-fund
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:40.7885817Z #10 4.066 npm warn deprecated prebuild-install@7.1.3: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6143652Z #10 ...
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6146476Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6149211Z #9 [runtime 4/5] RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6150580Z #9 14.98 npm warn allow-scripts 3 packages have install scripts not yet covered by allowScripts:
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6152645Z #9 14.98 npm warn allow-scripts   better-sqlite3@12.11.1 (install: prebuild-install || node-gyp rebuild --release)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6154144Z #9 14.98 npm warn allow-scripts   cbor-extract@2.2.2 (install: node-gyp-build-optional-packages)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6155414Z #9 14.98 npm warn allow-scripts   esbuild@0.27.7 (postinstall: node install.js)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6156479Z #9 14.98 npm warn allow-scripts
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6157793Z #9 14.98 npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6158906Z #9 14.98 npm notice
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6159617Z #9 14.98 npm notice New major version of npm available! 11.16.0 -> 12.0.1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6160665Z #9 14.98 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6162111Z #9 14.98 npm notice To update run: npm install -g npm@12.0.1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6162735Z #9 14.98 npm notice
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6163115Z #9 14.98 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:45.6163547Z #9 14.98 added 260 packages in 15s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:46.0459241Z #9 15.41 npm warn using --force Recommended protections disabled.
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3192534Z #9 ...
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3233070Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3251676Z #10 [build 4/7] RUN npm install --no-audit --no-fund
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3300441Z #10 16.53 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3302677Z #10 16.53 added 268 packages in 16s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3305109Z #10 16.53 npm warn allow-scripts 4 packages have install scripts not yet covered by allowScripts:
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3307247Z #10 16.53 npm warn allow-scripts   better-sqlite3@12.11.1 (install: prebuild-install || node-gyp rebuild --release)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3309031Z #10 16.53 npm warn allow-scripts   cbor-extract@2.2.2 (install: node-gyp-build-optional-packages)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3310766Z #10 16.53 npm warn allow-scripts   esbuild@0.27.7 (postinstall: node install.js)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3312429Z #10 16.53 npm warn allow-scripts   esbuild@0.25.12 (postinstall: node install.js)
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3313750Z #10 16.53 npm warn allow-scripts
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3315240Z #10 16.53 npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3316836Z #10 16.54 npm notice
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3317914Z #10 16.54 npm notice New major version of npm available! 11.16.0 -> 12.0.1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3319490Z #10 16.54 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3320696Z #10 16.54 npm notice To update run: npm install -g npm@12.0.1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3322075Z #10 16.54 npm notice
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.3322751Z #10 DONE 16.7s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.4674753Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:47.4676225Z #11 [build 5/7] COPY tsconfig.json ./
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.5286215Z #11 DONE 1.2s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.5287590Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.5288854Z #9 [runtime 4/5] RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.7266885Z #9 DONE 17.9s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.7269084Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.7269578Z #12 [build 6/7] COPY src ./src
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.7270322Z #12 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.7270725Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.7271790Z #13 [build 7/7] RUN npm run typecheck && npm run build
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.9091340Z #13 0.332 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.9096697Z #13 0.332 > colony-dominion-rivet-control@0.3.1 typecheck
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.9097995Z #13 0.332 > tsc --noEmit
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:48.9099007Z #13 0.332 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:52.4825167Z #13 3.906 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:52.4826831Z #13 3.906 > colony-dominion-rivet-control@0.3.1 build
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:52.4827708Z #13 3.906 > tsc
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:52.4828252Z #13 3.906 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.0628610Z #13 DONE 7.5s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.2888462Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.2889910Z #14 [runtime 5/5] COPY --from=build /app/dist ./dist
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.4614489Z #14 DONE 0.0s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.4615592Z 
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.4615985Z #15 exporting to image
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:56.4616533Z #15 exporting layers
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.4989456Z #15 exporting layers 2.2s done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.5207093Z #15 writing image sha256:a98f35303341aaccdf688aca8e80f5e35bd45a91274f50d74be598033bdcdacc done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.5208989Z #15 naming to registry.rivet.dev/colony-rivet-control:b8fc04555254 done
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.5214405Z #15 DONE 2.2s
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.5318924Z ^[[32m INFO^[[0m pushing Docker image
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.5346740Z ^[[32m INFO^[[0m running command ^[[3mcommand^[[0m^[[2m=^[[0mdocker push registry.rivet.dev/colony-rivet-control:b8fc04555254
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6530924Z The push refers to repository [registry.rivet.dev/colony-rivet-control]
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6828646Z 46fa3f519bfe: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6829347Z 0f7d60c4a993: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6829877Z f28601f470e0: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6835612Z 8cb60a0e2fbe: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6836267Z 01028eae6924: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6836920Z b0d4b0de8306: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6840928Z 0ba8902ff50f: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6842073Z 34884abbe928: Preparing
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6881991Z b0d4b0de8306: Waiting
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6882486Z 0ba8902ff50f: Waiting
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:09:58.6899524Z 34884abbe928: Waiting
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:00.3668378Z 01028eae6924: Layer already exists
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:00.7652782Z b0d4b0de8306: Layer already exists
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:02.2934203Z 0ba8902ff50f: Layer already exists
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:03.7152630Z 34884abbe928: Layer already exists
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:03.9052458Z 8cb60a0e2fbe: Pushed
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:04.9723175Z 46fa3f519bfe: Pushed
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:05.0834884Z f28601f470e0: Pushed
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:21.4986911Z 0f7d60c4a993: Pushed
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:28.8669510Z b8fc04555254: digest: sha256:0354477af6e463e856fbc6de89b3c91c743ded51ff39e97a0c9abcb467814f57 size: 1994
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:28.8700596Z ^[[32m INFO^[[0m upserting managed pool
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:30.8910572Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:32.9498113Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:35.0123469Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:37.2016247Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:39.2657397Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:41.3289749Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:43.4649223Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:45.5206588Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:47.5930433Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:49.6587870Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:51.7194361Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:53.8096998Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:55.8675650Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:57.9283554Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:10:59.9928126Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:11:02.0553795Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mready
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:11:02.0555517Z https://dashboard.rivet.dev/orgs/yOqDe3oynkJcMLHZfQ5xc1ocXMBBTjvG/projects/colonyio-3bo7/ns/staging-4x4s?skipOnboarding=1
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:17:10.6223092Z Managed pool did not reach ready: ; last={'managedPool': {'name': 'default', 'status': 'ready', 'config': {'displayName': 'Default', 'image': {'repository': 'colony-rivet-control', 'tag': 'b8fc04555254'}, 'runnerConfig': {'maxConcurrentActors': 1000, 'drainGracePeriod': 60, 'drainOnVersionUpgrade': True}, 'environment': {'MAX_PLAYERS': '10', 'MIN_PLAYERS': '2', 'NODE_ENV': 'production', 'PROTOCOL_VERSION': '3', 'QUEUE_TTL_SECONDS': '120', 'REGIONS_JSON': '[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]', 'SUPABASE_SECRET_KEY': '***', 'SUPABASE_URL': 'https://mlwsxeqorlfgmxqxnfoo.supabase.co', 'SUPPORTED_BUILD_ID': 'PHASE-05.3-ONLINE-PRODUCTION-COMPLETION'}, 'command': None, 'args': [], 'resources': {'minScale': 0, 'maxScale': 1, 'cpu': 1, 'memory': '512Mi', 'instanceRequestConcurrency': 80}}}}
+deploy	Deploy and verify through managed-pool API	2026-07-20T17:17:10.6345745Z ##[error]Process completed with exit code 1.
+deploy	Commit authoritative status	﻿2026-07-20T17:17:13.3187465Z ##[group]Run set -euo pipefail
+deploy	Commit authoritative status	2026-07-20T17:17:13.3188074Z ^[[36;1mset -euo pipefail^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3188844Z ^[[36;1mtest -f deployment/status/rivet-staging-authoritative.json || exit 1^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3189763Z ^[[36;1mgit config user.name "github-actions[bot]"^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3190685Z ^[[36;1mgit config user.email "41898282+github-actions[bot]@users.noreply.github.com"^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3192066Z ^[[36;1mgit add deployment/status/rivet-staging-authoritative.json^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3192840Z ^[[36;1mif git diff --cached --quiet; then^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3193351Z ^[[36;1m  exit 0^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3193729Z ^[[36;1mfi^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3194283Z ^[[36;1mgit commit -m "Record authoritative Rivet control status"^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3194998Z ^[[36;1mgit fetch origin main^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3195471Z ^[[36;1mgit rebase origin/main^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3195952Z ^[[36;1mgit push origin HEAD:main^[[0m
+deploy	Commit authoritative status	2026-07-20T17:17:13.3281740Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+deploy	Commit authoritative status	2026-07-20T17:17:13.3282402Z env:
+deploy	Commit authoritative status	2026-07-20T17:17:13.3283004Z   RIVET_CLOUD_TOKEN: ***
+deploy	Commit authoritative status	2026-07-20T17:17:13.3283624Z   SUPABASE_SECRET_KEY: ***
+deploy	Commit authoritative status	2026-07-20T17:17:13.3284118Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
+deploy	Commit authoritative status	2026-07-20T17:17:13.3284645Z   REGIONS_JSON: 
+deploy	Commit authoritative status	2026-07-20T17:17:13.3285240Z   SUPPORTED_BUILD_ID: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
+deploy	Commit authoritative status	2026-07-20T17:17:13.3285937Z   PROTOCOL_VERSION: 3
+deploy	Commit authoritative status	2026-07-20T17:17:13.3286359Z   MIN_PLAYERS: 2
+deploy	Commit authoritative status	2026-07-20T17:17:13.3286739Z   MAX_PLAYERS: 10
+deploy	Commit authoritative status	2026-07-20T17:17:13.3287131Z   QUEUE_TTL_SECONDS: 120
+deploy	Commit authoritative status	2026-07-20T17:17:13.3287556Z ##[endgroup]
+deploy	Commit authoritative status	2026-07-20T17:17:13.3386473Z ##[error]Process completed with exit code 1.
