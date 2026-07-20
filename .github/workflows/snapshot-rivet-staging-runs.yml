@@ -1,0 +1,72 @@
+name: Snapshot Rivet Staging Runs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/snapshot-rivet-staging-runs.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Snapshot latest deployment run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          set +e
+          RUNS_JSON="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow deploy-rivet-control-staging.yml \
+            --branch main \
+            --limit 5 \
+            --json databaseId,status,conclusion,headSha,url,event,createdAt,updatedAt 2>"$RUNNER_TEMP/gh-error.log")"
+          GH_STATUS=$?
+          set -e
+
+          python - "$RUNS_JSON" "$GH_STATUS" "$RUNNER_TEMP/gh-error.log" <<'PY'
+          import json
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          raw = sys.argv[1]
+          gh_status = int(sys.argv[2])
+          error_path = Path(sys.argv[3])
+          try:
+              runs = json.loads(raw) if raw.strip() else []
+          except json.JSONDecodeError:
+              runs = []
+          payload = {
+              "recorded_at": datetime.now(timezone.utc).isoformat(),
+              "gh_exit_status": gh_status,
+              "gh_error": error_path.read_text(encoding="utf-8", errors="replace")[-2000:] if error_path.exists() else "",
+              "runs": runs,
+          }
+          Path("deployment/status/rivet-staging-snapshot.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Commit snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deployment/status/rivet-staging-snapshot.json
+          git commit -m "Snapshot latest Rivet staging runs"
+          git push origin HEAD:main
