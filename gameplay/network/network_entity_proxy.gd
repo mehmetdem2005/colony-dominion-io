@@ -181,5 +181,8 @@ func _draw_health_bar(width: float) -> void:
 
 
 func _resolve_move_speed() -> float:
-	var definition: UnitDefinition = UnitCatalog.get_definition(kind)
+	var catalog: Node = get_node_or_null("/root/UnitCatalog")
+	if catalog == null or not catalog.has_method("get_definition"):
+		return 280.0
+	var definition: UnitDefinition = catalog.call("get_definition", kind) as UnitDefinition
 	return definition.move_speed if definition != null else 280.0
