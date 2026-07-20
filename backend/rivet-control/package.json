@@ -1,23 +1,21 @@
 {
   "name": "colony-dominion-rivet-control",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server-full-online.ts",
+    "start": "node dist/server-full-online.js",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "deploy": "npx --yes @rivetkit/cli@latest deploy",
-    "publish-build": "tsx src/publish-build.ts"
+    "deploy": "npx --yes @rivetkit/cli@latest deploy"
   },
   "dependencies": {
     "@hono/node-server": "1.19.1",
     "hono": "4.12.31",
     "jose": "6.2.3",
     "zod": "4.4.3",
-    "rivetkit": "2.3.4",
-    "@rivet-gg/api": "25.5.3"
+    "rivetkit": "2.3.4"
   },
   "devDependencies": {
     "@types/node": "22.15.0",
