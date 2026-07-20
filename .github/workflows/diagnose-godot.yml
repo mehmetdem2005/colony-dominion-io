@@ -1,0 +1,116 @@
+name: Diagnose Godot Source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/diagnose-godot.yml"
+      - "project.godot"
+      - "autoload/**"
+      - "gameplay/**"
+      - "network/**"
+      - "scenes/**"
+      - "tests/**"
+      - "tools/**"
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot editor
+        timeout-minutes: 8
+        run: tools/install_godot_ci.sh
+
+      - name: Diagnose editor import and parse
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p build/diagnostics
+          LOG=build/diagnostics/editor-import.log
+          SUMMARY=build/diagnostics/error-summary.txt
+
+          set +e
+          timeout --foreground 240s \
+            "$GODOT_BIN" \
+            --headless \
+            --quiet \
+            --no-header \
+            --path "$GITHUB_WORKSPACE" \
+            --editor \
+            --quit \
+            >"$LOG" 2>&1
+          CODE=$?
+          set -e
+
+          grep -nE \
+            'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer' \
+            "$LOG" >"$SUMMARY" || true
+
+          echo "===== GODOT ERROR SUMMARY ====="
+          if [[ -s "$SUMMARY" ]]; then
+            cat "$SUMMARY"
+          else
+            echo "No matching Godot parse/compile error lines were found."
+          fi
+
+          echo "===== GODOT LOG TAIL ====="
+          tail -n 60 "$LOG" || true
+
+          if [[ $CODE -ne 0 || -s "$SUMMARY" ]]; then
+            exit 1
+          fi
+
+      - name: Run compile smoke test only
+        shell: bash
+        run: |
+          set -uo pipefail
+          LOG=build/diagnostics/compile-smoke.log
+          SUMMARY=build/diagnostics/compile-smoke-summary.txt
+
+          set +e
+          timeout --foreground 90s \
+            "$GODOT_BIN" \
+            --headless \
+            --quiet \
+            --no-header \
+            --path "$GITHUB_WORKSPACE" \
+            --script res://tests/phase_04_5_1_compile_smoke_test.gd \
+            >"$LOG" 2>&1
+          CODE=$?
+          set -e
+
+          grep -nE \
+            'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer|Script cannot instantiate|Failed to load:' \
+            "$LOG" >"$SUMMARY" || true
+
+          echo "===== COMPILE SMOKE SUMMARY ====="
+          if [[ -s "$SUMMARY" ]]; then
+            cat "$SUMMARY"
+          else
+            echo "No matching compile smoke errors were found."
+          fi
+
+          echo "===== COMPILE SMOKE LOG TAIL ====="
+          tail -n 60 "$LOG" || true
+
+          if [[ $CODE -ne 0 || -s "$SUMMARY" ]]; then
+            exit 1
+          fi
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-source-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
+          path: build/diagnostics/
