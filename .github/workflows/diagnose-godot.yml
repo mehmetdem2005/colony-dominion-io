@@ -12,12 +12,13 @@ on:
       - "scenes/**"
       - "tests/**"
       - "tools/**"
+      - "export_presets.cfg"
   workflow_dispatch:
 
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     env:
@@ -26,85 +27,120 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Godot editor
+      - name: Install Godot editor and export templates
         timeout-minutes: 8
         run: tools/install_godot_ci.sh
 
-      - name: Diagnose editor import and parse
+      - name: Validate all Godot tests and dedicated server export
         shell: bash
         run: |
           set -uo pipefail
-          mkdir -p build/diagnostics
-          LOG=build/diagnostics/editor-import.log
-          SUMMARY=build/diagnostics/error-summary.txt
 
-          set +e
-          timeout --foreground 240s \
+          mkdir -p build/diagnostics build/server
+          OVERALL=build/diagnostics/overall-summary.txt
+          : > "$OVERALL"
+          FAILURES=0
+
+          ERROR_PATTERN='SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer|Script cannot instantiate|Failed to load:|TIMEOUT'
+
+          run_case() {
+            local label="$1"
+            local seconds="$2"
+            shift 2
+
+            local safe_name
+            safe_name="$(printf '%s' "$label" | tr ' /:' '---' | tr -cd '[:alnum:]_.-')"
+            local log="build/diagnostics/${safe_name}.log"
+            local summary="build/diagnostics/${safe_name}-summary.txt"
+
+            echo
+            echo "===== START: $label (timeout=${seconds}s) ====="
+
+            timeout --foreground "${seconds}s" "$@" >"$log" 2>&1
+            local code=$?
+
+            grep -nE "$ERROR_PATTERN" "$log" >"$summary" || true
+
+            if [[ $code -eq 0 && ! -s "$summary" ]]; then
+              echo "PASS | $label" | tee -a "$OVERALL"
+              return 0
+            fi
+
+            FAILURES=$((FAILURES + 1))
+            echo "FAIL | $label | exit=$code" | tee -a "$OVERALL"
+            echo "----- ERROR SUMMARY: $label -----"
+
+            if [[ -s "$summary" ]]; then
+              cat "$summary"
+            else
+              echo "No matching error line; showing log tail."
+            fi
+
+            echo "----- LOG TAIL: $label -----"
+            tail -n 50 "$log" || true
+            return 0
+          }
+
+          run_case "editor-import-parse" 240 \
             "$GODOT_BIN" \
             --headless \
             --quiet \
             --no-header \
             --path "$GITHUB_WORKSPACE" \
             --editor \
-            --quit \
-            >"$LOG" 2>&1
-          CODE=$?
-          set -e
+            --quit
 
-          grep -nE \
-            'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer' \
-            "$LOG" >"$SUMMARY" || true
+          TESTS=(
+            tests/phase_04_5_1_compile_smoke_test.gd
+            tests/online_foundation_regression_test.gd
+            tests/online_security_contract_test.gd
+            tests/online_transport_regression_test.gd
+            tests/online_production_completion_test.gd
+            tests/north_world_depth_regression_test.gd
+          )
 
-          echo "===== GODOT ERROR SUMMARY ====="
-          if [[ -s "$SUMMARY" ]]; then
-            cat "$SUMMARY"
+          for test_path in "${TESTS[@]}"; do
+            run_case "$test_path" 90 \
+              "$GODOT_BIN" \
+              --headless \
+              --quiet \
+              --no-header \
+              --path "$GITHUB_WORKSPACE" \
+              --script "res://$test_path"
+          done
+
+          if [[ $FAILURES -eq 0 ]]; then
+            run_case "dedicated-server-export" 600 \
+              "$GODOT_BIN" \
+              --headless \
+              --quiet \
+              --no-header \
+              --path "$GITHUB_WORKSPACE" \
+              --export-release "Dedicated Server" \
+              "$GITHUB_WORKSPACE/build/server/colony-dominion-server.x86_64"
+
+            if [[ ! -x build/server/colony-dominion-server.x86_64 ]]; then
+              echo "FAIL | dedicated-server-executable-missing" | tee -a "$OVERALL"
+              FAILURES=$((FAILURES + 1))
+            fi
+
+            if [[ ! -s build/server/colony-dominion-server.pck ]]; then
+              echo "FAIL | dedicated-server-pck-missing" | tee -a "$OVERALL"
+              FAILURES=$((FAILURES + 1))
+            fi
           else
-            echo "No matching Godot parse/compile error lines were found."
+            echo "SKIP | dedicated-server-export | source tests failed" | tee -a "$OVERALL"
           fi
 
-          echo "===== GODOT LOG TAIL ====="
-          tail -n 60 "$LOG" || true
+          echo
+          echo "===== COMPLETE GODOT VALIDATION SUMMARY ====="
+          cat "$OVERALL"
 
-          if [[ $CODE -ne 0 || -s "$SUMMARY" ]]; then
+          if [[ $FAILURES -ne 0 ]]; then
             exit 1
           fi
 
-      - name: Run compile smoke test only
-        shell: bash
-        run: |
-          set -uo pipefail
-          LOG=build/diagnostics/compile-smoke.log
-          SUMMARY=build/diagnostics/compile-smoke-summary.txt
-
-          set +e
-          timeout --foreground 90s \
-            "$GODOT_BIN" \
-            --headless \
-            --quiet \
-            --no-header \
-            --path "$GITHUB_WORKSPACE" \
-            --script res://tests/phase_04_5_1_compile_smoke_test.gd \
-            >"$LOG" 2>&1
-          CODE=$?
-          set -e
-
-          grep -nE \
-            'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer|Script cannot instantiate|Failed to load:' \
-            "$LOG" >"$SUMMARY" || true
-
-          echo "===== COMPILE SMOKE SUMMARY ====="
-          if [[ -s "$SUMMARY" ]]; then
-            cat "$SUMMARY"
-          else
-            echo "No matching compile smoke errors were found."
-          fi
-
-          echo "===== COMPILE SMOKE LOG TAIL ====="
-          tail -n 60 "$LOG" || true
-
-          if [[ $CODE -ne 0 || -s "$SUMMARY" ]]; then
-            exit 1
-          fi
+          echo "GODOT_SOURCE_AND_SERVER_EXPORT_OK"
 
       - name: Upload diagnostic logs
         if: always()
@@ -113,4 +149,6 @@ jobs:
           name: godot-source-diagnostics
           if-no-files-found: warn
           retention-days: 7
-          path: build/diagnostics/
+          path: |
+            build/diagnostics/
+            build/server/
