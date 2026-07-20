@@ -28,7 +28,6 @@ func _initialize() -> void:
 		"/v1/internal/sessions/consume",
 		"/v1/internal/matches/result",
 		"/v1/health/config",
-		"timingSafeEqual",
 		"hashTicket",
 		"isTicketOwner",
 		"SUPABASE_SECRET_KEY",
@@ -44,6 +43,8 @@ func _initialize() -> void:
 		"join_ticket_claim_mismatch",
 		"consumeSessionTicket",
 		"displayName",
+		"timingSafeEqual",
+		"constantTimeHashEqual",
 	]:
 		if not registry.contains(required):
 			failures.append("Actor ticket contract missing: %s" % required)
