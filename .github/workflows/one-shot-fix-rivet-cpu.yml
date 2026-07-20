@@ -1,0 +1,74 @@
+name: One-shot Fix Rivet CPU
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-shot-fix-rivet-cpu.yml"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  patch-and-dispatch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Patch Rivet compute resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path('.github/workflows/deploy-rivet-control-staging.yml')
+          one_shot = Path('.github/workflows/one-shot-fix-rivet-cpu.yml')
+          text = target.read_text(encoding='utf-8')
+          lines = text.splitlines()
+
+          cpu_indexes = [i for i, line in enumerate(lines) if line.strip() == '--cpu 0.25 \\']
+          if len(cpu_indexes) != 1:
+              raise SystemExit(f'Expected exactly one --cpu 0.25 line, found {len(cpu_indexes)}')
+          cpu_index = cpu_indexes[0]
+          lines[cpu_index] = lines[cpu_index].replace('--cpu 0.25', '--cpu 1')
+
+          memory_indexes = [i for i, line in enumerate(lines) if line.strip() == '--memory 512Mi \\']
+          if len(memory_indexes) != 1:
+              raise SystemExit(f'Expected exactly one --memory 512Mi line, found {len(memory_indexes)}')
+          memory_index = memory_indexes[0]
+          concurrency_line = lines[memory_index][:len(lines[memory_index]) - len(lines[memory_index].lstrip())] + '--instance-request-concurrency 80 \\'
+          if memory_index + 1 >= len(lines) or lines[memory_index + 1].strip() != '--instance-request-concurrency 80 \\':
+              lines.insert(memory_index + 1, concurrency_line)
+
+          target.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          one_shot.unlink()
+          PY
+
+          grep -F -- '--cpu 1 \' .github/workflows/deploy-rivet-control-staging.yml
+          grep -F -- '--instance-request-concurrency 80 \' .github/workflows/deploy-rivet-control-staging.yml
+
+      - name: Commit permanent fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/deploy-rivet-control-staging.yml .github/workflows/one-shot-fix-rivet-cpu.yml
+          git commit -m "Fix Rivet compute CPU and request concurrency"
+          git push origin HEAD:main
+
+      - name: Dispatch corrected staging deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh workflow run deploy-rivet-control-staging.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f confirmation=DEPLOY-RIVET-STAGING
