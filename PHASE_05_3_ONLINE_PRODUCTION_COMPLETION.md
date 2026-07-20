@@ -2,7 +2,7 @@
 
 Build: `PHASE-05.3-ONLINE-PRODUCTION-COMPLETION`  
 Protocol: `3`  
-Maximum players: `6`
+Maximum players: `10`
 
 ## Completed
 
@@ -17,7 +17,7 @@ Maximum players: `6`
 - Supabase season, MMR, rating history, leaderboard and player summary RPCs.
 - Advisory-lock and timestamp based duplicate-result protection.
 - Linux headless export, non-root Docker image and health checks.
-- Six-client soak bot, real `tc/netem` network matrix and report analyzer.
+- Ten-client soak bot, real `tc/netem` network matrix and report analyzer.
 - Prometheus metrics, alert rules and production runbook.
 - Safe deployment bootstrap with separate deployment and allocator token scopes.
 
