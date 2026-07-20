@@ -7,7 +7,7 @@
 3. Apply all Supabase migrations to staging, then run the schema/RLS verifier.
 4. Deploy the Rivet control plane and confirm `/v1/health/config` returns `ready: true`.
 5. Register the game-server build tag used by `RIVET_GAME_SERVER_BUILD_TAG`.
-6. Run the four-profile network matrix with six clients for at least 30 minutes per profile.
+6. Run the four-profile network matrix with ten clients for at least 30 minutes per profile.
 7. Promote the exact image digest and Android artifact checksum to production.
 
 ## Rollback
