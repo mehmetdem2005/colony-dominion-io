@@ -1,10 +1,10 @@
-name: Deploy Rivet Control Staging
+name: Deploy Rivet Full Online Staging
 
 on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: Type DEPLOY-RIVET-STAGING
+        description: Type DEPLOY-RIVET-FULL-ONLINE
         required: true
         type: string
   push:
@@ -12,18 +12,23 @@ on:
     paths:
       - ".github/workflows/deploy-rivet-control-staging.yml"
       - "backend/rivet-control/**"
-      - "backend/game-server/**"
-      - "network/network_protocol.gd"
+      - "network/**"
+      - "autoload/**"
+      - "gameplay/match/**"
+      - "config/backend_config.json"
+      - "core/boot.gd"
+      - "project.godot"
+      - "export_presets.cfg"
 
 concurrency:
-  group: colony-rivet-control-staging
+  group: colony-rivet-full-online-staging
   cancel-in-progress: true
 
 jobs:
-  deploy-control:
-    if: ${{ github.event_name == 'push' || inputs.confirmation == 'DEPLOY-RIVET-STAGING' }}
+  deploy-full-online:
+    if: ${{ github.event_name == 'push' || inputs.confirmation == 'DEPLOY-RIVET-FULL-ONLINE' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 55
     environment: staging
     permissions:
       contents: read
@@ -32,11 +37,13 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       REGIONS_JSON: ${{ vars.REGIONS_JSON }}
-      SUPPORTED_BUILD_ID: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
-      PROTOCOL_VERSION: "3"
+      SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
+      PROTOCOL_VERSION: "4"
       MIN_PLAYERS: "2"
       MAX_PLAYERS: "10"
       QUEUE_TTL_SECONDS: "120"
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
 
     steps:
       - uses: actions/checkout@v6
@@ -45,6 +52,16 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build validation tools
+        run: python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+
+      - name: Install Godot and templates
+        run: tools/install_godot_ci.sh
 
       - name: Normalize and validate staging credentials
         shell: bash
@@ -55,6 +72,7 @@ jobs:
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
           test "$MIN_PLAYERS" = "2"
           test "$MAX_PLAYERS" = "10"
+          test "$PROTOCOL_VERSION" = "4"
           echo "::add-mask::$RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_SECRET_KEY"
           mkdir -p build/rivet-staging
@@ -70,7 +88,6 @@ jobs:
           if [ -z "${REGIONS_JSON:-}" ]; then
             REGIONS_JSON='[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'
           fi
-
           REGIONS_JSON="$REGIONS_JSON" python - <<'PY'
           import json
           import os
@@ -84,62 +101,65 @@ jobs:
               output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")
           PY
 
-      - name: Typecheck and build control plane
+      - name: Validate, typecheck and build sources
         shell: bash
         run: |
           set -euo pipefail
+          python tools/validate_online_release.py
           npm --prefix backend/rivet-control install --no-audit --no-fund
           npm --prefix backend/rivet-control run typecheck
           npm --prefix backend/rivet-control run build
+          tools/build_dedicated_server.sh
 
-      - name: Build control-plane container
+      - name: Build full-online container
         shell: bash
         run: |
           set -euo pipefail
           docker build \
             --file backend/rivet-control/Dockerfile \
-            --tag "colony-rivet-control-ci:${GITHUB_SHA:0:12}" \
-            backend/rivet-control
-          docker image inspect "colony-rivet-control-ci:${GITHUB_SHA:0:12}" \
+            --tag "colony-rivet-full-online-ci:${GITHUB_SHA:0:12}" \
+            .
+          docker image inspect "colony-rivet-full-online-ci:${GITHUB_SHA:0:12}" \
             --format '{{.Id}} {{.Architecture}}' \
             | tee build/rivet-staging/container-image.txt
+          docker run --rm \
+            --entrypoint /usr/local/bin/godot \
+            "colony-rivet-full-online-ci:${GITHUB_SHA:0:12}" \
+            --headless --version \
+            | tee build/rivet-staging/godot-runtime-version.txt
+          grep -q "4.6.3" build/rivet-staging/godot-runtime-version.txt
 
-      - name: Deploy control plane to Rivet Compute staging
+      - name: Deploy full-online runtime to Rivet Compute staging
         id: deploy
-        timeout-minutes: 25
+        timeout-minutes: 30
         shell: bash
         run: |
           set -uo pipefail
-
-          ROOT="$PWD"
-          RAW_LOG="$RUNNER_TEMP/rivet-control-deploy.log"
-          ATTEMPT_LOG="$RUNNER_TEMP/rivet-control-attempt.log"
-          EVIDENCE="$ROOT/build/rivet-staging"
+          RAW_LOG="$RUNNER_TEMP/rivet-full-online-deploy.log"
+          ATTEMPT_LOG="$RUNNER_TEMP/rivet-full-online-attempt.log"
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
           DEPLOY_STATUS=1
           MAX_ATTEMPTS=4
           : > "$RAW_LOG"
 
-          cd backend/rivet-control
           for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
             : > "$ATTEMPT_LOG"
-            echo "===== RIVET DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"
-
+            echo "===== RIVET FULL-ONLINE DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"
             set +e
             npx --yes @rivetkit/cli@latest deploy \
               --token "$RIVET_CLOUD_TOKEN" \
               --namespace staging \
-              --dockerfile Dockerfile \
+              --dockerfile backend/rivet-control/Dockerfile \
               --build-context . \
               --yes \
-              --image colony-rivet-control \
+              --image colony-rivet-full-online \
               --tag "${GITHUB_SHA:0:12}" \
-              --cpu 1 \
-              --memory 512Mi \
+              --cpu 2 \
+              --memory 2Gi \
               --instance-request-concurrency 80 \
               --min-scale 0 \
-              --max-scale 1 \
-              --max-concurrent-actors 1000 \
+              --max-scale 4 \
+              --max-concurrent-actors 3 \
               --env "NODE_ENV=production" \
               --env "SUPABASE_URL=${SUPABASE_URL}" \
               --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \
@@ -149,6 +169,7 @@ jobs:
               --env "MAX_PLAYERS=${MAX_PLAYERS}" \
               --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
               --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \
+              --env "RIVET_STARTUP_CANARY=1" \
               2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"
             DEPLOY_STATUS=${PIPESTATUS[0]}
             set -e
@@ -156,104 +177,51 @@ jobs:
             if [ "$DEPLOY_STATUS" -eq 0 ]; then
               break
             fi
-
             if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
-              echo "Permanent Rivet configuration or authentication failure" >&2
               break
             fi
-
             if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
               if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
-                DELAY=$((15 * (2 ** (ATTEMPT - 1))))
-                echo "Transient Rivet failure; retrying in ${DELAY}s" | tee -a "$RAW_LOG"
-                sleep "$DELAY"
+                sleep $((15 * (2 ** (ATTEMPT - 1))))
                 continue
               fi
             fi
-
-            echo "Non-transient or exhausted Rivet deployment failure" >&2
             break
           done
-          cd "$ROOT"
 
-          RAW_LOG="$RAW_LOG" EVIDENCE="$EVIDENCE" python - <<'PY'
+          python - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'
           import os
+          import sys
           from pathlib import Path
-          raw = Path(os.environ["RAW_LOG"]).read_text(encoding="utf-8", errors="replace")
+          raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
-          Path(os.environ["EVIDENCE"], "deploy-sanitized.log").write_text(raw, encoding="utf-8")
+          Path(sys.argv[2]).write_text(raw, encoding="utf-8")
           PY
+          test "$DEPLOY_STATUS" -eq 0
+          grep -Eqi 'pool status[[:space:]]+status=ready' "$RAW_LOG"
 
-          if [ "$DEPLOY_STATUS" -ne 0 ]; then
-            echo "Rivet deployment failed with status $DEPLOY_STATUS" >&2
-            exit "$DEPLOY_STATUS"
-          fi
-
-          RAW_LOG="$RAW_LOG" EVIDENCE="$EVIDENCE" python - <<'PY'
-          import json
-          import os
-          import re
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-          raw = Path(os.environ["RAW_LOG"]).read_text(encoding="utf-8", errors="replace")
-          text = ansi.sub("", raw)
-          ready = bool(re.search(r"pool status\s+status=ready", text, re.IGNORECASE))
-          dashboard = re.search(
-              r"https://dashboard\.rivet\.dev/orgs/[^\s]+/projects/[^\s]+/ns/[^?\s]+(?:\?skipOnboarding=1)?",
-              text,
-          )
-          if not ready:
-              raise SystemExit("Rivet CLI exited successfully but did not report pool status ready")
-          if not dashboard:
-              raise SystemExit("Rivet CLI exited successfully but did not emit a staging dashboard URL")
-
-          report = {
-              "success": True,
-              "verified_at": datetime.now(timezone.utc).isoformat(),
-              "verification": "rivet_cli_exit_zero_and_pool_ready",
-              "dashboard_url": dashboard.group(0),
-              "managed_pool_status": "ready",
-              "control_plane_live": True,
-              "rivet_managed_pool_ready": True,
-              "cpu": 1,
-              "memory": "512Mi",
-              "instance_request_concurrency": 80,
-              "min_players": 2,
-              "max_players": 10,
-              "game_server_allocator_ready": False,
-              "full_online_ready": False,
-          }
-          evidence = Path(os.environ["EVIDENCE"])
-          evidence.joinpath("status.json").write_text(
-              json.dumps(report, indent=2, ensure_ascii=False) + "\n",
-              encoding="utf-8",
-          )
-          evidence.joinpath("control-url.txt").write_text(dashboard.group(0) + "\n", encoding="utf-8")
-          print("RIVET_CONTROL_STAGING_READY=true")
-          print("MAX_PLAYERS=10")
-          print("FULL_ONLINE_READY=false")
-          PY
-
-      - name: Capture sanitized Rivet runtime logs
-        if: always()
+      - name: Verify live Godot actor canary
+        timeout-minutes: 8
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           mkdir -p build/rivet-staging
-          (
-            cd backend/rivet-control
-            npx --yes @rivetkit/cli@latest logs \
-              --token "$RIVET_CLOUD_TOKEN" \
-              --namespace staging \
-              -n 200 \
-              > ../../build/rivet-staging/runtime-raw.log 2>&1
-          )
-          python - <<'PY'
+          FOUND=0
+          for ATTEMPT in $(seq 1 36); do
+            set +e
+            (
+              cd backend/rivet-control
+              npx --yes @rivetkit/cli@latest logs \
+                --token "$RIVET_CLOUD_TOKEN" \
+                --namespace staging \
+                -n 500
+            ) > build/rivet-staging/runtime-raw.log 2>&1
+            LOG_STATUS=$?
+            set -e
+            python - <<'PY'
           import os
           from pathlib import Path
           source = Path("build/rivet-staging/runtime-raw.log")
@@ -263,38 +231,63 @@ jobs:
               if value:
                   raw = raw.replace(value, "***")
           Path("build/rivet-staging/runtime-sanitized.log").write_text(raw, encoding="utf-8")
-          source.unlink(missing_ok=True)
           PY
-          true
+            if [ "$LOG_STATUS" -eq 0 ] && grep -q 'RIVET_GAME_ACTOR_CANARY_OK' build/rivet-staging/runtime-sanitized.log; then
+              FOUND=1
+              break
+            fi
+            if grep -q 'RIVET_GAME_ACTOR_CANARY_FAILED' build/rivet-staging/runtime-sanitized.log; then
+              cat build/rivet-staging/runtime-sanitized.log >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$FOUND" -eq 1
 
-      - name: Verify deployed control plane report
+      - name: Write authoritative full-online status
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
+          from datetime import datetime, timezone
           from pathlib import Path
-          report = json.loads(Path("build/rivet-staging/status.json").read_text())
-          assert report["success"] is True
-          assert report["managed_pool_status"] == "ready"
-          assert report["control_plane_live"] is True
-          assert report["rivet_managed_pool_ready"] is True
-          assert report["cpu"] == 1
-          assert report["instance_request_concurrency"] == 80
-          assert report["min_players"] == 2
-          assert report["max_players"] == 10
-          assert report["game_server_allocator_ready"] is False
-          assert report["full_online_ready"] is False
+          report = {
+              "success": True,
+              "verified_at": datetime.now(timezone.utc).isoformat(),
+              "verification": "rivet_pool_ready_and_live_godot_actor_canary",
+              "provider": "rivet_only",
+              "managed_pool_status": "ready",
+              "control_plane_live": True,
+              "rivet_managed_pool_ready": True,
+              "game_server_allocator_ready": True,
+              "rivet_game_actor_ready": True,
+              "websocket_bridge_ready": True,
+              "full_online_ready": True,
+              "cpu": 2,
+              "memory": "2Gi",
+              "max_concurrent_actors_per_instance": 3,
+              "max_scale": 4,
+              "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
+              "protocol_version": 4,
+              "min_players": 2,
+              "max_players": 10,
+          }
+          Path("build/rivet-staging/status.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+          )
           print("RIVET_CONTROL_STAGING_READY=true")
+          print("RIVET_GAME_ACTOR_READY=true")
+          print("RIVET_WEBSOCKET_BRIDGE_READY=true")
           print("MAX_PLAYERS=10")
-          print("FULL_ONLINE_READY=false")
+          print("FULL_ONLINE_READY=true")
           PY
 
-      - name: Upload staging control-plane evidence
+      - name: Upload full-online staging evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: rivet-control-staging
+          name: rivet-full-online-staging
           if-no-files-found: warn
           retention-days: 14
           path: build/rivet-staging/
