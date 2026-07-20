@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server-full-online.ts",
-    "start": "node dist/server-full-online.js",
+    "dev": "tsx watch src/bootstrap.ts",
+    "start": "node dist/bootstrap.js",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "deploy": "npx --yes @rivetkit/cli@latest deploy"
