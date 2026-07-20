@@ -41,8 +41,33 @@ run_timed() {
 run_timed "Static online release validation" 180 \
   python3 "$ROOT/tools/validate_online_release.py"
 
-run_timed "Godot editor import/parse" 240 \
-  "$GODOT_BIN" --headless --path "$ROOT" --editor --quit
+mkdir -p "$ROOT/build/ci-logs"
+IMPORT_LOG="$ROOT/build/ci-logs/godot-editor-import.log"
+
+echo
+echo "===== START: Godot editor import/parse (timeout=240s) ====="
+
+set +e
+timeout --foreground 240s \
+  "$GODOT_BIN" --headless --path "$ROOT" --editor --quit \
+  2>&1 | tee "$IMPORT_LOG"
+IMPORT_CODE=${PIPESTATUS[0]}
+set -e
+
+if [[ $IMPORT_CODE -ne 0 ]]; then
+  echo "===== FAIL: Godot editor import/parse (exit=$IMPORT_CODE) =====" >&2
+  exit "$IMPORT_CODE"
+fi
+
+IMPORT_ERROR_PATTERN='SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script'
+
+if grep -Eq "$IMPORT_ERROR_PATTERN" "$IMPORT_LOG"; then
+  echo "===== FAIL: Godot import contained script errors =====" >&2
+  grep -En "$IMPORT_ERROR_PATTERN" "$IMPORT_LOG" >&2 || true
+  exit 1
+fi
+
+echo "===== PASS: Godot editor import/parse ====="
 
 TESTS=(
   tests/phase_04_5_1_compile_smoke_test.gd

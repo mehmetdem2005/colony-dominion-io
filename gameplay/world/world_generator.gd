@@ -2,7 +2,7 @@ class_name WorldGenerator
 extends Node
 
 const RESOURCE_SCENE := preload("res://scenes/resources/resource_node.tscn")
-const GROUND_WORLD_TEXTURE := preload("res://assets/ground/ground_world.png")
+const GROUND_WORLD_TEXTURE_PATH: String = "res://assets/ground/ground_world.png"
 
 const PROP_CONFIGS := [
 	{
@@ -168,7 +168,11 @@ func _create_ground_tiles(parent: Node2D) -> void:
 
 	var ground := Sprite2D.new()
 	ground.name = "GroundWorld"
-	ground.texture = GROUND_WORLD_TEXTURE
+	var ground_texture: Texture2D = load(GROUND_WORLD_TEXTURE_PATH) as Texture2D
+	if ground_texture == null:
+		push_error("World ground texture could not be loaded: %s" % GROUND_WORLD_TEXTURE_PATH)
+		return
+	ground.texture = ground_texture
 	ground.centered = false
 	ground.position = _bounds.position
 	ground.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR

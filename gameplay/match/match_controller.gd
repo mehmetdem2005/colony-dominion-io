@@ -82,10 +82,14 @@ const TEAM_COLORS: Array[Color] = [
 ]
 
 
+func _game_session():
+	return get_node_or_null("/root/GameSession")
+
+
 func _ready() -> void:
 	is_headless_server = _detect_headless_server()
 	_match_seed = (
-		GameSession.get_match_seed() if GameSession.has_method("get_match_seed") else 738291
+		_game_session().get_match_seed() if _game_session().has_method("get_match_seed") else 738291
 	)
 	match_rules = DEFAULT_MATCH_RULES.duplicate(true) as MatchRules
 	if match_rules == null:
@@ -124,7 +128,7 @@ func _ready() -> void:
 			_clear_local_movement,
 			_cancel_camera_gestures
 		)
-	GameSession.bind_match(self)
+	_game_session().bind_match(self)
 	GameTransport.bind_match(self)
 	units_root.y_sort_enabled = false
 	structures_root.y_sort_enabled = not is_headless_server
@@ -146,7 +150,7 @@ func _ready() -> void:
 	for index in SPAWN_POSITIONS.size():
 		var controller := COLONY_CONTROLLER_SCRIPT.new() as ColonyController
 		add_child(controller)
-		var colony_name: String = GameSession.player_name if index == 0 else COLONY_NAMES[index]
+		var colony_name: String = _game_session().player_name if index == 0 else COLONY_NAMES[index]
 		var local_human: bool = index == 0 and not is_headless_server
 		controller.configure(
 			self,
@@ -174,7 +178,7 @@ func _ready() -> void:
 		if not hud.safe_frame_insets_changed.is_connected(camera.set_safe_frame_insets):
 			hud.safe_frame_insets_changed.connect(camera.set_safe_frame_insets)
 		hud.bind_match(self, player_controller)
-		GameSession.bind_player(player_controller)
+		_game_session().bind_player(player_controller)
 		AudioSystem.enter_match()
 		_update_audio_context()
 		_audio_context_left = match_rules.audio_context_interval
@@ -196,7 +200,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_free_detached_pools()
-	GameSession.clear()
+	_game_session().clear()
 
 
 func _free_detached_pools() -> void:
@@ -336,7 +340,7 @@ func _finish_match(winner: ColonyController) -> void:
 
 func restart_match() -> void:
 	AudioSystem.play_ui(&"ui_select")
-	GameSession.prepare_new_match()
+	_game_session().prepare_new_match()
 	var error: int = get_tree().reload_current_scene()
 	if error != OK:
 		push_error("Match reload failed: %s" % error_string(error))

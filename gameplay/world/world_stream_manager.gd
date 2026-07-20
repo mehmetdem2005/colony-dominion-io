@@ -1,7 +1,7 @@
 class_name WorldStreamManager
 extends Node2D
 
-const GROUND_TEXTURE := preload("res://assets/ground/dirt_stream_tile.png")
+const GROUND_TEXTURE_PATH: String = "res://assets/ground/dirt_stream_tile.png"
 const CHUNK_BUILD_JOB_SCRIPT := preload("res://gameplay/world/world_chunk_build_job.gd")
 const CONTENT_CATALOG_SCRIPT := preload("res://gameplay/world/world_content_catalog.gd")
 const RESIDENCY_PLANNER_SCRIPT := preload("res://gameplay/world/world_residency_planner.gd")
@@ -743,7 +743,11 @@ func _create_repeating_ground() -> void:
 
 	var ground := Polygon2D.new()
 	ground.name = "StreamingGround"
-	ground.texture = GROUND_TEXTURE
+	var ground_texture: Texture2D = load(GROUND_TEXTURE_PATH) as Texture2D
+	if ground_texture == null:
+		push_error("Streaming ground texture could not be loaded: %s" % GROUND_TEXTURE_PATH)
+		return
+	ground.texture = ground_texture
 	ground.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	ground.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	ground.polygon = PackedVector2Array(
@@ -754,8 +758,8 @@ func _create_repeating_ground() -> void:
 			Vector2(world_bounds.position.x, world_bounds.end.y),
 		]
 	)
-	var texture_width: float = float(GROUND_TEXTURE.get_width())
-	var texture_height: float = float(GROUND_TEXTURE.get_height())
+	var texture_width: float = float(ground_texture.get_width())
+	var texture_height: float = float(ground_texture.get_height())
 	var uv_width: float = world_bounds.size.x / GROUND_REPEAT_WORLD_SIZE * texture_width
 	var uv_height: float = world_bounds.size.y / GROUND_REPEAT_WORLD_SIZE * texture_height
 	ground.uv = PackedVector2Array(
