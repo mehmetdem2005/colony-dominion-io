@@ -29,6 +29,17 @@ The production runtime uses Rivet Compute and Rivet Actors only. No Oracle, exte
 - Reconnect reservation: `60 seconds`
 - Snapshot cadence: `20 Hz`
 - Input cadence: `30 Hz`
+- Rivet pool resources: `2 CPU`, `2 GiB RAM`
+- Maximum actors per instance: `3`
+- Maximum staging scale: `4 instances`
+
+## Failure model
+
+- A Godot child that fails readiness is terminated and never receives a public assignment.
+- A child crash closes all proxied client sockets and is retried at most twice.
+- Actor destroy or sleep terminates the child with `SIGTERM`, then `SIGKILL` after the grace deadline.
+- A failed deployment startup canary terminates the Rivet runtime process so the instance cannot remain falsely healthy.
+- Match result writes and join-ticket consumption require the per-match server credential.
 
 ## Required evidence before merge
 
