@@ -1,0 +1,13 @@
+{
+  "success": false,
+  "phase": "deploy",
+  "message": "Rivet deploy command failed",
+  "run_id": "29762138605",
+  "run_attempt": "1",
+  "commit": "68c11d46fdff715e924ad229f64117ae0e965f29",
+  "recorded_at": "2026-07-20T17:03:36.827189+00:00",
+  "control_plane_live": false,
+  "rivet_managed_pool_ready": false,
+  "game_server_allocator_ready": false,
+  "full_online_ready": false
+}
