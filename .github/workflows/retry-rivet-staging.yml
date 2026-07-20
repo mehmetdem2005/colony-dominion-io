@@ -7,13 +7,30 @@ on:
         description: Optional successful Diagnose Godot Source run id
         required: false
         type: string
+      force_legacy_retry:
+        description: Run the provider-blocked legacy Build API path anyway
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: colony-rivet-staging-publish
   cancel-in-progress: true
 
 jobs:
+  blocked:
+    if: ${{ !inputs.force_legacy_retry }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Explain provider block
+        run: |
+          echo "Legacy Rivet Build API retry is intentionally blocked."
+          echo "Four backoff-separated attempts returned HTTP 500 with unique ray IDs."
+          echo "See deployment/rivet-build-api-support-report.md."
+          exit 1
+
   publish-and-deploy:
+    if: ${{ inputs.force_legacy_retry }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: staging
