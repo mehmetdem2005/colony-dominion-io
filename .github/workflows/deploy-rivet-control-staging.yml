@@ -1,0 +1,191 @@
+name: Deploy Rivet Control Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY-RIVET-STAGING
+        required: true
+        type: string
+
+concurrency:
+  group: colony-rivet-control-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy-control:
+    if: ${{ inputs.confirmation == 'DEPLOY-RIVET-STAGING' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      REGIONS_JSON: ${{ vars.REGIONS_JSON }}
+      RIVET_NAMESPACE: staging
+      SUPPORTED_BUILD_ID: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
+      PROTOCOL_VERSION: "3"
+      MIN_PLAYERS: "2"
+      MAX_PLAYERS: "6"
+      QUEUE_TTL_SECONDS: "120"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Validate staging inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
+          test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
+
+          SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
+          DEFAULT_REGIONS='[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"},{"id":"na-east","displayName":"Kuzey Amerika Doğu","shortName":"NA-E","probeUrl":"","enabled":true,"providerRegion":"iad"}]'
+          EFFECTIVE_REGIONS_JSON="${REGIONS_JSON:-$DEFAULT_REGIONS}"
+
+          python - <<'PY'
+          import json
+          import os
+
+          regions = json.loads(os.environ["EFFECTIVE_REGIONS_JSON"])
+          if not isinstance(regions, list) or not regions:
+              raise SystemExit("REGIONS_JSON must be a non-empty JSON array")
+          enabled = [item for item in regions if isinstance(item, dict) and item.get("enabled")]
+          if not enabled:
+              raise SystemExit("REGIONS_JSON must contain at least one enabled region")
+          print("Enabled regions:", ", ".join(str(item.get("id", "")) for item in enabled))
+          PY
+
+          echo "SUPABASE_URL=$SUPABASE_URL" >> "$GITHUB_ENV"
+          echo "EFFECTIVE_REGIONS_JSON=$EFFECTIVE_REGIONS_JSON" >> "$GITHUB_ENV"
+        env:
+          EFFECTIVE_REGIONS_JSON: ${{ vars.REGIONS_JSON || '[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"},{"id":"na-east","displayName":"Kuzey Amerika Doğu","shortName":"NA-E","probeUrl":"","enabled":true,"providerRegion":"iad"}]' }}
+
+      - name: Typecheck and build control plane
+        working-directory: backend/rivet-control
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm run build
+
+      - name: Deploy control plane to Rivet staging
+        working-directory: backend/rivet-control
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../../build/diagnostics ../../deployment
+
+          args=(
+            npx --yes @rivetkit/cli@latest deploy
+            --yes
+            --namespace "$RIVET_NAMESPACE"
+            --dockerfile Dockerfile
+            --build-context .
+            --image colony-rivet-control
+            --tag "${GITHUB_SHA:0:12}"
+            --cpu 0.25
+            --memory 512Mi
+            --min-scale 0
+            --max-scale 1
+            --max-concurrent-actors 1000
+            --drain-grace-period 1800
+            --instance-request-concurrency 80
+            --env "NODE_ENV=production"
+            --env "SUPABASE_URL=$SUPABASE_URL"
+            --env "SUPABASE_SECRET_KEY=$SUPABASE_SECRET_KEY"
+            --env "SUPPORTED_BUILD_ID=$SUPPORTED_BUILD_ID"
+            --env "PROTOCOL_VERSION=$PROTOCOL_VERSION"
+            --env "MIN_PLAYERS=$MIN_PLAYERS"
+            --env "MAX_PLAYERS=$MAX_PLAYERS"
+            --env "QUEUE_TTL_SECONDS=$QUEUE_TTL_SECONDS"
+            --env "REGIONS_JSON=$EFFECTIVE_REGIONS_JSON"
+          )
+
+          "${args[@]}" 2>&1 | tee ../../build/diagnostics/rivet-control-deploy.log
+
+      - name: Capture Rivet staging logs
+        if: always()
+        working-directory: backend/rivet-control
+        run: |
+          mkdir -p ../../build/diagnostics
+          npx --yes @rivetkit/cli@latest logs \
+            --namespace "$RIVET_NAMESPACE" \
+            -n 100 \
+            > ../../build/diagnostics/rivet-control-runtime.log 2>&1 || true
+
+      - name: Write deployment status report
+        if: success()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          log_path = Path("build/diagnostics/rivet-control-deploy.log")
+          text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else ""
+          urls = []
+          for value in re.findall(r"https://[^\s<>\"']+", text):
+              cleaned = value.rstrip(".,);]")
+              if cleaned not in urls:
+                  urls.append(cleaned)
+
+          report = {
+              "status": "control_plane_deployed",
+              "environment": "staging",
+              "namespace": "staging",
+              "commit": os.environ.get("GITHUB_SHA", ""),
+              "supabase_project_ref": os.environ.get("SUPABASE_PROJECT_REF", ""),
+              "supported_build_id": os.environ.get("SUPPORTED_BUILD_ID", ""),
+              "protocol_version": int(os.environ.get("PROTOCOL_VERSION", "3")),
+              "deployment_urls_from_cli": urls,
+              "supabase_schema_status": "deployed_and_verified",
+              "control_plane_status": "deployed",
+              "game_server_hosting_status": "blocked_legacy_build_api",
+              "full_online_stack_ready": False,
+              "note": "RivetKit control plane is deployed. Godot UDP dedicated-server hosting is not deployed by this workflow."
+          }
+          output = Path("deployment/rivet_control_staging.json")
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print("RIVET_CONTROL_STAGING_DEPLOYED")
+          print(output.read_text(encoding="utf-8"))
+          PY
+
+      - name: Verify deployment report
+        if: success()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("deployment/rivet_control_staging.json").read_text(encoding="utf-8"))
+          if report.get("control_plane_status") != "deployed":
+              raise SystemExit("Rivet control-plane deployment did not complete")
+          if report.get("full_online_stack_ready") is not False:
+              raise SystemExit("Deployment must not claim the full online stack is ready")
+          if report.get("game_server_hosting_status") != "blocked_legacy_build_api":
+              raise SystemExit("Game-server hosting status is not explicit")
+          print("RIVET_CONTROL_STAGING_REPORT_OK")
+          PY
+
+      - name: Upload staging deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rivet-control-staging
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            deployment/rivet_control_staging.json
+            build/diagnostics/
