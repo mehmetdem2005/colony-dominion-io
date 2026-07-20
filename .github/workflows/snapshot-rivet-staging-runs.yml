@@ -70,3 +70,5 @@ jobs:
           git add deployment/status/rivet-staging-snapshot.json
           git commit -m "Snapshot latest Rivet staging runs"
           git push origin HEAD:main
+
+# trigger-revision: 1
