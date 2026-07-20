@@ -37,14 +37,22 @@ func set_player_name(value: String) -> void:
 
 func prepare_offline_match() -> int:
 	online_assignment.clear()
-	NetworkSession.set_offline()
+	var network_session: Node = _get_network_session()
+	if network_session == null:
+		push_error("NetworkSession autoload is unavailable")
+	else:
+		network_session.call("set_offline")
 	return prepare_new_match()
 
 
 func prepare_online_match(assignment: Dictionary) -> void:
 	online_assignment = assignment.duplicate(true)
-	NetworkSession.set_online()
-	NetworkSession.set_match_assignment(online_assignment)
+	var network_session: Node = _get_network_session()
+	if network_session == null:
+		push_error("NetworkSession autoload is unavailable")
+		return
+	network_session.call("set_online")
+	network_session.call("set_match_assignment", online_assignment)
 
 
 func prepare_new_match() -> int:
@@ -64,3 +72,7 @@ func clear() -> void:
 	current_match = null
 	player_controller = null
 	online_assignment.clear()
+
+
+func _get_network_session() -> Node:
+	return get_node_or_null("/root/NetworkSession")
