@@ -6,10 +6,22 @@ on:
     branches: [main]
     paths:
       - "backend/rivet-control/**"
+      - "network/**"
+      - "autoload/**"
+      - "gameplay/match/**"
+      - "config/backend_config.json"
+      - "project.godot"
+      - "export_presets.cfg"
       - ".github/workflows/validate-rivet-control.yml"
   pull_request:
     paths:
       - "backend/rivet-control/**"
+      - "network/**"
+      - "autoload/**"
+      - "gameplay/match/**"
+      - "config/backend_config.json"
+      - "project.godot"
+      - "export_presets.cfg"
       - ".github/workflows/validate-rivet-control.yml"
 
 concurrency:
@@ -19,9 +31,12 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 35
     permissions:
       contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
     steps:
       - uses: actions/checkout@v6
 
@@ -29,6 +44,16 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install validation tools
+        run: python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+
+      - name: Install Godot and export templates
+        run: tools/install_godot_ci.sh
 
       - name: Install control-plane dependencies
         working-directory: backend/rivet-control
@@ -41,6 +66,9 @@ jobs:
           npm run typecheck
           npm run build
 
+      - name: Build validated dedicated-server package
+        run: tools/build_dedicated_server.sh
+
       - name: Validate current Rivet CLI contract
         working-directory: backend/rivet-control
         run: |
@@ -51,14 +79,19 @@ jobs:
           grep -q -- "--dockerfile" ../../build-rivet-cli-help.txt
           grep -q -- "--build-context" ../../build-rivet-cli-help.txt
 
-      - name: Build control-plane container
+      - name: Build full-online Rivet container
         run: |
           set -euo pipefail
           docker build \
             -f backend/rivet-control/Dockerfile \
             -t colony-rivet-control:validation \
-            backend/rivet-control
+            .
           docker image inspect colony-rivet-control:validation --format '{{.Id}} {{.Architecture}}'
+          docker run --rm \
+            --entrypoint /usr/local/bin/godot \
+            colony-rivet-control:validation \
+            --headless --version | tee build-rivet-godot-version.txt
+          grep -q "4.6.3" build-rivet-godot-version.txt
 
       - name: Upload validation evidence
         if: always()
@@ -67,4 +100,7 @@ jobs:
           name: rivet-control-validation
           if-no-files-found: warn
           retention-days: 7
-          path: build-rivet-cli-help.txt
+          path: |
+            build-rivet-cli-help.txt
+            build-rivet-godot-version.txt
+            build/ci-logs/
