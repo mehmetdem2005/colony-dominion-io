@@ -1,0 +1,16 @@
+{
+  "success": false,
+  "validated_sha": "463ef4521a927b99f460bbf852efc5f36b764ba8",
+  "run_id": "29769542113",
+  "recorded_at": "2026-07-20T18:52:58.095622+00:00",
+  "steps": {
+    "architecture": "success",
+    "typescript": "cancelled",
+    "gdscript": "skipped",
+    "godot": "skipped",
+    "docker": "skipped"
+  },
+  "provider": "rivet_only",
+  "protocol_version": 4,
+  "max_players": 10
+}
