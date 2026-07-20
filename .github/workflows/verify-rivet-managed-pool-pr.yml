@@ -1,0 +1,133 @@
+name: Verify Rivet Managed Pool PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/rivet-pr-verify-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    env:
+      RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
+      RIVET_ORGANIZATION: yOqDe3oynkJcMLHZfQ5xc1ocXMBBTjvG
+      RIVET_PROJECT: colonyio-3bo7
+      RIVET_NAMESPACE: staging-4x4s
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify token and managed pool
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RIVET_CLOUD_TOKEN"
+          echo "::add-mask::$RIVET_CLOUD_TOKEN"
+          mkdir -p build/rivet-pr-verification
+
+          curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
+            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
+            --header "Accept: application/json" \
+            https://cloud-api.rivet.dev/tokens/api/inspect \
+            > build/rivet-pr-verification/token-inspect.json
+
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          organization = os.environ["RIVET_ORGANIZATION"]
+          project = os.environ["RIVET_PROJECT"]
+          namespace = os.environ["RIVET_NAMESPACE"]
+          token = os.environ["RIVET_CLOUD_TOKEN"]
+          inspect = json.loads(Path("build/rivet-pr-verification/token-inspect.json").read_text())
+          if inspect.get("organization") != organization or inspect.get("project") != project:
+              raise SystemExit(f"Cloud token scope mismatch: {inspect}")
+
+          endpoint = (
+              "https://cloud-api.rivet.dev/projects/"
+              + urllib.parse.quote(project, safe="")
+              + "/namespaces/"
+              + urllib.parse.quote(namespace, safe="")
+              + "/managed-pools/default?org="
+              + urllib.parse.quote(organization, safe="")
+          )
+          last = None
+          last_error = ""
+
+          for _ in range(36):
+              request = urllib.request.Request(
+                  endpoint,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/json",
+                      "User-Agent": "colony-rivet-pr-verifier",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      last = json.loads(response.read().decode("utf-8", errors="replace"))
+                  status = str(last.get("status", "")).lower()
+                  if status == "ready":
+                      break
+                  if status == "error":
+                      raise SystemExit(f"Managed pool error: {last.get('error')}")
+              except urllib.error.HTTPError as exc:
+                  last_error = f"HTTP {exc.code}"
+              except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                  last_error = str(exc)
+              time.sleep(5)
+          else:
+              raise SystemExit(f"Managed pool not ready: {last_error}; last={last}")
+
+          config = (last or {}).get("config", {})
+          resources = config.get("resources", {}) if isinstance(config, dict) else {}
+          report = {
+              "success": True,
+              "verified_at": datetime.now(timezone.utc).isoformat(),
+              "verification": "rivet_cloud_api_managed_pool",
+              "organization": organization,
+              "project": project,
+              "cloud_namespace": namespace,
+              "managed_pool_status": str((last or {}).get("status", "")).lower(),
+              "control_plane_live": True,
+              "rivet_managed_pool_ready": True,
+              "cpu": resources.get("cpu"),
+              "memory": resources.get("memory"),
+              "instance_request_concurrency": resources.get("instanceRequestConcurrency"),
+              "min_players": 2,
+              "max_players": 10,
+              "game_server_allocator_ready": False,
+              "full_online_ready": False,
+              "managed_pool": last,
+          }
+          Path("build/rivet-pr-verification/verification.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          print("RIVET_CONTROL_STAGING_READY=true")
+          print("MAX_PLAYERS=10")
+          print("FULL_ONLINE_READY=false")
+          PY
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rivet-managed-pool-verification
+          if-no-files-found: error
+          retention-days: 14
+          path: build/rivet-pr-verification/
