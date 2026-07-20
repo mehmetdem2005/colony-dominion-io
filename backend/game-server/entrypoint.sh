@@ -12,9 +12,25 @@ if [ "${ALLOW_INCOMPLETE_SERVER_ENV:-0}" != "1" ]; then
   done
 fi
 
-case "${GAME_PORT:-7000}" in *[!0-9]*|'') echo "invalid GAME_PORT" >&2; exit 64;; esac
-case "${CONTROL_PORT:-7001}" in *[!0-9]*|'') echo "invalid CONTROL_PORT" >&2; exit 64;; esac
-case "${MAX_PLAYERS:-6}" in *[!0-9]*|'') echo "invalid MAX_PLAYERS" >&2; exit 64;; esac
-case "${EXPECTED_PLAYERS:-2}" in *[!0-9]*|'') echo "invalid EXPECTED_PLAYERS" >&2; exit 64;; esac
+GAME_PORT="${GAME_PORT:-7000}"
+CONTROL_PORT="${CONTROL_PORT:-7001}"
+MAX_PLAYERS="${MAX_PLAYERS:-10}"
+EXPECTED_PLAYERS="${EXPECTED_PLAYERS:-2}"
+
+case "$GAME_PORT" in *[!0-9]*|'') echo "invalid GAME_PORT" >&2; exit 64;; esac
+case "$CONTROL_PORT" in *[!0-9]*|'') echo "invalid CONTROL_PORT" >&2; exit 64;; esac
+case "$MAX_PLAYERS" in *[!0-9]*|'') echo "invalid MAX_PLAYERS" >&2; exit 64;; esac
+case "$EXPECTED_PLAYERS" in *[!0-9]*|'') echo "invalid EXPECTED_PLAYERS" >&2; exit 64;; esac
+
+if [ "$MAX_PLAYERS" -lt 1 ] || [ "$MAX_PLAYERS" -gt 10 ]; then
+  echo "MAX_PLAYERS must be between 1 and 10" >&2
+  exit 64
+fi
+if [ "$EXPECTED_PLAYERS" -lt 1 ] || [ "$EXPECTED_PLAYERS" -gt "$MAX_PLAYERS" ]; then
+  echo "EXPECTED_PLAYERS must be between 1 and MAX_PLAYERS" >&2
+  exit 64
+fi
+
+export GAME_PORT CONTROL_PORT MAX_PLAYERS EXPECTED_PLAYERS
 
 exec /usr/bin/tini -- /app/colony-dominion-server.x86_64 --headless --server "$@"
