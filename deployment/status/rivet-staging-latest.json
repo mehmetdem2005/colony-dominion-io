@@ -1,12 +1,12 @@
 {
-  "conclusion": "failure",
-  "deployment_report_available": false,
+  "conclusion": "success",
+  "deployment_report_available": true,
   "event": "push",
-  "failure_log_available": true,
-  "head_sha": "70a85eb19f32b7002367743c67a846da458c3734",
-  "recorded_at": "2026-07-20T16:50:19.113623+00:00",
+  "failure_log_available": false,
+  "head_sha": "03b6539d36c29cffab8543c978b15461747b3009",
+  "recorded_at": "2026-07-20T17:00:48.083606+00:00",
   "run_attempt": 1,
-  "run_id": 29760603070,
-  "run_url": "https://github.com/mehmetdem2005/colony-dominion-io/actions/runs/29760603070",
+  "run_id": 29761778747,
+  "run_url": "https://github.com/mehmetdem2005/colony-dominion-io/actions/runs/29761778747",
   "workflow": "Deploy Rivet Control Staging"
 }
