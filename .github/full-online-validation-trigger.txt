@@ -2,5 +2,5 @@ validation_target=RIVET_ONLY_FULL_ONLINE
 protocol=4
 max_players=10
 external_hosting=false
-triggered_at=2026-07-20T22:38:00+03:00
-validator=universal-websocket-listener-fix
+triggered_at=2026-07-20T22:43:00+03:00
+validator=post-listener-fix-validation
