@@ -48,4 +48,4 @@ USER node
 EXPOSE 3000
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "/app/control/dist/server-full-online.js"]
+CMD ["node", "/app/control/dist/bootstrap.js"]
