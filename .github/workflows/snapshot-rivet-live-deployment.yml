@@ -1,12 +1,13 @@
 name: Snapshot Rivet Live Deployment
 
 on:
-  pull_request_target:
-    types: [opened]
+  pull_request:
+    types: [synchronize, reopened]
 
 permissions:
   actions: read
   contents: write
+  pull-requests: read
 
 jobs:
   snapshot:
@@ -41,7 +42,7 @@ jobs:
                 --branch main \
                 --limit 20 \
                 --json databaseId,headSha \
-                --jq '.[] | select(.headSha == env.TARGET_SHA) | .databaseId' \
+                --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
                 | head -n 1
             )"
             [ -n "$RUN_ID" ] && break
@@ -73,10 +74,12 @@ jobs:
         run: |
           set +e
           mkdir -p deployment/status/rivet-live-evidence
-          gh run download "$RIVET_LIVE_RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --name rivet-full-online-staging \
-            --dir deployment/status/rivet-live-evidence
+          if [ -n "${RIVET_LIVE_RUN_ID:-}" ]; then
+            gh run download "$RIVET_LIVE_RUN_ID" \
+              --repo "$GITHUB_REPOSITORY" \
+              --name rivet-full-online-staging \
+              --dir deployment/status/rivet-live-evidence
+          fi
           true
 
       - name: Commit live deployment snapshot
