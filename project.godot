@@ -14,8 +14,8 @@ run/max_fps.mobile=60
 [autoload]
 AudioSystem="*res://audio/scripts/audio_system.gd"
 UnitCatalog="*res://autoload/unit_catalog.gd"
-GameSession="*res://autoload/game_session.gd"
 NetworkSession="*res://autoload/network_session.gd"
+GameSession="*res://autoload/game_session.gd"
 GameTransport="*res://network/game_transport.gd"
 OnlineServices="*res://autoload/online_services.gd"
 NetworkStatusOverlay="*res://ui/network_status_overlay.gd"
