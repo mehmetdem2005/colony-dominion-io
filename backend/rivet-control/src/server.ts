@@ -18,8 +18,8 @@ const baseUrl = process.env.INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`;
 const actorClient = createClient<typeof registry>(`${baseUrl}/api/rivet`);
 const app = new Hono<{ Variables: AuthVariables }>();
 const regions = loadRegions();
-const minPlayers = Math.max(1, Number(process.env.MIN_PLAYERS ?? 2));
-const maxPlayers = Math.max(minPlayers, Number(process.env.MAX_PLAYERS ?? 6));
+const minPlayers = readBoundedIntegerEnvironment("MIN_PLAYERS", 2, 1, 10);
+const maxPlayers = readBoundedIntegerEnvironment("MAX_PLAYERS", 10, minPlayers, 10);
 const queueTtlMs = Math.max(30, Number(process.env.QUEUE_TTL_SECONDS ?? 120)) * 1000;
 const requiredBuildId = process.env.SUPPORTED_BUILD_ID ?? "";
 const requiredProtocolVersion = Number(process.env.PROTOCOL_VERSION ?? 0);
@@ -88,7 +88,15 @@ app.get("/v1/health/config", (c) => {
     ),
     regions: regions.some((region) => region.enabled),
   };
-  return c.json({ ready: Object.values(checks).every(Boolean), checks });
+  return c.json({
+    ready: Object.values(checks).every(Boolean),
+    checks,
+    limits: {
+      min_players: minPlayers,
+      max_players: maxPlayers,
+      queue_ttl_seconds: queueTtlMs / 1000,
+    },
+  });
 });
 
 app.get("/v1/health/ping", (c) =>
@@ -341,6 +349,21 @@ function toPublicAssignment(assignment: ServerAssignment): Record<string, unknow
     expires_at: assignment.expiresAt,
     protocol_version: assignment.protocolVersion,
   };
+}
+
+function readBoundedIntegerEnvironment(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value;
 }
 
 function hashTicket(ticket: string): string {
