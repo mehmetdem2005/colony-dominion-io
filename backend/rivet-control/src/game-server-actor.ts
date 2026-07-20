@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { actor } from "rivetkit";
 
@@ -22,7 +22,7 @@ type GameServerActorState = GameServerActorInput & {
 };
 
 type GameRuntime = {
-  child: ChildProcessWithoutNullStreams;
+  child: ChildProcess;
   gamePort: number;
   controlPort: number;
   ready: boolean;
@@ -153,8 +153,8 @@ async function startRuntime(actorId: string, state: GameServerActorState): Promi
     logs: [],
   };
   runtimes.set(actorId, runtime);
-  child.stdout.on("data", (chunk: Buffer) => appendLogs(runtime, "stdout", chunk));
-  child.stderr.on("data", (chunk: Buffer) => appendLogs(runtime, "stderr", chunk));
+  child.stdout?.on("data", (chunk: Buffer) => appendLogs(runtime, "stdout", chunk));
+  child.stderr?.on("data", (chunk: Buffer) => appendLogs(runtime, "stderr", chunk));
   child.once("exit", (code) => {
     runtime.exited = true;
     runtime.ready = false;
