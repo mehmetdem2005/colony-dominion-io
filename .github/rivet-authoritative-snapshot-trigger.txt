@@ -1,0 +1,2 @@
+trigger=2026-07-20T20:20:00+03:00
+workflow=snapshot-rivet-authoritative-run.yml
