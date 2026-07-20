@@ -1,0 +1,96 @@
+name: Full Online Branch Validation
+
+on:
+  push:
+    branches: [full-online-completion]
+
+concurrency:
+  group: full-online-branch-validation
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install validation tools
+        run: python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+
+      - name: Install Godot and templates
+        run: tools/install_godot_ci.sh
+
+      - name: Validate release architecture
+        run: python tools/validate_online_release.py
+
+      - name: Typecheck and build Rivet runtime
+        working-directory: backend/rivet-control
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm run build
+
+      - name: Lint and format GDScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            find . -type f -name '*.gd' \
+              -not -path './.godot/*' \
+              -not -path './.godot-bin/*' \
+              -not -path './build/*' \
+              | sort
+          )
+          test "${#files[@]}" -gt 0
+          gdlint "${files[@]}"
+          gdformat --check "${files[@]}"
+
+      - name: Parse, test and export dedicated server
+        run: tools/build_dedicated_server.sh
+
+      - name: Build embedded Godot Rivet image
+        run: |
+          set -euo pipefail
+          docker build \
+            -f backend/rivet-control/Dockerfile \
+            -t colony-rivet-full-online:${GITHUB_SHA:0:12} \
+            .
+          docker image inspect colony-rivet-full-online:${GITHUB_SHA:0:12} \
+            --format '{{.Id}} {{.Architecture}}' \
+            | tee build/full-online-container.txt
+          docker run --rm \
+            --entrypoint /usr/local/bin/godot \
+            colony-rivet-full-online:${GITHUB_SHA:0:12} \
+            --headless --version \
+            | tee build/full-online-godot-version.txt
+          grep -q '4.6.3' build/full-online-godot-version.txt
+
+      - name: Upload full-online evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-online-branch-validation
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build/ci-logs/
+            build/full-online-container.txt
+            build/full-online-godot-version.txt
+            build/server/
