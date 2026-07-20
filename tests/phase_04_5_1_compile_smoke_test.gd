@@ -21,6 +21,11 @@ const REQUIRED_RESOURCES: Array[String] = [
 	"res://scenes/server_game.tscn",
 ]
 
+const NODE2D_SCRIPT_PATHS: Array[String] = [
+	"res://gameplay/match/match_controller.gd",
+	"res://gameplay/world/world_stream_manager.gd",
+]
+
 var _failures: Array[String] = []
 
 
@@ -30,20 +35,44 @@ func _init() -> void:
 
 func _run() -> void:
 	for resource_path in REQUIRED_RESOURCES:
-		var resource: Resource = ResourceLoader.load(resource_path)
-		if resource == null:
-			_failures.append("Failed to load: %s" % resource_path)
+		_validate_resource(resource_path)
 
-	var world_stream := WorldStreamManager.new()
-	if not world_stream is Node2D:
-		_failures.append("WorldStreamManager must inherit Node2D")
-	world_stream.free()
+	for script_path in NODE2D_SCRIPT_PATHS:
+		_validate_node2d_script(script_path)
 
-	var match_controller := MatchController.new()
-	if not match_controller is Node2D:
-		_failures.append("MatchController must inherit Node2D")
-	match_controller.free()
+	_finish()
 
+
+func _validate_resource(resource_path: String) -> void:
+	var resource: Resource = ResourceLoader.load(resource_path)
+	if resource == null:
+		_failures.append("Failed to load: %s" % resource_path)
+		return
+
+	if resource is Script:
+		var script := resource as Script
+		if not script.can_instantiate():
+			_failures.append("Script cannot instantiate: %s" % resource_path)
+
+
+func _validate_node2d_script(script_path: String) -> void:
+	var resource: Resource = ResourceLoader.load(script_path)
+	if not resource is Script:
+		_failures.append("Expected Script resource: %s" % script_path)
+		return
+
+	var script := resource as Script
+	if not script.can_instantiate():
+		return
+
+	var native_base: StringName = script.get_instance_base_type()
+	if native_base != &"Node2D":
+		_failures.append(
+			"%s must inherit Node2D, found native base: %s" % [script_path, native_base]
+		)
+
+
+func _finish() -> void:
 	if _failures.is_empty():
 		print("PHASE_04_5_1_COMPILE_SMOKE_OK")
 		quit(0)
