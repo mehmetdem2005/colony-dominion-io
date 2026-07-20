@@ -191,17 +191,20 @@ jobs:
 
           python - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'
           import os
+          import re
           import sys
           from pathlib import Path
+
           raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
+          raw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)
           Path(sys.argv[2]).write_text(raw, encoding="utf-8")
           PY
           test "$DEPLOY_STATUS" -eq 0
-          grep -Eqi 'pool status[[:space:]]+status=ready' "$RAW_LOG"
+          grep -Eqi 'pool status[[:space:]]+status=ready' build/rivet-staging/deploy-sanitized.log
 
       - name: Verify live Godot actor canary
         timeout-minutes: 8
@@ -223,6 +226,7 @@ jobs:
             set -e
             python - <<'PY'
           import os
+          import re
           from pathlib import Path
           source = Path("build/rivet-staging/runtime-raw.log")
           raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
@@ -230,6 +234,7 @@ jobs:
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
+          raw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)
           Path("build/rivet-staging/runtime-sanitized.log").write_text(raw, encoding="utf-8")
           PY
             if [ "$LOG_STATUS" -eq 0 ] && grep -q 'RIVET_GAME_ACTOR_CANARY_OK' build/rivet-staging/runtime-sanitized.log; then
