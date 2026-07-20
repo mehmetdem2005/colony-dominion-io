@@ -83,8 +83,9 @@ static func _validate_assignment_endpoint(assignment: Dictionary) -> String:
 	var transport: String = String(assignment.get("transport", TRANSPORT_ENET))
 	if transport == TRANSPORT_WEBSOCKET:
 		var websocket_url: String = String(assignment.get("websocket_url", ""))
-		if not websocket_url.begins_with("wss://") and not (
-			OS.is_debug_build() and websocket_url.begins_with("ws://")
+		if (
+			not websocket_url.begins_with("wss://")
+			and not (OS.is_debug_build() and websocket_url.begins_with("ws://"))
 		):
 			return "Rivet WebSocket adresi geçersiz"
 		return ""

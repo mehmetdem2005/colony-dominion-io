@@ -53,7 +53,10 @@ func _run() -> void:
 	for marker in ["gameServer.create", "getGatewayUrl", 'transport: "websocket"']:
 		if not allocator.contains(marker):
 			failures.append("Rivet-native allocator is missing: %s" % marker)
-	if allocator.contains("RIVET_ALLOCATOR_CLOUD_TOKEN") or allocator.contains("RIVET_ALLOCATOR_URL"):
+	if (
+		allocator.contains("RIVET_ALLOCATOR_CLOUD_TOKEN")
+		or allocator.contains("RIVET_ALLOCATOR_URL")
+	):
 		failures.append("External allocator credentials are forbidden in the Rivet-only runtime")
 	var ranked_sql: String = FileAccess.get_file_as_string(
 		"res://backend/supabase/migrations/202607190005_authoritative_ranked_results.sql"

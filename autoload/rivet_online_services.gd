@@ -6,13 +6,12 @@ func _is_valid_assignment(assignment: Dictionary) -> bool:
 	if not bool(validation.get("ok", false)):
 		return false
 	var normalized: Dictionary = validation.get("assignment", {}) as Dictionary
-	var transport: String = String(
-		normalized.get("transport", NetworkProtocol.TRANSPORT_ENET)
-	)
+	var transport: String = String(normalized.get("transport", NetworkProtocol.TRANSPORT_ENET))
 	if transport == NetworkProtocol.TRANSPORT_WEBSOCKET:
 		var websocket_url: String = String(normalized.get("websocket_url", ""))
-		return websocket_url.begins_with("wss://") or (
-			OS.is_debug_build() and websocket_url.begins_with("ws://")
+		return (
+			websocket_url.begins_with("wss://")
+			or (OS.is_debug_build() and websocket_url.begins_with("ws://"))
 		)
 	return (
 		transport == NetworkProtocol.TRANSPORT_ENET

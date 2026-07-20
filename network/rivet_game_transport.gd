@@ -58,9 +58,9 @@ func start_dedicated_server() -> Dictionary:
 
 	if error != OK or _active_peer == null:
 		_active_peer = null
-		var message: String = "Ağ sunucusu başlatılamadı (%s): %s" % [
-			transport, error_string(error)
-		]
+		var message: String = (
+			"Ağ sunucusu başlatılamadı (%s): %s" % [transport, error_string(error)]
+		)
 		server_start_failed.emit(message)
 		return {"ok": false, "error": message}
 
@@ -95,9 +95,11 @@ func is_server_ready() -> bool:
 
 func _open_client_peer() -> Dictionary:
 	_close_peer()
-	var transport: String = String(
-		_assignment.get("transport", NetworkProtocol.TRANSPORT_ENET)
-	).strip_edges().to_lower()
+	var transport: String = (
+		String(_assignment.get("transport", NetworkProtocol.TRANSPORT_ENET))
+		. strip_edges()
+		. to_lower()
+	)
 	var error: Error = OK
 	if transport == NetworkProtocol.TRANSPORT_WEBSOCKET:
 		var websocket_url: String = String(_assignment.get("websocket_url", "")).strip_edges()
@@ -109,9 +111,7 @@ func _open_client_peer() -> Dictionary:
 		var host: String = String(_assignment.get("host", ""))
 		var port: int = int(_assignment.get("port", 0))
 		var enet_peer := ENetMultiplayerPeer.new()
-		error = enet_peer.create_client(
-			host, port, NetworkProtocol.ENET_CHANNEL_COUNT, 0, 0, 0
-		)
+		error = enet_peer.create_client(host, port, NetworkProtocol.ENET_CHANNEL_COUNT, 0, 0, 0)
 		if error == OK:
 			_active_peer = enet_peer
 	else:
@@ -119,9 +119,9 @@ func _open_client_peer() -> Dictionary:
 
 	if error != OK or _active_peer == null:
 		_active_peer = null
-		var message: String = "Ağ bağlantısı oluşturulamadı (%s): %s" % [
-			transport, error_string(error)
-		]
+		var message: String = (
+			"Ağ bağlantısı oluşturulamadı (%s): %s" % [transport, error_string(error)]
+		)
 		NetworkSession.set_connection_state(NetworkSession.ConnectionState.FAILED, message)
 		client_connection_failed.emit(message)
 		return {"ok": false, "error": message}
@@ -162,7 +162,6 @@ func _process_reconnect(_delta: float) -> void:
 	_reconnect_attempt += 1
 	reconnect_started.emit(_reconnect_attempt)
 	set_meta(
-		"next_reconnect_msec",
-		now_msec + roundi(NetworkProtocol.RECONNECT_RETRY_SECONDS * 1000.0)
+		"next_reconnect_msec", now_msec + roundi(NetworkProtocol.RECONNECT_RETRY_SECONDS * 1000.0)
 	)
 	_open_client_peer()
