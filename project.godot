@@ -1,9 +1,9 @@
 config_version=5
 
 [application]
-config/name="Colony Dominion.io 05.3 Online Production"
+config/name="Colony Dominion.io 05.4 Rivet Full Online"
 config/description="Top-down 2D ant colony io strategy game"
-config/version="05.3"
+config/version="05.4"
 config/icon="res://assets/ui/app_icon.png"
 run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.6", "Mobile")
@@ -16,8 +16,8 @@ AudioSystem="*res://audio/scripts/audio_system.gd"
 UnitCatalog="*res://autoload/unit_catalog.gd"
 NetworkSession="*res://autoload/network_session.gd"
 GameSession="*res://autoload/game_session.gd"
-GameTransport="*res://network/game_transport.gd"
-OnlineServices="*res://autoload/online_services.gd"
+GameTransport="*res://network/rivet_game_transport.gd"
+OnlineServices="*res://autoload/rivet_online_services.gd"
 NetworkStatusOverlay="*res://ui/network_status_overlay.gd"
 
 [display]
