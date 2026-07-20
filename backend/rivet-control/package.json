@@ -8,7 +8,7 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "deploy": "npx --yes rivet-cli@latest deploy",
+    "deploy": "npx --yes @rivetkit/cli@latest deploy",
     "publish-build": "tsx src/publish-build.ts"
   },
   "dependencies": {
