@@ -1,16 +1,19 @@
 {
   "success": false,
-  "validated_sha": "463ef4521a927b99f460bbf852efc5f36b764ba8",
-  "run_id": "29769542113",
-  "recorded_at": "2026-07-20T18:52:58.095622+00:00",
+  "validated_sha": "650107c40ad2c13e16f543f680cfbc88f852f653",
+  "run_id": "29770666582",
+  "recorded_at": "2026-07-20T19:09:54.554367+00:00",
   "steps": {
+    "tools": "success",
+    "godot_install": "success",
     "architecture": "success",
-    "typescript": "cancelled",
-    "gdscript": "skipped",
-    "godot": "skipped",
-    "docker": "skipped"
+    "typescript": "failure",
+    "gdscript": "failure",
+    "godot": "success",
+    "docker": "failure"
   },
   "provider": "rivet_only",
   "protocol_version": 4,
-  "max_players": 10
+  "max_players": 10,
+  "external_hosting": false
 }
