@@ -20,7 +20,7 @@ jobs:
           ref: full-online-completion
           fetch-depth: 0
 
-      - name: Expand authoritative colony slots to ten
+      - name: Apply deterministic full-online source patches
         shell: bash
         run: |
           set -euo pipefail
@@ -28,8 +28,8 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path("gameplay/match/match_controller.gd")
-          text = path.read_text(encoding="utf-8")
+          match_path = Path("gameplay/match/match_controller.gd")
+          match_text = match_path.read_text(encoding="utf-8")
           pattern = re.compile(
               r'const SPAWN_POSITIONS: Array\[Vector2\] = \[.*?\n\]\n'
               r'const COLONY_NAMES: Array\[String\] = \[.*?\n\]\n'
@@ -72,17 +72,39 @@ jobs:
           \tColor("8ac926"),
           \tColor("b08968"),
           ]'''
-          updated, count = pattern.subn(replacement, text, count=1)
+          updated, count = pattern.subn(replacement, match_text, count=1)
           if count != 1:
               raise SystemExit(f"Expected one colony constants block, replaced {count}")
-          path.write_text(updated, encoding="utf-8")
+          match_path.write_text(updated, encoding="utf-8")
+
+          actor_path = Path("backend/rivet-control/src/game-server-actor.ts")
+          actor_text = actor_path.read_text(encoding="utf-8")
+          actor_text = actor_text.replace(
+              'import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";',
+              'import { spawn, type ChildProcess } from "node:child_process";',
+          )
+          actor_text = actor_text.replace(
+              "child: ChildProcessWithoutNullStreams;",
+              "child: ChildProcess;",
+          )
+          actor_text = actor_text.replace(
+              'child.stdout.on("data", (chunk: Buffer) => appendLogs(runtime, "stdout", chunk));',
+              'child.stdout?.on("data", (chunk: Buffer) => appendLogs(runtime, "stdout", chunk));',
+          )
+          actor_text = actor_text.replace(
+              'child.stderr.on("data", (chunk: Buffer) => appendLogs(runtime, "stderr", chunk));',
+              'child.stderr?.on("data", (chunk: Buffer) => appendLogs(runtime, "stderr", chunk));',
+          )
+          if "ChildProcessWithoutNullStreams" in actor_text:
+              raise SystemExit("Legacy child process type remains")
+          actor_path.write_text(actor_text, encoding="utf-8")
           PY
 
           grep -q 'Vector2(8800.0, 3000.0)' gameplay/match/match_controller.gd
-          grep -q '"River Brood"' gameplay/match/match_controller.gd
-          test "$(grep -c '^[[:space:]]*Color("' gameplay/match/match_controller.gd | head -n 1)" -ge 10
+          grep -q 'child: ChildProcess;' backend/rivet-control/src/game-server-actor.ts
+          grep -q 'child.stdout?.on' backend/rivet-control/src/game-server-actor.ts
 
-      - name: Commit scoped patch
+      - name: Commit scoped patches
         shell: bash
         run: |
           set -euo pipefail
@@ -91,6 +113,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add gameplay/match/match_controller.gd
-          git commit -m "Expand authoritative match to ten colony slots"
+          git add gameplay/match/match_controller.gd backend/rivet-control/src/game-server-actor.ts
+          git commit -m "Apply deterministic full-online source patches"
           git push origin HEAD:full-online-completion
