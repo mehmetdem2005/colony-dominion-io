@@ -47,11 +47,14 @@ jobs:
           python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
       - name: Install Godot 4.6.3 and export templates
         run: tools/install_godot_ci.sh
-      - name: Static release validation
-        run: |
-          python tools/validate_online_release.py
-          gdlint $(find . -name '*.gd' -type f | sort)
-          gdformat --check $(find . -name '*.gd' -type f | sort)
+      - name: Validate online release architecture
+        run: python tools/validate_online_release.py
+      - name: Lint GDScript
+        run: gdlint $(find . -name '*.gd' -type f | sort)
+      - name: Verify GDScript formatting
+        run: gdformat --check $(find . -name '*.gd' -type f | sort)
+      - name: Run deployment bootstrap regression
+        run: python tools/test_deploy_online_stack.py
       - name: Typecheck Rivet control plane
         working-directory: backend/rivet-control
         run: |
