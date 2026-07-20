@@ -10,13 +10,12 @@ concurrency:
 jobs:
   deploy-supabase:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: staging
     permissions:
       contents: read
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       COLONY_PROJECT_NAME: ${{ vars.COLONY_PROJECT_NAME }}
     steps:
@@ -29,18 +28,36 @@ jobs:
       - name: Install validation dependencies
         run: python -m pip install pglast pyyaml
 
+      - name: Audit complete online deployment source
+        run: |
+          mkdir -p build/diagnostics
+          python tools/audit_online_deployment.py --strict \
+            2>&1 | tee build/diagnostics/deployment-audit.log
+
+      - name: Preflight Supabase Management API
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          python tools/deploy_supabase_staging.py \
+            --project-name "${COLONY_PROJECT_NAME:-colony.io}" \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --preflight-only \
+            2>&1 | tee build/diagnostics/supabase-preflight.log
+
       - name: Apply and verify Supabase schema
         timeout-minutes: 10
         run: |
-          tools/deploy_online_stack.sh \
+          set -o pipefail
+          python tools/deploy_supabase_staging.py \
             --project-name "${COLONY_PROJECT_NAME:-colony.io}" \
             --project-ref "$SUPABASE_PROJECT_REF" \
-            --skip-rivet
+            2>&1 | tee build/diagnostics/supabase-deploy.log
 
       - name: Verify deployment report
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           report_path = Path("deployment/last_deployment.json")
@@ -49,24 +66,35 @@ jobs:
           report = json.loads(report_path.read_text(encoding="utf-8"))
           if report.get("status") != "complete":
               raise SystemExit("deployment report is incomplete")
+          if report.get("deployment_environment") != "staging":
+              raise SystemExit("deployment report is not labelled as staging")
           supabase = report.get("supabase", {})
+          expected_ref = os.environ.get("SUPABASE_PROJECT_REF", "")
+          if expected_ref and supabase.get("project_ref") != expected_ref:
+              raise SystemExit("deployment report points to the wrong Supabase project")
           verification = supabase.get("verification", {})
           if verification.get("verified_table_count", 0) < 12:
               raise SystemExit("Supabase table verification did not pass")
-          if not verification.get("authoritative_result_function"):
-              raise SystemExit("authoritative result function is missing")
-          if not verification.get("leaderboard_function"):
-              raise SystemExit("leaderboard function is missing")
-          if not verification.get("ranked_summary_function"):
-              raise SystemExit("ranked summary function is missing")
+          for key in (
+              "authoritative_result_function",
+              "leaderboard_function",
+              "ranked_summary_function",
+          ):
+              if not verification.get(key):
+                  raise SystemExit(f"Supabase function verification failed: {key}")
+          if len(supabase.get("migrations_applied", [])) < 5:
+              raise SystemExit("not all expected Supabase migrations were applied")
           print("SUPABASE_STAGING_SCHEMA_OK")
           PY
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: colony-supabase-staging
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
           path: |
+            deployment/deployment_audit.json
             deployment/last_deployment.json
             config/backend_config.json
+            build/diagnostics/
