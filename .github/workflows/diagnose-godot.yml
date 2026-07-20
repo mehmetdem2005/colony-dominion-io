@@ -12,13 +12,14 @@ on:
       - "scenes/**"
       - "tests/**"
       - "tools/**"
+      - "backend/rivet-control/**"
       - "export_presets.cfg"
   workflow_dispatch:
 
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     env:
@@ -27,11 +28,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install Godot editor and export templates
         timeout-minutes: 8
         run: tools/install_godot_ci.sh
 
-      - name: Validate all Godot tests and dedicated server export
+      - name: Validate Godot, Rivet control, and dedicated server export
         shell: bash
         run: |
           set -uo pipefail
@@ -41,7 +46,7 @@ jobs:
           : > "$OVERALL"
           FAILURES=0
 
-          ERROR_PATTERN='SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer|Script cannot instantiate|Failed to load:|TIMEOUT'
+          ERROR_PATTERN='SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|ERROR:|Invalid call|Identifier not found|Cannot infer|Script cannot instantiate|Failed to load:|TIMEOUT|error TS[0-9]+'
 
           run_case() {
             local label="$1"
@@ -81,7 +86,7 @@ jobs:
             fi
 
             echo "----- LOG TAIL: $label -----"
-            tail -n 50 "$log" || true
+            tail -n 60 "$log" || true
             return 0
           }
 
@@ -113,6 +118,12 @@ jobs:
               --script "res://$test_path"
           done
 
+          run_case "rivet-control-install" 240 \
+            npm --prefix backend/rivet-control install --no-audit --no-fund
+
+          run_case "rivet-control-typecheck" 180 \
+            npm --prefix backend/rivet-control run typecheck
+
           if [[ $FAILURES -eq 0 ]]; then
             run_case "dedicated-server-export" 600 \
               "$GODOT_BIN" \
@@ -137,20 +148,20 @@ jobs:
           fi
 
           echo
-          echo "===== COMPLETE GODOT VALIDATION SUMMARY ====="
+          echo "===== COMPLETE SOURCE VALIDATION SUMMARY ====="
           cat "$OVERALL"
 
           if [[ $FAILURES -ne 0 ]]; then
             exit 1
           fi
 
-          echo "GODOT_SOURCE_AND_SERVER_EXPORT_OK"
+          echo "GODOT_RIVET_SOURCE_AND_SERVER_EXPORT_OK"
 
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: godot-source-diagnostics
+          name: source-diagnostics
           if-no-files-found: warn
           retention-days: 7
           path: |
