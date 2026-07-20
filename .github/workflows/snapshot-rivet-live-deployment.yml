@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: 811ae857544f2effd1ed76cd1609341c10b1b815
+      TARGET_SHA: 5e0330528486aa25e7fc0ba0f1daf5eb4f9804ae
     steps:
       - uses: actions/checkout@v6
         with:
