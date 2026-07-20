@@ -23,7 +23,7 @@ jobs:
   deploy-control:
     if: ${{ github.event_name == 'push' || inputs.confirmation == 'DEPLOY-RIVET-STAGING' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     environment: staging
     permissions:
       contents: read
@@ -64,8 +64,6 @@ jobs:
           import re
           from pathlib import Path
 
-          # Rivet CLI-compatible token normalization. The CLI accepts an opaque,
-          # non-empty token and delegates validity to /tokens/api/inspect.
           raw_token = os.environ.get("RAW_RIVET_CLOUD_TOKEN", "")
 
           def unquote(value: str) -> str:
@@ -77,7 +75,6 @@ jobs:
           token = ""
           stripped = raw_token.strip()
 
-          # Accept JSON copied from Connect, assignment lines, or a direct token.
           if stripped.startswith(("{", "[")):
               try:
                   parsed = json.loads(stripped)
@@ -113,8 +110,6 @@ jobs:
                   token = assignment.group(1)
 
           if not token:
-              # Prefer known current and legacy dashboard forms when Connect text
-              # contains surrounding prose.
               known = list(dict.fromkeys(
                   re.findall(
                       r"cloud_api_[A-Za-z0-9._~+/=-]+|cloud\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}",
@@ -196,40 +191,104 @@ jobs:
 
       - name: Deploy control plane to Rivet Compute staging
         id: deploy
-        timeout-minutes: 15
+        timeout-minutes: 25
         shell: bash
         run: |
           set -uo pipefail
           RAW_LOG="$RUNNER_TEMP/rivet-control-deploy.log"
+          ATTEMPT_LOG="$RUNNER_TEMP/rivet-control-deploy-attempt.log"
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
+          : > "$RAW_LOG"
+
+          echo "Preflighting Rivet Cloud token with retry support"
+          set +e
+          INSPECT_CODE="$(curl \
+            --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
+            --output "$RUNNER_TEMP/rivet-token-inspect.json" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
+            --header "Accept: application/json" \
+            https://cloud-api.rivet.dev/tokens/api/inspect)"
+          INSPECT_STATUS=$?
+          set -e
+
+          if [ "$INSPECT_STATUS" -ne 0 ]; then
+            echo "Rivet token inspection could not reach Cloud API after retries" >&2
+            exit "$INSPECT_STATUS"
+          fi
+          case "$INSPECT_CODE" in
+            200) echo "Rivet Cloud token preflight passed" ;;
+            401|403)
+              echo "Rivet Cloud token rejected with HTTP $INSPECT_CODE" >&2
+              exit 2
+              ;;
+            *)
+              echo "Rivet token inspection returned unexpected HTTP $INSPECT_CODE" >&2
+              cat "$RUNNER_TEMP/rivet-token-inspect.json" >&2 || true
+              exit 1
+              ;;
+          esac
 
           cd backend/rivet-control
-          set +e
-          npx --yes @rivetkit/cli@latest deploy \
-            --token "$RIVET_CLOUD_TOKEN" \
-            --namespace staging \
-            --dockerfile Dockerfile \
-            --build-context . \
-            --yes \
-            --image colony-rivet-control \
-            --tag "${GITHUB_SHA:0:12}" \
-            --cpu 0.25 \
-            --memory 512Mi \
-            --min-scale 0 \
-            --max-scale 1 \
-            --max-concurrent-actors 1000 \
-            --env "NODE_ENV=production" \
-            --env "SUPABASE_URL=${SUPABASE_URL}" \
-            --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \
-            --env "SUPPORTED_BUILD_ID=${SUPPORTED_BUILD_ID}" \
-            --env "PROTOCOL_VERSION=${PROTOCOL_VERSION}" \
-            --env "MIN_PLAYERS=${MIN_PLAYERS}" \
-            --env "MAX_PLAYERS=${MAX_PLAYERS}" \
-            --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
-            --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \
-            2>&1 | tee "$RAW_LOG"
-          DEPLOY_STATUS=${PIPESTATUS[0]}
-          set -e
+          DEPLOY_STATUS=1
+          MAX_ATTEMPTS=4
+
+          for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
+            : > "$ATTEMPT_LOG"
+            echo "===== RIVET DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"
+
+            set +e
+            npx --yes @rivetkit/cli@latest deploy \
+              --token "$RIVET_CLOUD_TOKEN" \
+              --namespace staging \
+              --dockerfile Dockerfile \
+              --build-context . \
+              --yes \
+              --image colony-rivet-control \
+              --tag "${GITHUB_SHA:0:12}" \
+              --cpu 0.25 \
+              --memory 512Mi \
+              --min-scale 0 \
+              --max-scale 1 \
+              --max-concurrent-actors 1000 \
+              --env "NODE_ENV=production" \
+              --env "SUPABASE_URL=${SUPABASE_URL}" \
+              --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \
+              --env "SUPPORTED_BUILD_ID=${SUPPORTED_BUILD_ID}" \
+              --env "PROTOCOL_VERSION=${PROTOCOL_VERSION}" \
+              --env "MIN_PLAYERS=${MIN_PLAYERS}" \
+              --env "MAX_PLAYERS=${MAX_PLAYERS}" \
+              --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
+              --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \
+              2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"
+            DEPLOY_STATUS=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$DEPLOY_STATUS" -eq 0 ]; then
+              echo "Rivet deployment succeeded on attempt $ATTEMPT" | tee -a "$RAW_LOG"
+              break
+            fi
+
+            if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden' "$ATTEMPT_LOG"; then
+              echo "Permanent Rivet authentication/authorization failure; not retrying" >&2
+              break
+            fi
+
+            if grep -Eqi '503 Service Unavailable|502 Bad Gateway|504 Gateway Timeout|429 Too Many Requests|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
+              if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+                DELAY=$((15 * (2 ** (ATTEMPT - 1))))
+                echo "Transient Rivet failure detected; retrying in ${DELAY}s" | tee -a "$RAW_LOG"
+                sleep "$DELAY"
+                continue
+              fi
+            fi
+
+            echo "Non-transient or exhausted Rivet deployment failure" >&2
+            break
+          done
+
           cd ../..
 
           python - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'
@@ -247,7 +306,7 @@ jobs:
           PY
 
           if [ "$DEPLOY_STATUS" -ne 0 ]; then
-            echo "Rivet deployment command failed with status $DEPLOY_STATUS" >&2
+            echo "Rivet deployment failed after controlled retries; status $DEPLOY_STATUS" >&2
             exit "$DEPLOY_STATUS"
           fi
 
@@ -264,7 +323,15 @@ jobs:
           text = ansi.sub("", Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace"))
           urls = re.findall(r"https://[^\s<>'\"]+", text)
           candidates = []
-          blocked_hosts = {"github.com", "npmjs.com", "www.npmjs.com", "rivet.dev"}
+          blocked_hosts = {
+              "github.com",
+              "npmjs.com",
+              "www.npmjs.com",
+              "rivet.dev",
+              "cloud-api.rivet.dev",
+              "dashboard.rivet.dev",
+              "registry.rivet.dev",
+          }
           for raw in reversed(urls):
               raw = raw.rstrip(".,);]}")
               parts = urlsplit(raw)
@@ -274,8 +341,11 @@ jobs:
               if origin not in candidates:
                   candidates.append(origin)
 
-          deadline = time.time() + 240
-          last_error = "no deployment URL candidates found"
+          if not candidates:
+              raise SystemExit("No deploy endpoint URL was emitted by Rivet CLI")
+
+          deadline = time.time() + 360
+          last_error = "no deployment URL candidates responded"
           while time.time() < deadline:
               for origin in candidates:
                   try:
@@ -303,13 +373,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+          curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-max-time 180 --retry-all-errors \
             "$RIVET_CONTROL_URL/v1/health" \
             | tee build/rivet-staging/health.json
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+          curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-max-time 180 --retry-all-errors \
             "$RIVET_CONTROL_URL/v1/health/config" \
             | tee build/rivet-staging/health-config.json
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+          curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-max-time 180 --retry-all-errors \
             "$RIVET_CONTROL_URL/v1/regions" \
             | tee build/rivet-staging/regions.json
 
