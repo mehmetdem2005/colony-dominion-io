@@ -1,0 +1,164 @@
+name: colony-staging
+
+services:
+  rivet-engine:
+    image: rivetdev/engine:latest
+    restart: unless-stopped
+    environment:
+      RIVET__database__file_system__path: /var/lib/rivet/data
+      RIVET__auth__admin_token: ${RIVET_ADMIN_TOKEN:?RIVET_ADMIN_TOKEN is required}
+    volumes:
+      - rivet-data:/var/lib/rivet/data
+    ports:
+      - "127.0.0.1:6420:6420"
+    networks:
+      - colony-staging
+    security_opt:
+      - no-new-privileges:true
+
+  runner-config:
+    image: curlimages/curl:8.12.1
+    restart: "no"
+    depends_on:
+      - rivet-engine
+    environment:
+      RIVET_ADMIN_TOKEN: ${RIVET_ADMIN_TOKEN:?RIVET_ADMIN_TOKEN is required}
+    networks:
+      - colony-staging
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        until curl --silent --fail http://rivet-engine:6420/health >/dev/null 2>&1; do
+          sleep 2
+        done
+        curl --fail-with-body --silent --show-error \
+          -X PUT "http://rivet-engine:6420/runner-configs/default?namespace=staging" \
+          -H "Authorization: Bearer $${RIVET_ADMIN_TOKEN}" \
+          -H "Content-Type: application/json" \
+          --data '{"datacenters":{"default":{"normal":{}}}}'
+
+  allocator:
+    build:
+      context: ../..
+      dockerfile: backend/external-allocator/Dockerfile
+    image: ${ALLOCATOR_IMAGE:-colony-external-allocator:staging}
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      ALLOCATOR_SHARED_TOKEN: ${ALLOCATOR_SHARED_TOKEN:?ALLOCATOR_SHARED_TOKEN is required}
+      PUBLIC_GAME_HOST: ${PUBLIC_GAME_HOST:?PUBLIC_GAME_HOST is required}
+      CONTROL_BASE_URL: http://control-plane:3000
+      GAME_SERVER_IMAGE: ${GAME_SERVER_IMAGE:-colony-dominion-server:staging}
+      GAME_SERVER_DOCKER_NETWORK: colony-staging
+      SUPPORTED_BUILD_ID: ${SUPPORTED_BUILD_ID:-PHASE-05.3-ONLINE-PRODUCTION-COMPLETION}
+      PROTOCOL_VERSION: ${PROTOCOL_VERSION:-3}
+      MAX_PLAYERS: ${MAX_PLAYERS:-6}
+      MAX_CONCURRENT_SERVERS: ${MAX_CONCURRENT_SERVERS:-4}
+      GAME_PORT_MIN: ${GAME_PORT_MIN:-20000}
+      GAME_PORT_MAX: ${GAME_PORT_MAX:-20015}
+      CONTROL_PORT_MIN: ${CONTROL_PORT_MIN:-21000}
+      CONTROL_PORT_MAX: ${CONTROL_PORT_MAX:-21015}
+      GAME_SERVER_CPU_MILLICORES: ${GAME_SERVER_CPU_MILLICORES:-500}
+      GAME_SERVER_MEMORY_MB: ${GAME_SERVER_MEMORY_MB:-512}
+      ASSIGNMENT_TTL_SECONDS: ${ASSIGNMENT_TTL_SECONDS:-120}
+      SERVER_MAX_LIFETIME_SECONDS: ${SERVER_MAX_LIFETIME_SECONDS:-14400}
+      SERVER_READY_TIMEOUT_SECONDS: ${SERVER_READY_TIMEOUT_SECONDS:-45}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - allocator-data:/data
+    networks:
+      - colony-staging
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 4
+
+  control-plane:
+    build:
+      context: ../../backend/rivet-control
+      dockerfile: Dockerfile
+    image: ${CONTROL_PLANE_IMAGE:-colony-rivet-control:staging}
+    restart: unless-stopped
+    depends_on:
+      allocator:
+        condition: service_healthy
+      rivet-engine:
+        condition: service_started
+      runner-config:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      RIVET_RUNTIME_MODE: runner
+      RIVET_PORT: "3000"
+      RIVET_ENDPOINT: http://rivet-engine:6420
+      RIVET_NAMESPACE: staging
+      RIVET_TOKEN: ${RIVET_ADMIN_TOKEN:?RIVET_ADMIN_TOKEN is required}
+      RIVET_PUBLIC_ENDPOINT: https://${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME is required}/api/rivet
+      SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:?SUPABASE_SECRET_KEY is required}
+      SUPPORTED_BUILD_ID: ${SUPPORTED_BUILD_ID:-PHASE-05.3-ONLINE-PRODUCTION-COMPLETION}
+      PROTOCOL_VERSION: ${PROTOCOL_VERSION:-3}
+      MIN_PLAYERS: ${MIN_PLAYERS:-2}
+      MAX_PLAYERS: ${MAX_PLAYERS:-6}
+      QUEUE_TTL_SECONDS: ${QUEUE_TTL_SECONDS:-120}
+      RIVET_ALLOCATOR_URL: http://allocator:8080
+      RIVET_ALLOCATOR_TOKEN: ${ALLOCATOR_SHARED_TOKEN:?ALLOCATOR_SHARED_TOKEN is required}
+      PUBLIC_CONTROL_BASE_URL: https://${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME is required}
+      REGIONS_JSON: ${REGIONS_JSON:-}
+    networks:
+      - colony-staging
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 4
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME is required}
+      CADDY_EMAIL: ${CADDY_EMAIL:?CADDY_EMAIL is required}
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - colony-staging
+    security_opt:
+      - no-new-privileges:true
+
+  game-server-image:
+    profiles: ["build-only"]
+    build:
+      context: ../..
+      dockerfile: backend/game-server/Dockerfile
+      args:
+        GODOT_VERSION: ${GODOT_VERSION:-4.6.3}
+    image: ${GAME_SERVER_IMAGE:-colony-dominion-server:staging}
+    command: ["--help"]
+
+networks:
+  colony-staging:
+    name: colony-staging
+    driver: bridge
+
+volumes:
+  rivet-data:
+  allocator-data:
+  caddy-data:
+  caddy-config:
