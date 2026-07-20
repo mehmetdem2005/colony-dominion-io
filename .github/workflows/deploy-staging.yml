@@ -53,6 +53,11 @@ jobs:
       - name: Publish game-server build to Rivet
         timeout-minutes: 8
         run: tools/publish_rivet_game_server.sh
+      - name: Apply resolved Rivet context
+        run: |
+          test -s build/rivet-context.env
+          grep -E '^RIVET_(PROJECT|ENVIRONMENT|PROJECT_ID|ENVIRONMENT_ID)=' build/rivet-context.env >> "$GITHUB_ENV"
+          echo "Resolved Rivet project and environment loaded for deployment."
       - name: Deploy Supabase schema and Rivet control plane
         timeout-minutes: 12
         run: |
