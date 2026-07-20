@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { QueueEntry, RegionDefinition, ServerAssignment } from "./types.js";
 
 export type AllocationResult = {
@@ -7,12 +7,11 @@ export type AllocationResult = {
   serverAuthToken: string;
 };
 
-type ExternalAllocationResponse = {
-  assignment?: Record<string, unknown>;
-  join_tickets?: Record<string, unknown>;
-  joinTickets?: Record<string, unknown>;
-  server_auth_token?: unknown;
-  serverAuthToken?: unknown;
+type ActorPort = { host?: string; port?: number; url?: string; hostname?: string };
+type RivetActorResponse = {
+  id?: string;
+  actorId?: string;
+  network?: { ports?: Record<string, ActorPort> };
 };
 
 export async function allocateGameServer(
@@ -20,8 +19,9 @@ export async function allocateGameServer(
   players: QueueEntry[],
 ): Promise<AllocationResult> {
   if (players.length === 0) throw new Error("Cannot allocate a server without players");
-  const allocatorUrl = process.env.RIVET_ALLOCATOR_URL?.trim().replace(/\/$/, "");
+  const allocatorUrl = process.env.RIVET_ALLOCATOR_URL?.replace(/\/$/, "");
   if (allocatorUrl) return allocateThroughExternalAdapter(allocatorUrl, region, players);
+  if (hasDirectRivetConfiguration()) return allocateDirectlyOnRivet(region, players);
   return allocateDevelopmentServer(region, players);
 }
 
@@ -30,81 +30,33 @@ async function allocateThroughExternalAdapter(
   region: RegionDefinition,
   players: QueueEntry[],
 ): Promise<AllocationResult> {
-  assertAllocatorUrlAllowed(allocatorUrl);
-  const token = requiredEnvironment("RIVET_ALLOCATOR_TOKEN");
-  const buildId = players[0]?.buildId ?? "";
-  const protocolVersion = players[0]?.protocolVersion ?? 0;
-  if (!buildId || protocolVersion <= 0) throw new Error("Allocation candidates have invalid build metadata");
-  for (const player of players) {
-    if (player.buildId !== buildId || player.protocolVersion !== protocolVersion) {
-      throw new Error("Allocation candidates do not share the same build and protocol version");
-    }
-  }
-  const allocationKey = createHash("sha256")
-    .update(JSON.stringify({
-      regionId: region.id,
-      buildId,
-      protocolVersion,
-      queueTicketIds: players.map((entry) => entry.queueTicketId).sort(),
-    }))
-    .digest("hex");
-  const requestBody = {
-    allocation_key: allocationKey,
-    region_id: region.id,
-    provider_region: region.providerRegion ?? "",
-    players: players.map((entry) => ({
-      player_id: entry.playerId,
-      queue_ticket_id: entry.queueTicketId,
-    })),
-    build_id: buildId,
-    protocol_version: protocolVersion,
-  };
-
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(`${allocatorUrl}/allocate`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-          "x-colony-allocation-key": allocationKey,
-        },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(65_000),
-      });
-      const responseText = await response.text();
-      if (!response.ok) {
-        const transient = response.status === 429 || response.status >= 500;
-        const detail = responseText.slice(0, 1000).replace(/\s+/g, " ");
-        const error = new Error(`External allocator failed with HTTP ${response.status}: ${detail}`);
-        if (!transient || attempt === 3) throw error;
-        lastError = error;
-      } else {
-        let parsed: unknown;
-        try {
-          parsed = responseText ? JSON.parse(responseText) : null;
-        } catch {
-          throw new Error("External allocator returned invalid JSON");
-        }
-        return normalizeExternalAllocation(parsed, region, players);
-      }
-    } catch (error) {
-      lastError = error;
-      if (attempt === 3 || !isRetryableNetworkError(error)) throw error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, attempt * 750));
-  }
-  throw lastError instanceof Error ? lastError : new Error("External allocator failed");
+  const response = await fetch(`${allocatorUrl}/allocate`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.RIVET_ALLOCATOR_TOKEN ?? ""}`,
+    },
+    body: JSON.stringify({
+      region_id: region.id,
+      provider_region: region.providerRegion,
+      players: players.map((entry) => ({
+        player_id: entry.playerId,
+        queue_ticket_id: entry.queueTicketId,
+      })),
+      build_id: players[0]?.buildId,
+      protocol_version: players[0]?.protocolVersion,
+    }),
+  });
+  if (!response.ok) throw new Error(`Rivet allocator failed with HTTP ${response.status}`);
+  return normalizeExternalAllocation((await response.json()) as Record<string, unknown>, region, players);
 }
 
 function normalizeExternalAllocation(
-  value: unknown,
+  body: Record<string, unknown>,
   region: RegionDefinition,
   players: QueueEntry[],
 ): AllocationResult {
-  const body = (asRecord(value) ?? {}) as ExternalAllocationResponse;
-  const rawAssignment = asRecord(body.assignment) ?? asRecord(value) ?? {};
+  const rawAssignment = asRecord(body.assignment) ?? body;
   const matchId = readText(rawAssignment, "matchId", "match_id");
   const serverId = readText(rawAssignment, "serverId", "server_id");
   const host = readText(rawAssignment, "host", "hostname");
@@ -117,11 +69,7 @@ function normalizeExternalAllocation(
   const protocolVersion = readPositiveIntegerValue(
     rawAssignment.protocolVersion ?? rawAssignment.protocol_version,
   );
-  const serverAuthToken = readText(
-    asRecord(value) ?? {},
-    "serverAuthToken",
-    "server_auth_token",
-  );
+  const serverAuthToken = readText(body, "serverAuthToken", "server_auth_token");
   const rawTickets = asRecord(body.joinTickets ?? body.join_tickets);
   const joinTickets: Record<string, string> = {};
   if (rawTickets) {
@@ -158,33 +106,172 @@ function normalizeExternalAllocation(
   };
 }
 
+async function allocateDirectlyOnRivet(
+  region: RegionDefinition,
+  players: QueueEntry[],
+): Promise<AllocationResult> {
+  const matchId = randomUUID();
+  const serverId = randomUUID();
+  const matchSeed = randomBytes(4).readUInt32BE(0) & 0x7fffffff;
+  const gameServerToken = randomBytes(32).toString("base64url");
+  const project = requiredEnvironment("RIVET_PROJECT");
+  const environment = requiredEnvironment("RIVET_ENVIRONMENT");
+  const buildTag = requiredEnvironment("RIVET_GAME_SERVER_BUILD_TAG");
+  const controlBaseUrl = requiredEnvironment("PUBLIC_CONTROL_BASE_URL").replace(/\/$/, "");
+  const cpu = readPositiveInteger("GAME_SERVER_CPU_MILLICORES", 1000);
+  const memory = readPositiveInteger("GAME_SERVER_MEMORY_MB", 1024);
+  const sdk = (await import("@rivet-gg/api")) as unknown as {
+    RivetClient: new (options?: Record<string, unknown>) => Record<string, unknown>;
+  };
+  const client = new sdk.RivetClient({
+    token: requiredEnvironment("RIVET_ALLOCATOR_CLOUD_TOKEN"),
+  });
+  const actor = await createRivetActor(client, {
+    project,
+    environment,
+    body: {
+      tags: {
+        name: "colony-dominion-game-server",
+        match_id: matchId,
+        server_id: serverId,
+        region_id: region.id,
+      },
+      buildTags: { name: buildTag, current: "true" },
+      region: region.providerRegion || undefined,
+      network: {
+        ports: {
+          game: { protocol: "udp", internalPort: 7000 },
+          control: { protocol: "http", internalPort: 7001 },
+        },
+      },
+      resources: { cpu, memory },
+      environment: {
+        MATCH_ID: matchId,
+        MATCH_SEED: String(Math.max(matchSeed, 1)),
+        SERVER_ID: serverId,
+        REGION_ID: region.id,
+        BUILD_ID: players[0]?.buildId ?? "",
+        PROTOCOL_VERSION: String(players[0]?.protocolVersion ?? 0),
+        MAX_PLAYERS: String(readPositiveInteger("MAX_PLAYERS", 6)),
+        EXPECTED_PLAYERS: String(players.length),
+        CONTROL_BASE_URL: controlBaseUrl,
+        GAME_SERVER_AUTH_TOKEN: gameServerToken,
+        GAME_PORT: "7000",
+        CONTROL_PORT: "7001",
+        RANKED_MATCH: process.env.RANKED_MATCH === "0" ? "0" : "1",
+      },
+    },
+  });
+  const actorId = actor.id ?? actor.actorId;
+  if (!actorId) throw new Error("Rivet actor response did not include an id");
+  const gamePort = actor.network?.ports?.game;
+  const controlPort = actor.network?.ports?.control;
+  const host = gamePort?.host ?? gamePort?.hostname ?? hostFromUrl(gamePort?.url);
+  const port = gamePort?.port ?? portFromUrl(gamePort?.url);
+  if (!host || !port) throw new Error("Rivet actor response did not include a public UDP endpoint");
+  const controlUrl = resolveHttpPortUrl(controlPort);
+  if (!controlUrl) throw new Error("Rivet actor response did not include a control endpoint");
+  await waitForReady(controlUrl, 30_000);
+  return makeAllocation(
+    matchId,
+    serverId,
+    host,
+    port,
+    region,
+    players,
+    Date.now() + 90_000,
+    gameServerToken,
+  );
+}
+
+async function createRivetActor(
+  client: Record<string, unknown>,
+  input: Record<string, unknown>,
+): Promise<RivetActorResponse> {
+  const actors = client.actors as
+    | { create?: (value: Record<string, unknown>) => Promise<unknown> }
+    | undefined;
+  if (actors?.create) {
+    const response = (await actors.create(input)) as Record<string, unknown>;
+    return (response.actor ?? response) as RivetActorResponse;
+  }
+  const actorsCreate = client.actorsCreate as
+    | ((value: Record<string, unknown>) => Promise<unknown>)
+    | undefined;
+  if (actorsCreate) {
+    const response = (await actorsCreate.call(client, input)) as Record<string, unknown>;
+    return (response.actor ?? response) as RivetActorResponse;
+  }
+  throw new Error("Installed Rivet SDK does not expose actors.create");
+}
+
+async function waitForReady(controlUrl: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${controlUrl.replace(/\/$/, "")}/ready`, {
+        signal: AbortSignal.timeout(1500),
+      });
+      if (response.ok) return;
+    } catch {
+      // Container can take a few seconds to bind its health port.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error("Allocated game server did not become ready before timeout");
+}
+
 function allocateDevelopmentServer(
   region: RegionDefinition,
   players: QueueEntry[],
 ): AllocationResult {
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEV_ALLOCATOR !== "1") {
-    throw new Error("External game-server allocator is not configured");
+    throw new Error("Development allocator is disabled in production");
   }
   const host = process.env.DEV_GAME_SERVER_HOST;
   const port = Number(process.env.DEV_GAME_SERVER_PORT ?? 0);
   if (!host || !Number.isInteger(port) || port <= 0) {
-    throw new Error("Configure RIVET_ALLOCATOR_URL or DEV_GAME_SERVER_HOST/PORT");
+    throw new Error(
+      "Configure direct Rivet allocation, RIVET_ALLOCATOR_URL, or DEV_GAME_SERVER_HOST/PORT",
+    );
   }
   const matchId = randomUUID();
   const serverAuthToken = requiredEnvironment("DEV_GAME_SERVER_AUTH_TOKEN");
+  return makeAllocation(
+    matchId,
+    `dev-${matchId}`,
+    host,
+    port,
+    region,
+    players,
+    Date.now() + 60_000,
+    serverAuthToken,
+  );
+}
+
+function makeAllocation(
+  matchId: string,
+  serverId: string,
+  host: string,
+  port: number,
+  region: RegionDefinition,
+  players: QueueEntry[],
+  expiresAt: number,
+  serverAuthToken: string,
+): AllocationResult {
   const joinTickets = Object.fromEntries(
     players.map((entry) => [entry.queueTicketId, randomBytes(32).toString("base64url")]),
   );
   return {
     assignment: {
       matchId,
-      serverId: `dev-${matchId}`,
+      serverId,
       host,
       port,
       regionId: region.id,
       regionName: region.displayName,
       regionShortName: region.shortName,
-      expiresAt: Date.now() + 60_000,
+      expiresAt,
       protocolVersion: players[0]?.protocolVersion ?? 1,
     },
     joinTickets,
@@ -192,29 +279,25 @@ function allocateDevelopmentServer(
   };
 }
 
-function assertAllocatorUrlAllowed(value: string): void {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("RIVET_ALLOCATOR_URL is not a valid URL");
-  }
-  if (url.protocol === "https:") return;
-  const localHost = ["localhost", "127.0.0.1", "allocator"].includes(url.hostname);
-  if (url.protocol === "http:" && (localHost || process.env.ALLOW_INSECURE_ALLOCATOR_URL === "1")) return;
-  throw new Error("RIVET_ALLOCATOR_URL must use HTTPS outside the private Docker network");
-}
-
-function isRetryableNetworkError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  if (error.name === "TimeoutError" || error.name === "AbortError") return true;
-  return error instanceof TypeError || /HTTP (429|5\d\d)/.test(error.message);
+function hasDirectRivetConfiguration(): boolean {
+  return Boolean(
+    process.env.RIVET_ALLOCATOR_CLOUD_TOKEN &&
+      process.env.RIVET_PROJECT &&
+      process.env.RIVET_ENVIRONMENT &&
+      process.env.RIVET_GAME_SERVER_BUILD_TAG &&
+      process.env.PUBLIC_CONTROL_BASE_URL,
+  );
 }
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required for game-server allocation`);
+  if (!value) throw new Error(`${name} is required for direct Rivet allocation`);
   return value;
+}
+
+function readPositiveInteger(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -222,23 +305,45 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     ? (value as Record<string, unknown>)
     : null;
 }
-
 function readText(record: Record<string, unknown>, primary: string, fallback: string): string {
   const value = record[primary] ?? record[fallback];
   return typeof value === "string" ? value.trim() : "";
 }
-
 function readPort(value: unknown): number {
   const port = Number(value ?? 0);
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : 0;
 }
-
 function readPositiveNumber(value: unknown): number {
   const number = Number(value ?? 0);
   return Number.isFinite(number) && number > 0 ? number : 0;
 }
-
 function readPositiveIntegerValue(value: unknown): number {
   const number = Number(value ?? 0);
   return Number.isInteger(number) && number > 0 ? number : 0;
+}
+function resolveHttpPortUrl(port?: ActorPort): string {
+  if (!port) return "";
+  if (port.url) return port.url.replace(/\/$/, "");
+  const host = port.host ?? port.hostname;
+  if (!host || !port.port) return "";
+  return `http://${host}:${port.port}`;
+}
+
+function hostFromUrl(value?: string): string {
+  if (!value) return "";
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "";
+  }
+}
+function portFromUrl(value?: string): number {
+  if (!value) return 0;
+  try {
+    const url = new URL(value);
+    if (url.port) return Number(url.port);
+    return url.protocol === "https:" ? 443 : 80;
+  } catch {
+    return 0;
+  }
 }
