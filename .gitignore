@@ -3,6 +3,7 @@ build/
 backend/**/node_modules/
 backend/**/.env
 backend/**/*.tgz
+deployment/oracle/.env
 config/backend_config.local.json
 *.apk
 *.aab
