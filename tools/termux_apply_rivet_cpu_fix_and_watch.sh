@@ -43,48 +43,57 @@ CURRENT_WORKFLOW="$(
     2>/dev/null
 )"
 
-if printf '%s' "$CURRENT_WORKFLOW" | grep -Fq -- '--cpu 1 \' \
-  && printf '%s' "$CURRENT_WORKFLOW" | grep -Fq -- '--instance-request-concurrency 80 \\'; then
+NEEDS_FIX=true
+if printf '%s' "$CURRENT_WORKFLOW" | grep -Fq -- '--cpu 1' \
+  && printf '%s' "$CURRENT_WORKFLOW" | grep -Fq -- '--instance-request-concurrency 80'; then
+  NEEDS_FIX=false
+fi
+
+if [ "$NEEDS_FIX" = true ]; then
+  echo "Eski CPU=0.25 yapılandırması bulundu. Tek kullanımlık düzeltme başlatılıyor."
+  gh workflow run "$FIX_WF" \
+    --repo "$REPO" \
+    --ref main
+  START_STATUS=$?
+else
   echo "CPU düzeltmesi zaten uygulanmış. Yeni deployment başlatılıyor."
   gh workflow run "$DEPLOY_WF" \
     --repo "$REPO" \
     --ref main \
     -f confirmation=DEPLOY-RIVET-STAGING
-  FIX_STATUS=$?
-else
-  echo "Eski CPU=0.25 yapılandırması bulundu. Tek kullanımlık düzeltme başlatılıyor."
-  gh workflow run "$FIX_WF" \
-    --repo "$REPO" \
-    --ref main
-  FIX_STATUS=$?
+  START_STATUS=$?
 fi
 
-if [ "$FIX_STATUS" -ne 0 ]; then
+if [ "$START_STATUS" -ne 0 ]; then
   echo "HATA: Düzeltme/deployment workflow'u başlatılamadı."
-  exit "$FIX_STATUS"
+  exit "$START_STATUS"
 fi
 
-FIX_RUN_ID=""
-for _ in $(seq 1 60); do
-  sleep 2
-  CURRENT_FIX_ID="$(
-    gh run list \
-      --repo "$REPO" \
-      --workflow "$FIX_WF" \
-      --event workflow_dispatch \
-      --limit 1 \
-      --json databaseId \
-      --jq '.[0].databaseId // empty' \
-      2>/dev/null
-  )"
-  if [ -n "$CURRENT_FIX_ID" ] && [ "$CURRENT_FIX_ID" != "$BEFORE_FIX_ID" ]; then
-    FIX_RUN_ID="$CURRENT_FIX_ID"
-    break
+if [ "$NEEDS_FIX" = true ]; then
+  FIX_RUN_ID=""
+  for _ in $(seq 1 60); do
+    sleep 2
+    CURRENT_FIX_ID="$(
+      gh run list \
+        --repo "$REPO" \
+        --workflow "$FIX_WF" \
+        --event workflow_dispatch \
+        --limit 1 \
+        --json databaseId \
+        --jq '.[0].databaseId // empty' \
+        2>/dev/null
+    )"
+    if [ -n "$CURRENT_FIX_ID" ] && [ "$CURRENT_FIX_ID" != "$BEFORE_FIX_ID" ]; then
+      FIX_RUN_ID="$CURRENT_FIX_ID"
+      break
+    fi
+  done
+
+  if [ -z "$FIX_RUN_ID" ]; then
+    echo "HATA: CPU düzeltme run'ı bulunamadı."
+    exit 1
   fi
 
-done
-
-if [ -n "$FIX_RUN_ID" ]; then
   echo "FIX_RUN_ID=$FIX_RUN_ID"
   gh run watch "$FIX_RUN_ID" --repo "$REPO" --exit-status
   FIX_RESULT=$?
@@ -111,7 +120,6 @@ for _ in $(seq 1 120); do
     DEPLOY_RUN_ID="$CURRENT_DEPLOY_ID"
     break
   fi
-
 done
 
 if [ -z "$DEPLOY_RUN_ID" ]; then
