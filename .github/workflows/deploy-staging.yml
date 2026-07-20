@@ -5,11 +5,12 @@ on:
 
 concurrency:
   group: colony-online-staging
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-24.04
+    timeout-minutes: 35
     environment: staging
     permissions:
       contents: read
@@ -41,14 +42,19 @@ jobs:
       - name: Install validation dependencies
         run: python -m pip install gdtoolkit pglast pyyaml pillow
       - name: Install Godot editor and export templates
+        timeout-minutes: 8
         run: tools/install_godot_ci.sh
       - name: Validate and build dedicated server
+        timeout-minutes: 18
         run: tools/build_dedicated_server.sh
       - name: Build Godot game-server image
+        timeout-minutes: 8
         run: IMAGE_TAG="$GAME_SERVER_IMAGE_TAG" tools/build_game_server_image.sh
       - name: Publish game-server build to Rivet
+        timeout-minutes: 8
         run: tools/publish_rivet_game_server.sh
       - name: Deploy Supabase schema and Rivet control plane
+        timeout-minutes: 12
         run: |
           tools/deploy_online_stack.sh \
             --project-name "${COLONY_PROJECT_NAME:-colony.io}" \
@@ -56,16 +62,11 @@ jobs:
             --rivet-project "$RIVET_PROJECT" \
             --rivet-environment "$RIVET_ENVIRONMENT" \
             --game-server-build-tag "$RIVET_GAME_SERVER_BUILD_TAG"
-      - name: Build connected Android test APK
-        run: |
-          "$GODOT_BIN" --headless --path . --editor --quit
-          "$GODOT_BIN" --headless --path . --export-debug "Android" build/colony-dominion-staging.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: colony-staging-release
+          name: colony-staging-backend
           if-no-files-found: error
           path: |
-            build/colony-dominion-staging.apk
             build/server/colony-dominion-server.x86_64
             build/server/colony-dominion-server.pck
             deployment/last_deployment.json
