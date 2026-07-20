@@ -52,12 +52,16 @@ jobs:
             safe_name="$(printf '%s' "$label" | tr ' /:' '---' | tr -cd '[:alnum:]_.-')"
             local log="build/diagnostics/${safe_name}.log"
             local summary="build/diagnostics/${safe_name}-summary.txt"
+            local code
 
             echo
             echo "===== START: $label (timeout=${seconds}s) ====="
 
-            timeout --foreground "${seconds}s" "$@" >"$log" 2>&1
-            local code=$?
+            if timeout --foreground "${seconds}s" "$@" >"$log" 2>&1; then
+              code=0
+            else
+              code=$?
+            fi
 
             grep -nE "$ERROR_PATTERN" "$log" >"$summary" || true
 
