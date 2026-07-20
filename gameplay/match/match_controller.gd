@@ -57,12 +57,16 @@ var _local_input_source: LocalCommandInputSource
 var _audio_context_left: float = 0.0
 
 const SPAWN_POSITIONS: Array[Vector2] = [
-	Vector2(-6000.0, 3000.0),
-	Vector2(6000.0, -3000.0),
-	Vector2(6000.0, 3000.0),
-	Vector2(-6000.0, -3000.0),
-	Vector2(0.0, -7000.0),
-	Vector2(0.0, 7000.0),
+	Vector2(-7200.0, 0.0),
+	Vector2(7200.0, 0.0),
+	Vector2(0.0, -7600.0),
+	Vector2(0.0, 7600.0),
+	Vector2(-5200.0, -5200.0),
+	Vector2(5200.0, -5200.0),
+	Vector2(-5200.0, 5200.0),
+	Vector2(5200.0, 5200.0),
+	Vector2(-8800.0, -3000.0),
+	Vector2(8800.0, 3000.0),
 ]
 const COLONY_NAMES: Array[String] = [
 	"QueenAnt",
@@ -71,6 +75,10 @@ const COLONY_NAMES: Array[String] = [
 	"Forest Legion",
 	"Tiny Stompers",
 	"Leaf Lickers",
+	"Amber Mandibles",
+	"Night Foragers",
+	"Stone Colony",
+	"River Brood",
 ]
 const TEAM_COLORS: Array[Color] = [
 	Color("2a9cff"),
@@ -79,6 +87,10 @@ const TEAM_COLORS: Array[Color] = [
 	Color("c252ff"),
 	Color("ff9f1a"),
 	Color("18d9e8"),
+	Color("ffd23f"),
+	Color("f15bb5"),
+	Color("8ac926"),
+	Color("b08968"),
 ]
 
 
