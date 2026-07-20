@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { actor } from "rivetkit";
+import { actor, type UniversalWebSocket } from "rivetkit";
 
 export type GameServerActorInput = {
   matchId: string;
@@ -28,7 +28,7 @@ type GameRuntime = {
   ready: boolean;
   exited: boolean;
   exitCode: number | null;
-  sockets: Set<WebSocket>;
+  sockets: Set<UniversalWebSocket>;
   logs: string[];
 };
 
@@ -242,7 +242,7 @@ async function normalizeSocketPayload(value: unknown): Promise<string | ArrayBuf
   throw new Error("Unsupported WebSocket payload type");
 }
 
-function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void }, downstream: WebSocket, upstream: WebSocket, runtime: GameRuntime): void {
+function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void }, downstream: UniversalWebSocket, upstream: WebSocket, runtime: GameRuntime): void {
   downstream.binaryType = "arraybuffer";
   runtime.sockets.add(downstream);
 
