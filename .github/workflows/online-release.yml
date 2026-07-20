@@ -13,6 +13,17 @@ on:
       - "tests/online_*"
       - "project.godot"
       - "export_presets.cfg"
+  pull_request:
+    paths:
+      - "network/**"
+      - "backend/**"
+      - "gameplay/network/**"
+      - "gameplay/world/**"
+      - "tools/**"
+      - "tests/online_*"
+      - "project.godot"
+      - "export_presets.cfg"
+      - ".github/workflows/online-release.yml"
 
 jobs:
   validate-and-build:
