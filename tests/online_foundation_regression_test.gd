@@ -15,6 +15,7 @@ const REQUIRED_RESOURCES: Array[String] = [
 	"res://network/rivet_matchmaking_client.gd",
 	"res://network/legal_acceptance_store.gd",
 	"res://autoload/network_session.gd",
+	"res://autoload/game_session.gd",
 	"res://autoload/online_services.gd",
 	"res://legal/legal_manifest.json",
 	"res://config/backend_config.json",
@@ -51,7 +52,9 @@ func _run() -> void:
 				)
 
 	var project_text: String = FileAccess.get_file_as_string("res://project.godot")
-	for autoload_name in ["NetworkSession", "OnlineServices", "NetworkStatusOverlay"]:
+	for autoload_name in [
+		"NetworkSession", "GameSession", "OnlineServices", "NetworkStatusOverlay"
+	]:
 		if not project_text.contains("%s=" % autoload_name):
 			_failures.append("Missing online autoload: %s" % autoload_name)
 
@@ -117,12 +120,38 @@ func _run() -> void:
 	if not auth_source.contains(".well-known/jwks.json"):
 		_failures.append("Control plane does not verify Supabase JWTs through JWKS")
 
-	GameSession.prepare_offline_match()
-	if NetworkSession.mode != NetworkSession.SessionMode.OFFLINE:
+	_validate_offline_autoload_contract()
+	_finish()
+
+
+func _validate_offline_autoload_contract() -> void:
+	var game_session: Node = root.get_node_or_null("GameSession")
+	var network_session: Node = root.get_node_or_null("NetworkSession")
+
+	if game_session == null:
+		_failures.append("GameSession autoload is unavailable at runtime")
+		return
+	if network_session == null:
+		_failures.append("NetworkSession autoload is unavailable at runtime")
+		return
+	if not game_session.has_method("prepare_offline_match"):
+		_failures.append("GameSession does not expose prepare_offline_match")
+		return
+
+	game_session.call("prepare_offline_match")
+
+	var mode_variant: Variant = network_session.get("mode")
+	if not mode_variant is int or int(mode_variant) != 0:
 		_failures.append("Offline mode depends on online services")
-	if not NetworkSession.match_assignment.is_empty():
+
+	var assignment_variant: Variant = network_session.get("match_assignment")
+	if not assignment_variant is Dictionary:
+		_failures.append("NetworkSession match assignment is not a Dictionary")
+	elif not (assignment_variant as Dictionary).is_empty():
 		_failures.append("Offline mode retained an online server assignment")
 
+
+func _finish() -> void:
 	if _failures.is_empty():
 		print("PHASE_05_2_ONLINE_RUNTIME_FOUNDATION_OK")
 		quit(0)
