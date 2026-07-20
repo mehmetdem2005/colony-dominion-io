@@ -5,7 +5,6 @@ REPO="mehmetdem2005/colony-dominion-io"
 SOURCE_PATH="tools/termux_resume_online_setup.sh"
 RUNTIME_DIR="$HOME/.colony-bootstrap"
 RUNTIME_FILE="$RUNTIME_DIR/termux_resume_online_setup.runtime.sh"
-STAMP="$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$RUNTIME_DIR"
 rm -f "$RUNTIME_FILE"
@@ -26,6 +25,12 @@ command -v gh >/dev/null 2>&1 || {
   exit 1
 }
 
+command -v python >/dev/null 2>&1 || {
+  echo "HATA: python komutu bulunamadı. Önce pkg install -y python çalıştır." >&2
+  finish_launcher FAILED
+  exit 1
+}
+
 if ! gh auth status >/dev/null 2>&1; then
   echo "HATA: GitHub oturumu açık değil. Önce gh auth login çalıştır." >&2
   finish_launcher FAILED
@@ -35,7 +40,7 @@ fi
 echo "===== GÜNCEL COLONY KURTARMA SİSTEMİ İNDİRİLİYOR ====="
 gh api \
   -H "Accept: application/vnd.github.raw+json" \
-  "repos/$REPO/contents/$SOURCE_PATH?ref=main&cache=$STAMP" \
+  "repos/$REPO/contents/$SOURCE_PATH?ref=main" \
   > "$RUNTIME_FILE"
 DOWNLOAD_STATUS=$?
 
@@ -45,7 +50,7 @@ if [ "$DOWNLOAD_STATUS" -ne 0 ] || [ ! -s "$RUNTIME_FILE" ]; then
   exit 1
 fi
 
-python "$RUNTIME_FILE" <<'PY'
+python - "$RUNTIME_FILE" <<'PY'
 from pathlib import Path
 import sys
 
