@@ -1,0 +1,3 @@
+trigger=2026-07-20T19:55:00+03:00
+workflow=finalize-rivet-control-staging.yml
+verification=cloud_api_managed_pool_status
