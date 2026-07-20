@@ -21,12 +21,12 @@ assignment state, hashed one-time join tickets and per-server credential hashes.
 
 ## Allocation modes
 
-1. `RIVET_ALLOCATOR_URL`: protected external allocator adapter.
-2. Direct Rivet allocation through `@rivet-gg/api`, using `RIVET_ALLOCATOR_CLOUD_TOKEN`, project, environment and build tag.
+1. `RIVET_ALLOCATOR_URL`: protected external allocator adapter for an approved authoritative game-server host.
+2. Legacy direct allocation through `@rivet-gg/api`: retained only for compatibility and source auditing. The current Rivet Compute staging workflow does not enable this path. Do not inject its runtime variables or claim UDP game-server hosting is ready until a current, officially supported Rivet game-server deployment contract is verified.
 3. Explicit local development server; disabled in production unless deliberately enabled.
 
 The broad `RIVET_CLOUD_TOKEN` is deployment-only and must not be injected into the running
-control plane. Direct allocation uses a separate scoped runtime token.
+control plane. Any future allocator integration must use a separate least-privilege runtime credential.
 
 Each allocation generates a random per-server authentication token. Only its hash is persisted
 in actor state; the raw token is injected into that one Godot container. No shared static
@@ -42,11 +42,15 @@ apply MMR twice.
 ## Validation and deployment
 
 ```bash
-npm install
+npm install --no-audit --no-fund
 npm run typecheck
 npm run build
-npx rivet-cli@latest deploy
+npx --yes @rivetkit/cli@latest deploy
 ```
+
+The repository's staging workflow deploys and verifies the RivetKit control plane on Rivet Compute.
+It intentionally reports the authoritative UDP game-server allocator as unavailable until that
+separate hosting path is approved and verified.
 
 Protected values must be provisioned through Rivet/CI runtime secret storage, never CLI arguments,
 Android configuration or committed files.
