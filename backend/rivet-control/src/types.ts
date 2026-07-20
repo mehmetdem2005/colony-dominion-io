@@ -12,6 +12,8 @@ export type QueueEntry = {
 export type ServerAssignment = {
   matchId: string;
   serverId: string;
+  transport: "websocket" | "enet";
+  websocketUrl: string;
   host: string;
   port: number;
   joinTicket: string;
