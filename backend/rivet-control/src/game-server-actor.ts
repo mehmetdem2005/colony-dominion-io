@@ -272,9 +272,9 @@ function bridgeSockets(context: { waitUntil: (promise: Promise<unknown>) => void
       // Ignore close races.
     }
   };
-  downstream.addEventListener("close", () => closeBoth(1000, "client_closed"), { once: true });
+  downstream.addEventListener("close", () => closeBoth(1000, "client_closed"));
   upstream.addEventListener("close", () => closeBoth(1011, "game_server_closed"), { once: true });
-  downstream.addEventListener("error", () => closeBoth(1011, "client_socket_error"), { once: true });
+  downstream.addEventListener("error", () => closeBoth(1011, "client_socket_error"));
   upstream.addEventListener("error", () => closeBoth(1011, "game_server_socket_error"), { once: true });
 }
 
