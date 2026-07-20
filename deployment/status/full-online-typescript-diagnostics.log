@@ -12,11 +12,7 @@ npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to revi
 > colony-dominion-rivet-control@0.4.0 typecheck
 > tsc --noEmit
 
-src/game-server-actor.ts(275,80): error TS2554: Expected 2 arguments, but got 3.
-src/game-server-actor.ts(277,86): error TS2554: Expected 2 arguments, but got 3.
 
 > colony-dominion-rivet-control@0.4.0 build
 > tsc
 
-src/game-server-actor.ts(275,80): error TS2554: Expected 2 arguments, but got 3.
-src/game-server-actor.ts(277,86): error TS2554: Expected 2 arguments, but got 3.

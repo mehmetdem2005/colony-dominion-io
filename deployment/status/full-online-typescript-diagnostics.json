@@ -1,8 +1,8 @@
 {
-  "success": false,
-  "outcome": "failure",
-  "exit_status": 2,
-  "validated_sha": "2cd1aa70ce1c556b648f0848917aad812d0fe702",
-  "run_id": "29771239222",
-  "recorded_at": "2026-07-20T19:16:20.842024+00:00"
+  "success": true,
+  "outcome": "success",
+  "exit_status": 0,
+  "validated_sha": "d1b7ac160f22fbc813b4eba5fd0a547c17bd6f81",
+  "run_id": "29771479903",
+  "recorded_at": "2026-07-20T19:19:54.024185+00:00"
 }
