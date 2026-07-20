@@ -1,0 +1,96 @@
+name: Snapshot Rivet Live Deployment
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'rivet-live-deployment-monitor'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_SHA: 811ae857544f2effd1ed76cd1609341c10b1b815
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: rivet-live-deployment-monitor
+          fetch-depth: 0
+
+      - name: Locate and wait for merged full-online deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          WORKFLOW="deploy-rivet-control-staging.yml"
+          mkdir -p deployment/status
+
+          RUN_ID=""
+          for _ in $(seq 1 120); do
+            RUN_ID="$(
+              gh run list \
+                --repo "$REPO" \
+                --workflow "$WORKFLOW" \
+                --branch main \
+                --limit 20 \
+                --json databaseId,headSha \
+                --jq '.[] | select(.headSha == env.TARGET_SHA) | .databaseId' \
+                | head -n 1
+            )"
+            [ -n "$RUN_ID" ] && break
+            sleep 5
+          done
+          test -n "$RUN_ID"
+          echo "RIVET_LIVE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+
+          set +e
+          gh run watch "$RUN_ID" --repo "$REPO" --exit-status
+          WATCH_STATUS=$?
+          set -e
+
+          gh run view "$RUN_ID" \
+            --repo "$REPO" \
+            --json databaseId,status,conclusion,event,headSha,url,attempt,workflowName,createdAt,updatedAt \
+            > deployment/status/rivet-full-online-live-run.json
+
+          gh run view "$RUN_ID" --repo "$REPO" --log-failed \
+            > deployment/status/rivet-full-online-live-failure.log 2>&1 || true
+
+          if [ "$WATCH_STATUS" -eq 0 ]; then
+            rm -f deployment/status/rivet-full-online-live-failure.log
+          fi
+
+      - name: Download deployment evidence
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p deployment/status/rivet-live-evidence
+          gh run download "$RIVET_LIVE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name rivet-full-online-staging \
+            --dir deployment/status/rivet-live-evidence
+          true
+
+      - name: Commit live deployment snapshot
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A deployment/status/rivet-full-online-live-run.json
+          git add -A deployment/status/rivet-full-online-live-failure.log
+          git add -A deployment/status/rivet-live-evidence
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Snapshot Rivet full-online live deployment"
+          git push origin HEAD:rivet-live-deployment-monitor
