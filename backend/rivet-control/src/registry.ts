@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { actor, setup } from "rivetkit";
 import type {
   QueueEntry,
@@ -24,12 +25,22 @@ function getQueue(state: MatchmakerState, regionId: string): QueueEntry[] {
   state.queues[regionId] ??= [];
   return state.queues[regionId]!;
 }
+
 function ensureIndexes(state: MatchmakerState): void {
   state.ticketOwners ??= {};
   state.activeTicketByPlayer ??= {};
   state.serverCredentials ??= {};
   state.terminalCreatedAt ??= {};
 }
+
+function constantTimeHashEqual(left: string, right: string): boolean {
+  const sha256Hex = /^[0-9a-f]{64}$/i;
+  if (!sha256Hex.test(left) || !sha256Hex.test(right)) return false;
+  const leftBytes = Buffer.from(left, "hex");
+  const rightBytes = Buffer.from(right, "hex");
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+}
+
 function readStatus(state: MatchmakerState, queueTicketId: string): QueueStatus {
   const assignment = state.assignments[queueTicketId];
   if (assignment) return { status: "assigned", queue_ticket_id: queueTicketId, assignment };
@@ -135,7 +146,7 @@ export const matchmaker = actor({
         delete c.state.serverCredentials[serverId];
         return false;
       }
-      if (record.matchId !== matchId || record.tokenHash !== tokenHash) return false;
+      if (record.matchId !== matchId || !constantTimeHashEqual(record.tokenHash, tokenHash)) return false;
       if (consumeResult) {
         if (record.resultRecordedAt > 0) return false;
         record.resultRecordedAt = now;
