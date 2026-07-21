@@ -1,0 +1,49 @@
+name: Apply Google Auth Bot Backfill
+
+on:
+  push:
+    branches: [work/google-bot-backfill]
+    paths:
+      - ".github/patch/google-bot-backfill.patch.xz.b64"
+      - ".github/workflows/apply-google-bot-backfill.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-google-auth-bot-backfill
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: work/google-bot-backfill
+          fetch-depth: 0
+
+      - name: Apply production source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .github/patch/google-bot-backfill.patch.xz.b64 \
+            | xz --decompress --stdout \
+            > "$RUNNER_TEMP/google-bot-backfill.patch"
+          git apply --index --whitespace=error "$RUNNER_TEMP/google-bot-backfill.patch"
+          git diff --cached --check
+          grep -q 'PHASE-05.5-GOOGLE-BOT-BACKFILL' config/backend_config.json
+          grep -q 'oauth-google-handoff' network/supabase_oauth_handoff.gd
+          grep -q 'BOT_BACKFILL_WAIT_SECONDS' backend/rivet-control/src/server-full-online.ts
+          grep -q 'assign_peer_to_available_team(peer_id, trusted_display_name)' network/game_transport.gd
+
+      - name: Commit production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Implement Google auth and server bot backfill"
+          git push origin HEAD:work/google-bot-backfill
