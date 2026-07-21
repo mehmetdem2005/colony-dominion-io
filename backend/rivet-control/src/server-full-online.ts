@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { createClient } from "rivetkit/client";
 import { z } from "zod";
 import { requireSupabaseAuth, type AuthVariables } from "./auth.js";
+import { authConfirmationResponse } from "./auth-confirmation-page.js";
 import { findRegion, loadRegions } from "./regions.js";
 import { allocateRivetGameServer } from "./rivet-native-allocator.js";
 import { runtimeRegistry } from "./runtime-registry.js";
@@ -96,6 +97,8 @@ app.get("/v1/health/config", (c) => {
 app.get("/v1/health/ping", (c) =>
   c.json({ ok: true, now: Date.now(), region: process.env.RIVET_REGION ?? "unknown" }),
 );
+app.get("/v1/auth/confirmed", () => authConfirmationResponse());
+
 app.get("/v1/regions", (c) =>
   c.json({
     regions: regions.map((region) => ({
