@@ -1,23 +1,33 @@
 import type { RegionDefinition } from "./types.js";
 
 const fallbackRegions: RegionDefinition[] = [
-  { id: "eu", displayName: "Avrupa", shortName: "EU", probeUrl: "", enabled: true, providerRegion: "fra" },
-  { id: "na-east", displayName: "Kuzey Amerika Doğu", shortName: "NA-E", probeUrl: "", enabled: false, providerRegion: "iad" },
-  { id: "na-west", displayName: "Kuzey Amerika Batı", shortName: "NA-W", probeUrl: "", enabled: false, providerRegion: "lax" },
-  { id: "sa", displayName: "Güney Amerika", shortName: "SA", probeUrl: "", enabled: false, providerRegion: "gru" },
-  { id: "asia", displayName: "Asya", shortName: "ASIA", probeUrl: "", enabled: false, providerRegion: "sin" },
-  { id: "oceania", displayName: "Okyanusya", shortName: "OCE", probeUrl: "", enabled: false, providerRegion: "syd" },
-  { id: "africa", displayName: "Afrika", shortName: "AF", probeUrl: "", enabled: false },
+  {
+    id: "eu",
+    displayName: "Avrupa — Frankfurt",
+    shortName: "EU-FRA",
+    probeUrl: "",
+    enabled: true,
+    providerRegion: "fra",
+  },
 ];
 
+function appendPathBeforeQuery(baseUrl: string, pathSuffix: string): string {
+  const url = new URL(baseUrl);
+  url.hash = "";
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/${pathSuffix.replace(/^\//, "")}`;
+  return url.toString();
+}
+
 function withPublicProbe(regions: RegionDefinition[]): RegionDefinition[] {
-  const publicBase = process.env.PUBLIC_CONTROL_BASE_URL?.replace(/\/$/, "");
-  return regions.map((region) => ({
-    ...region,
-    probeUrl:
-      region.probeUrl ||
-      (publicBase ? `${publicBase}/v1/health/ping?region=${encodeURIComponent(region.id)}` : ""),
-  }));
+  const publicBase = process.env.PUBLIC_CONTROL_BASE_URL?.trim() ?? "";
+  return regions
+    .filter((region) => region.enabled)
+    .map((region) => ({
+      ...region,
+      probeUrl:
+        region.probeUrl ||
+        (publicBase ? appendPathBeforeQuery(publicBase, "/v1/health/ping") : ""),
+    }));
 }
 
 export function loadRegions(): RegionDefinition[] {
@@ -25,12 +35,18 @@ export function loadRegions(): RegionDefinition[] {
   if (!raw) return withPublicProbe(fallbackRegions);
   try {
     const parsed = JSON.parse(raw) as RegionDefinition[];
-    return withPublicProbe(parsed.filter((region) => region.id && region.displayName));
+    const normalized = parsed.filter(
+      (region) => region.id && region.displayName && region.enabled,
+    );
+    return withPublicProbe(normalized.length > 0 ? normalized : fallbackRegions);
   } catch {
     return withPublicProbe(fallbackRegions);
   }
 }
 
-export function findRegion(regions: RegionDefinition[], regionId: string): RegionDefinition {
+export function findRegion(
+  regions: RegionDefinition[],
+  regionId: string,
+): RegionDefinition {
   return regions.find((region) => region.id === regionId) ?? regions[0]!;
 }
