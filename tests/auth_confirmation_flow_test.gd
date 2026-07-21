@@ -35,7 +35,11 @@ func _run() -> void:
 	)
 	_assert_source_contains(
 		"res://ui/auth_panel.gd",
-		["GOOGLE İLE DEVAM ET", "OnlineServices.sign_in_google", "E-posta veya şifre formu kullanılmaz"],
+		[
+			"GOOGLE İLE DEVAM ET",
+			"OnlineServices.sign_in_google",
+			"E-posta veya şifre formu kullanılmaz"
+		],
 		failures
 	)
 	var auth_panel_source := FileAccess.get_file_as_string("res://ui/auth_panel.gd")
