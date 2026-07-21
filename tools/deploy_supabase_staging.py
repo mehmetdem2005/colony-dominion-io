@@ -160,49 +160,109 @@ def configure_auth_confirmation(
     )
     if not isinstance(current, dict):
         raise module.DeployError("Could not read current Supabase Auth configuration")
-    allow_list = parse_allow_list(current.get("uri_allow_list", ""))
+
+    allow_list = [
+        item
+        for item in parse_allow_list(current.get("uri_allow_list", ""))
+        if "localhost" not in item.casefold() and "127.0.0.1" not in item
+    ]
     if confirmation_url not in allow_list:
         allow_list.append(confirmation_url)
 
-    template = load_confirmation_template(root)
-    payload = {
-        "site_url": confirmation_url,
-        "uri_allow_list": ",".join(allow_list),
-        "mailer_subjects_confirmation": "Colony Dominion.io — E-posta adresini doğrula",
-        "mailer_templates_confirmation_content": template,
-    }
+    # Redirect safety is critical and must not be coupled to optional email branding.
+    # Supabase free-tier projects using the default mail provider reject template writes.
     module.http_json(
         "PATCH",
         f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
         token=token,
-        body=payload,
+        body={
+            "site_url": confirmation_url,
+            "uri_allow_list": ",".join(allow_list),
+        },
         timeout=60.0,
     )
 
-    verified = module.http_json(
+    redirect_verified = module.http_json(
         "GET",
         f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
         token=token,
         timeout=45.0,
     )
-    if not isinstance(verified, dict):
-        raise module.DeployError("Could not verify Supabase Auth configuration")
-    verified_site_url = str(verified.get("site_url", "")).strip()
-    verified_allow_list = parse_allow_list(verified.get("uri_allow_list", ""))
-    verified_template = str(verified.get("mailer_templates_confirmation_content", ""))
+    if not isinstance(redirect_verified, dict):
+        raise module.DeployError("Could not verify Supabase Auth redirect configuration")
+    verified_site_url = str(redirect_verified.get("site_url", "")).strip()
+    verified_allow_list = parse_allow_list(redirect_verified.get("uri_allow_list", ""))
     if verified_site_url != confirmation_url:
         raise module.DeployError("Supabase Auth site URL verification failed")
     if confirmation_url not in verified_allow_list:
         raise module.DeployError("Supabase Auth redirect allow-list verification failed")
-    if "{{ .ConfirmationURL }}" not in verified_template:
-        raise module.DeployError("Supabase confirmation email template verification failed")
-    if "localhost" in verified_site_url.casefold():
-        raise module.DeployError("Supabase Auth still points to localhost")
+    if any(
+        "localhost" in item.casefold() or "127.0.0.1" in item
+        for item in verified_allow_list
+    ):
+        raise module.DeployError("Supabase Auth redirect allow-list still contains localhost")
+
+    template = load_confirmation_template(root)
+    template_status = "deployed"
+    template_deployed = False
+    subject_deployed = False
+    try:
+        module.http_json(
+            "PATCH",
+            f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+            token=token,
+            body={
+                "mailer_subjects_confirmation": (
+                    "Colony Dominion.io — E-posta adresini doğrula"
+                ),
+                "mailer_templates_confirmation_content": template,
+            },
+            timeout=60.0,
+        )
+        branded_verified = module.http_json(
+            "GET",
+            f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+            token=token,
+            timeout=45.0,
+        )
+        if not isinstance(branded_verified, dict):
+            raise module.DeployError("Could not verify Supabase confirmation template")
+        verified_template = str(
+            branded_verified.get("mailer_templates_confirmation_content", "")
+        )
+        verified_subject = str(branded_verified.get("mailer_subjects_confirmation", ""))
+        if "{{ .ConfirmationURL }}" not in verified_template:
+            raise module.DeployError("Supabase confirmation email template verification failed")
+        if "E-POSTAYI DOĞRULA" not in verified_template:
+            raise module.DeployError("Supabase confirmation email action verification failed")
+        if "Colony Dominion.io" not in verified_subject:
+            raise module.DeployError("Supabase confirmation email subject verification failed")
+        template_deployed = True
+        subject_deployed = True
+    except Exception as exc:
+        message = str(exc)
+        normalized = message.casefold()
+        free_tier_restriction = (
+            "email template modification is not available for free tier projects"
+            in normalized
+            and "default email provider" in normalized
+        )
+        if not free_tier_restriction:
+            raise
+        template_status = "blocked_free_tier_default_provider"
+        print(
+            "[Supabase] Confirmation email branding was not applied because the "
+            "project uses the free-tier default email provider. Redirect safety "
+            "was applied successfully."
+        )
+
     return {
         "site_url": verified_site_url,
         "redirect_allowlisted": True,
-        "confirmation_template": True,
         "localhost_removed": True,
+        "confirmation_template": template_deployed,
+        "confirmation_subject": subject_deployed,
+        "template_status": template_status,
     }
 
 
