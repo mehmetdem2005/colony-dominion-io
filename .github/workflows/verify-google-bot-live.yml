@@ -7,262 +7,141 @@ on:
       - ".github/workflows/verify-google-bot-live.yml"
 
 permissions:
-  actions: read
-  contents: read
+  contents: write
 
 jobs:
-  verify:
+  prepare-hotfix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    environment: staging
+    timeout-minutes: 15
     env:
-      TARGET_SHA: 6a65b15c51461b5e0cb9881e748bd5b75455b21a
       GH_TOKEN: ${{ github.token }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: main
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Locate main deployment runs
+      - name: Apply and validate callback hotfix
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/live-google-bot
-          locate_run() {
-            local workflow="$1"
-            local run_id=""
-            for _ in $(seq 1 120); do
-              run_id="$(
-                gh run list \
-                  --repo "$GITHUB_REPOSITORY" \
-                  --workflow "$workflow" \
-                  --branch main \
-                  --limit 50 \
-                  --json databaseId,headSha \
-                  --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
-                  | head -n 1
-              )"
-              [ -n "$run_id" ] && break
-              sleep 5
-            done
-            test -n "$run_id" || {
-              echo "Deployment run not found: $workflow" >&2
-              exit 2
-            }
-            printf '%s' "$run_id"
-          }
-          SUPABASE_RUN_ID="$(locate_run deploy-supabase-staging.yml)"
-          RIVET_RUN_ID="$(locate_run deploy-rivet-control-staging.yml)"
-          echo "SUPABASE_RUN_ID=$SUPABASE_RUN_ID" >> "$GITHUB_ENV"
-          echo "RIVET_RUN_ID=$RIVET_RUN_ID" >> "$GITHUB_ENV"
-
-      - name: Wait for Supabase deployment
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh run watch "$SUPABASE_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
-          gh run view "$SUPABASE_RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
-            > build/live-google-bot/supabase-run.json
-
-      - name: Wait for Rivet deployment
-        shell: bash
-        run: |
-          set -uo pipefail
-          set +e
-          gh run watch "$RIVET_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
-          status=$?
-          set -e
-          if ! gh run view "$RIVET_RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
-            > build/live-google-bot/rivet-run.json; then
-            python - "$RIVET_RUN_ID" "$status" <<'PY'
-          import json
-          import sys
+          mkdir -p build/oauth-hotfix
+          python - <<'PY'
           from pathlib import Path
-          Path("build/live-google-bot/rivet-run.json").write_text(
-              json.dumps(
-                  {
-                      "databaseId": int(sys.argv[1]),
-                      "status": "completed",
-                      "conclusion": "success" if int(sys.argv[2]) == 0 else "failure",
-                      "metadata_fallback": True,
-                  },
-                  indent=2,
-              ) + "\n",
-              encoding="utf-8",
-          )
-          PY
-          fi
-          echo "RIVET_WATCH_STATUS=$status" >> "$GITHUB_ENV"
 
-      - name: Verify live OAuth handoff and Auth configuration
+          function_path = Path("backend/supabase/functions/oauth-google-handoff/index.ts")
+          source = function_path.read_text(encoding="utf-8")
+          old = '''function functionBaseUrl(request: Request): string {
+            const url = new URL(request.url);
+            const marker = "/oauth-google-handoff";
+            const index = url.pathname.indexOf(marker);
+            if (index < 0) throw new Error("Function route is invalid");
+            return `${url.origin}${url.pathname.slice(0, index + marker.length)}`;
+          }'''
+          new = '''function functionBaseUrl(): string {
+            return `${requiredEnvironment("SUPABASE_URL")}/functions/v1/oauth-google-handoff`;
+          }'''
+          if old not in source:
+              raise SystemExit("Expected request-derived functionBaseUrl implementation was not found")
+          source = source.replace(old, new, 1)
+          source = source.replace("functionBaseUrl(request)", "functionBaseUrl()")
+          if "functionBaseUrl(request)" in source or "return `${url.origin}" in source:
+              raise SystemExit("Request-derived external callback URL remains")
+          function_path.write_text(source, encoding="utf-8")
+
+          test_path = Path("tests/google_oauth_bot_backfill_test.gd")
+          test = test_path.read_text(encoding="utf-8")
+          marker_block = '''\t\t\t"cache-control",
+\t\t],'''
+          replacement = '''\t\t\t"cache-control",
+\t\t\t'requiredEnvironment("SUPABASE_URL")',
+\t\t\t"/functions/v1/oauth-google-handoff",
+\t\t\t"functionBaseUrl()",
+\t\t],'''
+          if marker_block not in test:
+              raise SystemExit("OAuth source marker block was not found")
+          test = test.replace(marker_block, replacement, 1)
+          insertion_point = '''\t_assert_contains(
+\t\t"res://backend/supabase/migrations/202607210006_google_oauth_handoffs.sql",'''
+          negative_check = '''\tvar oauth_function_source := FileAccess.get_file_as_string(
+\t\t"res://backend/supabase/functions/oauth-google-handoff/index.ts"
+\t)
+\tif oauth_function_source.contains("functionBaseUrl(request)"):
+\t\tfailures.append("OAuth callback URL must not be derived from the internal request URL")
+\tif oauth_function_source.contains("return `${url.origin}"):
+\t\tfailures.append("OAuth callback URL must not use the Edge proxy origin")
+\n'''
+          if insertion_point not in test:
+              raise SystemExit("OAuth migration assertion insertion point was not found")
+          test = test.replace(insertion_point, negative_check + insertion_point, 1)
+          test_path.write_text(test, encoding="utf-8")
+          PY
+
+          python -m pip install --disable-pip-version-check gdtoolkit
+          gdlint tests/google_oauth_bot_backfill_test.gd
+          gdformat --check tests/google_oauth_bot_backfill_test.gd
+          grep -q 'requiredEnvironment("SUPABASE_URL")}/functions/v1/oauth-google-handoff' \
+            backend/supabase/functions/oauth-google-handoff/index.ts
+          ! grep -q 'functionBaseUrl(request)' backend/supabase/functions/oauth-google-handoff/index.ts
+          git diff --check
+
+      - name: Create validated Git blobs
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import hashlib
           import json
           import os
-          import secrets
-          import urllib.error
-          import urllib.parse
           import urllib.request
-          import uuid
           from pathlib import Path
 
-          output = Path("build/live-google-bot/report.json")
-          report = {
-              "ok": False,
-              "target_sha": os.environ["TARGET_SHA"],
-              "supabase_run_id": int(os.environ["SUPABASE_RUN_ID"]),
-              "rivet_run_id": int(os.environ["RIVET_RUN_ID"]),
-              "stage": "initializing",
-              "failures": [],
-          }
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          paths = [
+              "backend/supabase/functions/oauth-google-handoff/index.ts",
+              "tests/google_oauth_bot_backfill_test.gd",
+          ]
 
-          def save() -> None:
-              output.write_text(
-                  json.dumps(report, indent=2, ensure_ascii=False) + "\n",
-                  encoding="utf-8",
-              )
-
-          def request(url: str, method: str = "GET", body=None, headers=None):
-              payload = None if body is None else json.dumps(body).encode("utf-8")
-              merged = {
-                  "accept": "application/json",
-                  "content-type": "application/json",
-                  "user-agent": "Colony-Live-Google-Bot-Verification/1.1",
-              }
-              if headers:
-                  merged.update(headers)
-              req = urllib.request.Request(url, data=payload, method=method, headers=merged)
-              try:
-                  with urllib.request.urlopen(req, timeout=30) as response:
-                      raw = response.read().decode("utf-8", errors="replace")
-                      try:
-                          parsed = json.loads(raw) if raw else {}
-                      except json.JSONDecodeError:
-                          parsed = {"raw": raw[:1000]}
-                      return response.status, parsed
-              except urllib.error.HTTPError as exc:
-                  raw = exc.read().decode("utf-8", errors="replace")
-                  try:
-                      parsed = json.loads(raw) if raw else {}
-                  except json.JSONDecodeError:
-                      parsed = {"raw": raw[:1000]}
-                  return exc.code, parsed
-
-          try:
-              token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
-              project_ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
-              if not token or not project_ref:
-                  raise RuntimeError("Supabase staging verification credentials are missing")
-
-              supabase_url = f"https://{project_ref}.supabase.co"
-              function_url = f"{supabase_url}/functions/v1/oauth-google-handoff"
-
-              report["stage"] = "health"
-              status, health = request(f"{function_url}/health")
-              report["health_status"] = status
-              report["health_body"] = health
-              if status != 200 or health.get("service") != "colony-google-oauth-handoff":
-                  raise RuntimeError("OAuth handoff health endpoint is not ready")
-              report["oauth_handoff_health"] = True
-              save()
-
-              report["stage"] = "begin"
-              request_id = str(uuid.uuid4())
-              secret = secrets.token_urlsafe(48)
-              secret_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-              status, started = request(
-                  f"{function_url}/begin",
+          def create_blob(path: str) -> str:
+              payload = json.dumps(
+                  {"content": Path(path).read_text(encoding="utf-8"), "encoding": "utf-8"}
+              ).encode("utf-8")
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/git/blobs",
+                  data=payload,
                   method="POST",
-                  body={"request_id": request_id, "secret_hash": secret_hash},
-              )
-              report["begin_status"] = status
-              report["begin_body"] = started
-              authorize_url = str(started.get("authorize_url", ""))
-              if status != 200 or not authorize_url.startswith(f"{supabase_url}/auth/v1/authorize"):
-                  raise RuntimeError("OAuth handoff begin flow failed")
-              query = urllib.parse.parse_qs(urllib.parse.urlsplit(authorize_url).query)
-              redirect_to = str(query.get("redirect_to", [""])[0])
-              expected_callback = f"{function_url}/callback/{request_id}"
-              if redirect_to != expected_callback:
-                  raise RuntimeError("OAuth authorize URL callback routing is incorrect")
-              save()
-
-              report["stage"] = "cancel"
-              status, cancelled = request(
-                  f"{function_url}/cancel/{request_id}",
-                  method="DELETE",
-                  headers={"x-colony-oauth-secret": secret},
-              )
-              report["cancel_status"] = status
-              report["cancel_body"] = cancelled
-              if status != 200 or not cancelled.get("ok"):
-                  raise RuntimeError("OAuth handoff cleanup failed")
-              report["oauth_begin_cancel_roundtrip"] = True
-              save()
-
-              report["stage"] = "auth_config"
-              config_request = urllib.request.Request(
-                  f"https://api.supabase.com/v1/projects/{project_ref}/config/auth",
                   headers={
                       "Authorization": f"Bearer {token}",
-                      "Accept": "application/json",
-                      "User-Agent": "Colony-Live-Google-Bot-Verification/1.1",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "Colony-OAuth-Hotfix-Blob-Builder/1.0",
+                      "Content-Type": "application/json",
                   },
               )
-              with urllib.request.urlopen(config_request, timeout=30) as response:
-                  auth = json.loads(response.read().decode("utf-8"))
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  return str(json.loads(response.read().decode("utf-8"))["sha"])
 
-              allow_list = str(auth.get("uri_allow_list", ""))
-              callback_pattern = f"{function_url}/callback/**"
-              if callback_pattern not in allow_list:
-                  raise RuntimeError("Google OAuth callback pattern is absent from Auth allow-list")
-              if "localhost" in allow_list.lower() or "127.0.0.1" in allow_list:
-                  raise RuntimeError("Loopback URL remains in Auth allow-list")
-              report["google_callback_allowlisted"] = True
-              report["google_provider_enabled"] = bool(auth.get("external_google_enabled"))
-              report["google_client_id_present"] = bool(
-                  str(auth.get("external_google_client_id", "")).strip()
-              )
-              report["smtp_host"] = str(auth.get("smtp_host", ""))
-              report["smtp_user"] = str(auth.get("smtp_user", ""))
-              report["smtp_admin_email_present"] = bool(
-                  str(auth.get("smtp_admin_email", "")).strip()
-              )
-
-              rivet = json.loads(
-                  Path("build/live-google-bot/rivet-run.json").read_text(encoding="utf-8")
-              )
-              report["rivet_conclusion"] = str(rivet.get("conclusion", ""))
-              if report["rivet_conclusion"] != "success":
-                  raise RuntimeError("Rivet 05.5 deployment did not complete successfully")
-
-              report["stage"] = "complete"
-              report["ok"] = True
-          except Exception as exc:
-              report["failures"].append(str(exc))
-          finally:
-              save()
-              print(json.dumps(report, ensure_ascii=False))
-
-          if not report["ok"]:
-              raise SystemExit(1)
+          report = {
+              "target_branch": "fix/oauth-external-callback-url",
+              "entries": [
+                  {"path": path, "mode": "100644", "type": "blob", "sha": create_blob(path)}
+                  for path in paths
+              ],
+          }
+          Path("build/oauth-hotfix/blobs.json").write_text(
+              json.dumps(report, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report))
           PY
 
       - uses: actions/upload-artifact@v6
-        if: always()
         with:
-          name: colony-live-google-bot-verification
+          name: colony-oauth-callback-hotfix-blobs
           retention-days: 2
-          if-no-files-found: warn
-          path: build/live-google-bot/
+          if-no-files-found: error
+          path: build/oauth-hotfix/blobs.json
