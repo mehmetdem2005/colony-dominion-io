@@ -102,7 +102,6 @@ static func _get_logical_safe_rect(viewport: Viewport) -> Rect2:
 		viewport_size.x / float(screen_size.x), viewport_size.y / float(screen_size.y)
 	)
 	var logical_safe := Rect2(
-		Vector2(safe_area.position) * scale_to_viewport,
-		Vector2(safe_area.size) * scale_to_viewport
+		Vector2(safe_area.position) * scale_to_viewport, Vector2(safe_area.size) * scale_to_viewport
 	)
 	return logical_safe.intersection(full_rect)
