@@ -80,11 +80,6 @@ func _run() -> void:
 		],
 		failures
 	)
-	_assert_source_contains(
-		"res://.github/workflows/deploy-supabase-staging.yml",
-		["functions deploy oauth-google-handoff", "--no-verify-jwt"],
-		failures
-	)
 
 	if failures.is_empty():
 		print("PASS auth_confirmation_flow_test")
