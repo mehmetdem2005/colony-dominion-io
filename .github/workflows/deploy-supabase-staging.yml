@@ -128,7 +128,7 @@ jobs:
           CALLBACK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/callback/${CALLBACK_ID}/${CALLBACK_NONCE}"
           HEADER_FILE="$RUNNER_TEMP/google-oauth-callback.headers"
           BODY_FILE="$RUNNER_TEMP/google-oauth-callback.html"
-          STATUS_CODE="$(curl --silent --show-error \
+          STATUS_CODE="$(curl --location --silent --show-error \
             --retry 12 \
             --retry-delay 5 \
             --retry-all-errors \
@@ -147,14 +147,30 @@ jobs:
           blocks = [
               block for block in header_text.split("\n\n") if block.startswith("HTTP/")
           ]
-          if not blocks:
-              raise SystemExit("OAuth callback response headers are missing")
-          headers = {}
-          for line in blocks[-1].splitlines()[1:]:
-              if ":" not in line:
-                  continue
-              key, value = line.split(":", 1)
-              headers[key.strip().lower()] = value.strip()
+          if len(blocks) < 2:
+              raise SystemExit("OAuth callback did not redirect to a clean result URL")
+
+          def parse_headers(block: str) -> tuple[int, dict[str, str]]:
+              lines = block.splitlines()
+              status = int(lines[0].split()[1])
+              parsed: dict[str, str] = {}
+              for line in lines[1:]:
+                  if ":" not in line:
+                      continue
+                  key, value = line.split(":", 1)
+                  parsed[key.strip().lower()] = value.strip()
+              return status, parsed
+
+          redirect_status, redirect_headers = parse_headers(blocks[0])
+          if redirect_status != 303:
+              raise SystemExit(f"OAuth callback did not use HTTP 303: {redirect_status}")
+          clean_location = redirect_headers.get("location", "")
+          if not clean_location.endswith("/result/invalid"):
+              raise SystemExit(f"OAuth callback clean redirect is wrong: {clean_location!r}")
+          if "?" in clean_location or "#" in clean_location:
+              raise SystemExit("OAuth callback clean redirect contains query or fragment data")
+
+          _, headers = parse_headers(blocks[-1])
           status_code = int(sys.argv[3])
           if status_code not in {400, 403, 404, 410}:
               raise SystemExit(f"Unexpected invalid-callback status: {status_code}")
@@ -199,6 +215,7 @@ jobs:
               "status": "verified",
               "flow_type": "pkce",
               "tokens_in_browser": False,
+              "clean_redirect": True,
               "content_type": headers["content-type"],
               "inline": True,
               "utf8": True,
