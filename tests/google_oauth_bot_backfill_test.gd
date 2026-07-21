@@ -13,8 +13,21 @@ func _run() -> void:
 			"Crypto.new()",
 			"OS.shell_open",
 			"x-colony-oauth-secret",
-			"sign_in_refresh_token",
+			"code_challenge",
+			"_active_code_verifier",
+			"sign_in_pkce_code",
+			"flow_type",
 			"POLL_TIMEOUT_SECONDS",
+		],
+		failures
+	)
+	_assert_contains(
+		"res://network/supabase_auth_client.gd",
+		[
+			"grant_type=pkce",
+			"auth_code",
+			"code_verifier",
+			"PKCE_VERIFIER_PATTERN",
 		],
 		failures
 	)
@@ -25,9 +38,8 @@ func _run() -> void:
 			"oauth_handoffs",
 			"constantTimeEqual",
 			'consumed_at: "is.null"',
-			"refresh_token: null",
 			"Cache-Control",
-			'requiredEnvironment("SUPABASE_URL")',
+			requiredEnvironment("SUPABASE_URL"),
 			"/functions/v1/oauth-google-handoff",
 			"functionBaseUrl()",
 			"new Headers",
@@ -35,9 +47,12 @@ func _run() -> void:
 			"Content-Disposition",
 			"Cross-Origin-Resource-Policy",
 			"randomNonce",
-			"SAFE_OAUTH_ERRORS",
-			"history.replaceState",
-			'credentials: "omit"',
+			"flow_type",
+			"pkce",
+			"callback_nonce_hash",
+			"auth_code",
+			"tokens_in_browser",
+			"code_challenge_method",
 		],
 		failures
 	)
@@ -48,8 +63,16 @@ func _run() -> void:
 		failures.append("OAuth callback URL must not be derived from the internal request URL")
 	if oauth_function_source.contains("return `${url.origin}"):
 		failures.append("OAuth callback URL must not use the Edge proxy origin")
-	if oauth_function_source.contains("nonce-colony-oauth"):
-		failures.append("OAuth callback CSP must use a per-response nonce")
+	for forbidden in [
+		"nonce-colony-oauth",
+		"location.hash",
+		'params.get("refresh_token")',
+		"refresh_token: refreshToken",
+		'/complete/',
+		'action === "complete"',
+	]:
+		if oauth_function_source.contains(forbidden):
+			failures.append("Implicit OAuth marker remains: %s" % forbidden)
 	_assert_contains(
 		"res://.github/workflows/deploy-supabase-staging.yml",
 		[
@@ -57,12 +80,19 @@ func _run() -> void:
 			"text/html;charset=utf-8",
 			"google-oauth-callback-verification.json",
 			"secret_markers_absent",
+			"tokens_in_browser",
+			"flow_type",
 		],
 		failures
 	)
 	_assert_contains(
 		"res://backend/supabase/migrations/202607210006_google_oauth_handoffs.sql",
 		["enable row level security", "revoke all", "expires_at", "secret_hash"],
+		failures
+	)
+	_assert_contains(
+		"res://backend/supabase/migrations/202607220007_google_oauth_pkce_handoffs.sql",
+		["flow_type", "pkce", "callback_nonce_hash", "auth_code", "single-use"],
 		failures
 	)
 	_assert_contains(
