@@ -15,24 +15,39 @@ func _run() -> void:
 	else:
 		var config := config_variant as Dictionary
 		var base_url := String(config.get("supabase_url", "")).trim_suffix("/")
-		var confirmation_url := "%s/functions/v1/auth-confirmed" % base_url
-		if not confirmation_url.begins_with("https://"):
-			failures.append("Auth confirmation URL must use HTTPS")
-		if "localhost" in confirmation_url.to_lower():
-			failures.append("Auth confirmation URL must not use localhost")
-		if not confirmation_url.ends_with("/functions/v1/auth-confirmed"):
-			failures.append("Auth confirmation URL must use the Supabase Edge Function")
+		var oauth_url := "%s/functions/v1/oauth-google-handoff" % base_url
+		if not oauth_url.begins_with("https://"):
+			failures.append("Google OAuth handoff URL must use HTTPS")
+		if "localhost" in oauth_url.to_lower():
+			failures.append("Google OAuth handoff URL must not use localhost")
+		if not oauth_url.ends_with("/functions/v1/oauth-google-handoff"):
+			failures.append("Google OAuth handoff URL must use the Supabase Edge Function")
 
 	_assert_source_contains(
-		"res://network/supabase_auth_client.gd",
-		["redirect_to=", "resend_signup_confirmation", '_auth_endpoint("signup", redirect_url)'],
+		"res://network/supabase_oauth_handoff.gd",
+		[
+			"OS.shell_open",
+			"x-colony-oauth-secret",
+			"sign_in_refresh_token",
+			"POLL_TIMEOUT_SECONDS",
+		],
 		failures
 	)
 	_assert_source_contains(
 		"res://ui/auth_panel.gd",
-		["OnlineServices.config.supabase_url", "/functions/v1/auth-confirmed"],
+		["GOOGLE İLE DEVAM ET", "OnlineServices.sign_in_google", "E-posta veya şifre formu kullanılmaz"],
 		failures
 	)
+	var auth_panel_source := FileAccess.get_file_as_string("res://ui/auth_panel.gd")
+	for forbidden in [
+		"sign_in_email",
+		"sign_up_email",
+		"resend_signup_confirmation",
+		"YENİ HESAP OLUŞTUR",
+		"E-POSTA GİRİŞİ",
+	]:
+		if auth_panel_source.contains(forbidden):
+			failures.append("Google-only auth UI contains forbidden flow: %s" % forbidden)
 	_assert_source_contains(
 		"res://ui/legal_gate_panel.gd",
 		["LegalConsentCard", "_update_continue_state", "ONAYLARI KAYDET VE DEVAM ET"],
@@ -42,27 +57,28 @@ func _run() -> void:
 	if legal_source.contains("CheckBox.new()"):
 		failures.append("Consent UI must not regress to tiny default checkboxes")
 	_assert_source_contains(
-		"res://backend/supabase/functions/auth-confirmed/index.ts",
-		["Deno.serve", "E-posta adresin doğrulandı", "cache-control"],
-		failures
-	)
-	_assert_source_contains(
-		"res://backend/supabase/email_templates/confirmation.html",
-		["{{ .ConfirmationURL }}", "E-POSTAYI DOĞRULA"],
+		"res://backend/supabase/functions/oauth-google-handoff/index.ts",
+		[
+			"Deno.serve",
+			"functionBaseUrl()",
+			"/functions/v1/oauth-google-handoff",
+			"cache-control",
+		],
 		failures
 	)
 	_assert_source_contains(
 		"res://tools/deploy_supabase_staging.py",
-		["functions/v1/auth-confirmed", "uri_allow_list", "localhost_removed"],
+		[
+			"functions/v1/oauth-google-handoff",
+			"external_google_enabled",
+			"google_callback_pattern",
+			"localhost_removed",
+		],
 		failures
 	)
 	_assert_source_contains(
 		"res://.github/workflows/deploy-supabase-staging.yml",
-		[
-			"functions deploy auth-confirmed",
-			"functions deploy oauth-google-handoff",
-			"--no-verify-jwt",
-		],
+		["functions deploy oauth-google-handoff", "--no-verify-jwt"],
 		failures
 	)
 
