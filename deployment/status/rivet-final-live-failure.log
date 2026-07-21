@@ -1,42 +1,51 @@
-deploy-direct	Directly upsert managed pool and wait for ready	﻿2026-07-21T07:09:26.5440337Z ##[group]Run set -euo pipefail
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5440677Z ^[[36;1mset -euo pipefail^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5440951Z ^[[36;1mexport NODE_ENV=production^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5441367Z ^[[36;1mexport SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5441818Z ^[[36;1mexport REGIONS_JSON="$EFFECTIVE_REGIONS_JSON"^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5442158Z ^[[36;1mexport RIVET_STARTUP_CANARY=1^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5442501Z ^[[36;1mpython tools/deploy_rivet_managed_pool_direct.py \^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5442870Z ^[[36;1m  --namespace staging \^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5443179Z ^[[36;1m  --image-repository "$IMAGE_REPOSITORY" \^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5443513Z ^[[36;1m  --image-tag "$IMAGE_TAG" \^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5443852Z ^[[36;1m  --report build/rivet-direct/direct-deploy.json \^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5444190Z ^[[36;1m  --timeout-seconds 720 \^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5444849Z ^[[36;1m  2>&1 | tee build/rivet-direct/direct-deploy.log^[[0m
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5540292Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5540720Z env:
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5541126Z   RIVET_CLOUD_TOKEN: ***
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5541534Z   SUPABASE_ACCESS_TOKEN: ***
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5541930Z   SUPABASE_SECRET_KEY: ***
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5542239Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5542739Z   SUPABASE_PUBLISHABLE_KEY: ***
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543033Z   REGIONS_JSON: 
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543325Z   SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543699Z   PROTOCOL_VERSION: 4
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543960Z   MIN_PLAYERS: 2
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5544198Z   MAX_PLAYERS: 10
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5544772Z   QUEUE_TTL_SECONDS: 120
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5545050Z   GODOT_VERSION: 4.6.3
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5545501Z   GODOT_BIN: /home/runner/work/colony-dominion-io/colony-dominion-io/.godot-bin/godot
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5546046Z   IMAGE_REPOSITORY: colony-rivet-full-online
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5546469Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5546997Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5547509Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5547969Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5548433Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5548907Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5549817Z   EFFECTIVE_REGIONS_JSON: [{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5550475Z   IMAGE_TAG: 65437753b2bb
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5550873Z   IMAGE_REF: registry.rivet.dev/colony-rivet-full-online:65437753b2bb
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5551309Z ##[endgroup]
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:50.6886787Z RIVET_DIRECT_DEPLOY_FAILED: Cloud API PUT projects/colonyio-3bo7/namespaces/staging-4x4s/managed-pools/default?org=yOqDe3oynkJcMLHZfQ5xc1ocXMBBTjvG failed: HTTP 409: {"message":"Compute pool is currently being deployed to, please wait"}
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:50.6889498Z RIVET_DIRECT_UPSERT project=colonyio-3bo7 namespace=staging-4x4s image=colony-rivet-full-online:65437753b2bb
-deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:50.7005504Z ##[error]Process completed with exit code 1.
+deploy-direct	Build and push full-online image	﻿2026-07-21T07:15:59.0042910Z ##[group]Run set -euo pipefail
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0043509Z ^[[36;1mset -euo pipefail^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0043994Z ^[[36;1mIMAGE_TAG="${GITHUB_SHA:0:12}"^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0044679Z ^[[36;1mIMAGE_REF="registry.rivet.dev/${IMAGE_REPOSITORY}:${IMAGE_TAG}"^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0045446Z ^[[36;1mecho "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0046077Z ^[[36;1mecho "IMAGE_REF=$IMAGE_REF" >> "$GITHUB_ENV"^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0046575Z ^[[36;1m^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0046937Z ^[[36;1mprintf '%s' "$RIVET_CLOUD_TOKEN" \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0047650Z ^[[36;1m  | docker login registry.rivet.dev --username rivet --password-stdin^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0048348Z ^[[36;1mdocker buildx build \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0048821Z ^[[36;1m  --platform linux/amd64 \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0049672Z ^[[36;1m  --load \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0050114Z ^[[36;1m  --file backend/rivet-control/Dockerfile \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0050672Z ^[[36;1m  --tag "$IMAGE_REF" \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0051096Z ^[[36;1m  .^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0051521Z ^[[36;1mdocker image inspect "$IMAGE_REF" \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0052084Z ^[[36;1m  --format '{{.Id}} {{.Architecture}}' \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0052694Z ^[[36;1m  | tee build/rivet-direct/container-image.txt^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0053248Z ^[[36;1mdocker run --rm \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0053716Z ^[[36;1m  --entrypoint /usr/local/bin/godot \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0054225Z ^[[36;1m  "$IMAGE_REF" \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0054647Z ^[[36;1m  --headless --version \^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0055225Z ^[[36;1m  | tee build/rivet-direct/godot-runtime-version.txt^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0055978Z ^[[36;1mgrep -q "4.6.3" build/rivet-direct/godot-runtime-version.txt^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0056618Z ^[[36;1mdocker push "$IMAGE_REF"^[[0m
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0147763Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0148392Z env:
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0149294Z   RIVET_CLOUD_TOKEN: ***
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0149946Z   SUPABASE_ACCESS_TOKEN: ***
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0150663Z   SUPABASE_SECRET_KEY: ***
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0150962Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0151410Z   SUPABASE_PUBLISHABLE_KEY: ***
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0151680Z   REGIONS_JSON: 
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0151943Z   SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0152265Z   PROTOCOL_VERSION: 4
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0152481Z   MIN_PLAYERS: 2
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0152676Z   MAX_PLAYERS: 10
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0152881Z   QUEUE_TTL_SECONDS: 120
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0153112Z   GODOT_VERSION: 4.6.3
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0153489Z   GODOT_BIN: /home/runner/work/colony-dominion-io/colony-dominion-io/.godot-bin/godot
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0153944Z   IMAGE_REPOSITORY: colony-rivet-full-online
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0154298Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0154747Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0155180Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0155609Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0156003Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0156404Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0157004Z   EFFECTIVE_REGIONS_JSON: [{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]
+deploy-direct	Build and push full-online image	2026-07-21T07:15:59.0157542Z ##[endgroup]
+deploy-direct	Build and push full-online image	2026-07-21T07:16:14.5561842Z Error response from daemon: Get "https://registry.rivet.dev/v2/": Get "https://registry.rivet.dev/v2/token?account=rivet&client_id=docker&offline_token=true&service=rivet-registry": net/http: request canceled (Client.Timeout exceeded while awaiting headers) (Client.Timeout exceeded while awaiting headers)
+deploy-direct	Build and push full-online image	2026-07-21T07:16:14.5586236Z ##[error]Process completed with exit code 1.
