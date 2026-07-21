@@ -85,7 +85,36 @@ def validate() -> dict[str, object]:
     )
     require_markers(
         "backend/rivet-control/src/runtime-registry.ts",
-        ("matchmaker", "gameServer", "maxIncomingMessageSize", "maxOutgoingMessageSize"),
+        (
+            "matchmaker",
+            "gameServer",
+            "controlApi",
+            "maxIncomingMessageSize",
+            "maxOutgoingMessageSize",
+        ),
+    )
+    require_markers(
+        "backend/rivet-control/src/control-api-actor.ts",
+        (
+            "onRequest",
+            "x-colony-control-gateway",
+            "/v1/matchmaking/join",
+            "control_plane_unavailable",
+        ),
+    )
+    require("/v1/internal/" not in read("backend/rivet-control/src/control-api-actor.ts"), "internal routes exposed by public actor")
+    require_markers(
+        "backend/rivet-control/src/public-control-gateway.ts",
+        (
+            "PUBLIC_CONTROL_ACTOR_KEY",
+            "getGatewayUrl",
+            "RIVET_PUBLIC_CONTROL_GATEWAY_READY",
+            "health_verified",
+        ),
+    )
+    require_markers(
+        "backend/rivet-control/src/bootstrap.ts",
+        ("ensurePublicControlGateway", "runStartupCanary", "RIVET_FULL_ONLINE_BOOTSTRAP_FAILED"),
     )
     require_markers(
         "backend/rivet-control/src/game-server-actor.ts",
@@ -130,10 +159,23 @@ def validate() -> dict[str, object]:
     require('OnlineServices="*res://autoload/rivet_online_services.gd"' in project, "Rivet online services autoload missing")
 
     export_text = read("export_presets.cfg")
+    require('name="Android"' in export_text, "Android export preset missing")
     require('name="Dedicated Server"' in export_text, "dedicated export preset missing")
+    require('architectures/arm64-v8a=true' in export_text, "Android arm64 architecture missing")
     require('permissions/internet=true' in export_text, "Android INTERNET permission missing")
     require("config/*.json,legal/*.json,legal/*.md" in export_text, "Android legal/config export filter missing")
     require('version/name="0.5.4"' in export_text, "Android version mismatch")
+
+    deploy_workflow = read(".github/workflows/deploy-rivet-control-staging.yml")
+    for marker in (
+        "SUPABASE_PUBLISHABLE_KEY",
+        "RIVET_PUBLIC_CONTROL_GATEWAY_READY",
+        "rivet_control_base_url",
+        "--export-debug \"Android\"",
+        "colony-dominion-rivet-staging.apk",
+        "FULL_END_TO_END_RELEASE_READY=true",
+    ):
+        require(marker in deploy_workflow, f"deployment workflow marker missing: {marker}")
 
     forbidden_paths = (
         ROOT / "deployment/oracle",
@@ -167,6 +209,8 @@ def validate() -> dict[str, object]:
         "build_id": EXPECTED_BUILD,
         "protocol_version": EXPECTED_PROTOCOL,
         "transport": "rivet_websocket",
+        "public_control_gateway": True,
+        "android_staging_artifact": True,
         "max_players": 10,
         "migrations": names,
         "text_files_scanned": scanned,
