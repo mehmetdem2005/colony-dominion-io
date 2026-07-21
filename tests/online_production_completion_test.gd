@@ -30,6 +30,7 @@ func _run() -> void:
 		failures.append("Network protocol must be version 4")
 	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
 		failures.append("Online capacity must match the ten colony slots")
+	_validate_mobile_input_and_orientation(failures)
 	var config: String = FileAccess.get_file_as_string("res://config/backend_config.json")
 	if not config.contains(BUILD_ID) or not config.contains('"protocol_version": 4'):
 		failures.append("Client backend configuration is not pinned to Phase 05.4")
@@ -71,3 +72,29 @@ func _run() -> void:
 	for failure in failures:
 		push_error(failure)
 	quit(1)
+
+
+func _validate_mobile_input_and_orientation(failures: PackedStringArray) -> void:
+	var touch_emulation: bool = bool(
+		ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", false)
+	)
+	if not touch_emulation:
+		failures.append("Android touch-to-button mouse emulation must remain enabled")
+	var orientation: int = int(
+		ProjectSettings.get_setting("display/window/handheld/orientation", -1)
+	)
+	if orientation != DisplayServer.SCREEN_SENSOR:
+		failures.append("Android orientation must remain in sensor mode")
+	var viewport_width: int = int(
+		ProjectSettings.get_setting("display/window/size/viewport_width", 0)
+	)
+	var viewport_height: int = int(
+		ProjectSettings.get_setting("display/window/size/viewport_height", 0)
+	)
+	if viewport_width <= 0 or viewport_width != viewport_height:
+		failures.append("Portrait and landscape support requires a square base viewport")
+	var stretch_aspect: String = String(
+		ProjectSettings.get_setting("display/window/stretch/aspect", "")
+	)
+	if stretch_aspect != "expand":
+		failures.append("Portrait and landscape support requires stretch aspect expand")
