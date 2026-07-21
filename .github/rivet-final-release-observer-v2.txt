@@ -1,4 +1,4 @@
 workflow=deploy-rivet-full-online-direct.yml
 artifact=colony-dominion-rivet-direct-staging
-observer_version=5
+observer_version=6
 dispatch_fallback=true
