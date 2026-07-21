@@ -6,7 +6,7 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
   pull-requests: read
 
 jobs:
@@ -15,17 +15,17 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'rivet-live-deployment-monitor'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: 5e0330528486aa25e7fc0ba0f1daf5eb4f9804ae
+      TARGET_SHA: 0a1dea89fb2cf1b9a6380d85915a0cb7473ec0c3
     steps:
       - uses: actions/checkout@v6
         with:
           ref: rivet-live-deployment-monitor
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Locate and wait for merged full-online deployment
+      - name: Locate and wait for matching Rivet deployment
         shell: bash
         run: |
           set -euo pipefail
@@ -34,13 +34,13 @@ jobs:
           mkdir -p deployment/status
 
           RUN_ID=""
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 180); do
             RUN_ID="$(
               gh run list \
                 --repo "$REPO" \
                 --workflow "$WORKFLOW" \
                 --branch main \
-                --limit 20 \
+                --limit 60 \
                 --json databaseId,headSha \
                 --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
                 | head -n 1
@@ -67,33 +67,59 @@ jobs:
           if [ "$WATCH_STATUS" -eq 0 ]; then
             rm -f deployment/status/rivet-full-online-live-failure.log
           fi
+          exit "$WATCH_STATUS"
 
-      - name: Download deployment evidence
+      - name: Download final deployment evidence and APK
         if: always()
         shell: bash
         run: |
           set +e
+          rm -rf deployment/status/rivet-live-evidence
           mkdir -p deployment/status/rivet-live-evidence
           if [ -n "${RIVET_LIVE_RUN_ID:-}" ]; then
             gh run download "$RIVET_LIVE_RUN_ID" \
               --repo "$GITHUB_REPOSITORY" \
-              --name rivet-full-online-staging \
+              --name colony-dominion-rivet-staging-apk \
               --dir deployment/status/rivet-live-evidence
           fi
           true
 
-      - name: Commit live deployment snapshot
+      - name: Verify downloaded deployment evidence
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A deployment/status/rivet-full-online-live-run.json
-          git add -A deployment/status/rivet-full-online-live-failure.log
-          git add -A deployment/status/rivet-live-evidence
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Snapshot Rivet full-online live deployment"
-          git push origin HEAD:rivet-live-deployment-monitor
+          APK="$(find deployment/status/rivet-live-evidence -type f -name '*.apk' -print -quit)"
+          REPORT="$(find deployment/status/rivet-live-evidence -type f -name 'live-verification.json' -print -quit)"
+          SHA_FILE="$(find deployment/status/rivet-live-evidence -type f -name 'SHA256SUMS.txt' -print -quit)"
+          test -n "$APK" && test -s "$APK"
+          test -n "$REPORT" && test -s "$REPORT"
+          test -n "$SHA_FILE" && test -s "$SHA_FILE"
+          python - "$REPORT" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          expected = {
+              "runtime_build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
+              "protocol_version": 4,
+              "region": "eu",
+              "provider_region": "fra",
+              "query_safe_probe": True,
+              "bot_backfill_wait_seconds": 30,
+          }
+          for key, value in expected.items():
+              if report.get(key) != value:
+                  raise SystemExit(f"Live deployment mismatch: {key}={report.get(key)!r}")
+          PY
+          unzip -t "$APK" >/dev/null
+          (cd "$(dirname "$SHA_FILE")" && sha256sum --check "$(basename "$SHA_FILE")")
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: colony-rivet-05-5-eu-live
+          retention-days: 2
+          if-no-files-found: warn
+          path: deployment/status/
