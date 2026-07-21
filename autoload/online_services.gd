@@ -81,6 +81,8 @@ func get_missing_client_settings() -> PackedStringArray:
 func get_regions() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for region in config.regions:
+		if not bool(region.get("enabled", true)):
+			continue
 		var copy: Dictionary = region.duplicate(true)
 		copy["metrics"] = region_probe.get_metrics(String(region.get("id", "")))
 		result.append(copy)
@@ -89,9 +91,10 @@ func get_regions() -> Array[Dictionary]:
 
 func get_region(region_id: String) -> Dictionary:
 	var region: Dictionary = config.get_region(region_id)
-	if not region.is_empty():
+	if not region.is_empty() and bool(region.get("enabled", true)):
 		region["metrics"] = region_probe.get_metrics(region_id)
-	return region
+		return region
+	return {}
 
 
 func refresh_region_catalog() -> void:
@@ -99,9 +102,12 @@ func refresh_region_catalog() -> void:
 		return
 	_catalog_refresh_in_progress = true
 	if matchmaking.is_configured():
+		var regions_url: String = QuerySafeUrl.append_path(
+			config.rivet_control_base_url, "/v1/regions"
+		)
 		var response: Dictionary = await _control_http.request_json(
 			HTTPClient.METHOD_GET,
-			"%s/v1/regions" % config.rivet_control_base_url,
+			regions_url,
 			PackedStringArray(["Accept: application/json", "Cache-Control: no-cache"])
 		)
 		if bool(response.get("ok", false)):
@@ -176,15 +182,12 @@ func sync_preferences() -> Dictionary:
 	if not auth.has_session():
 		return {"ok": false, "error": "Tercih senkronizasyonu için oturum gerekli"}
 	var analytics_consent: bool = legal_store.is_currently_accepted("analytics_consent")
-	return await (
-		data
-		. update_preferences(
-			{
-				"preferred_region": NetworkSession.preferred_region_id,
-				"language": "tr",
-				"analytics_consent": analytics_consent,
-			}
-		)
+	return await data.update_preferences(
+		{
+			"preferred_region": NetworkSession.preferred_region_id,
+			"language": "tr",
+			"analytics_consent": analytics_consent,
+		}
 	)
 
 
@@ -193,7 +196,7 @@ func begin_matchmaking(display_name: String) -> Dictionary:
 	if not legal_store.has_required_acceptances():
 		return {"ok": false, "error": "Zorunlu kullanıcı belgeleri henüz onaylanmadı"}
 	if not auth.has_session():
-		return {"ok": false, "error": "Çevrim içi oyun için giriş yapılması gerekiyor"}
+		return {"ok": false, "error": "Çevrim içi oyun için Google ile giriş yapılması gerekiyor"}
 	if not is_client_configured():
 		return {
 			"ok": false,
@@ -203,8 +206,7 @@ func begin_matchmaking(display_name: String) -> Dictionary:
 	if not bool(legal_result.get("ok", false)):
 		return {
 			"ok": false,
-			"error":
-			(
+			"error": (
 				"Sözleşme kaydı doğrulanamadı: %s"
 				% String(legal_result.get("error", "bilinmeyen hata"))
 			),
@@ -359,27 +361,30 @@ func _normalize_regions(value: Variant) -> Array[Dictionary]:
 			continue
 		var region: Dictionary = region_variant
 		var region_id: String = String(region.get("id", "")).strip_edges().to_lower()
-		if region_id.is_empty() or seen.has(region_id):
+		var enabled: bool = bool(region.get("enabled", true))
+		if region_id.is_empty() or seen.has(region_id) or not enabled:
 			continue
 		var probe_url: String = String(region.get("probe_url", "")).strip_edges()
+		if probe_url.is_empty():
+			probe_url = QuerySafeUrl.append_path(
+				config.rivet_control_base_url, "/v1/health/ping"
+			)
 		if (
 			not probe_url.begins_with("https://")
 			and not (OS.is_debug_build() and probe_url.begins_with("http://"))
 		):
 			probe_url = ""
 		seen[region_id] = true
-		(
-			result
-			. append(
-				{
-					"id": region_id,
-					"display_name": String(region.get("display_name", region_id)).strip_edges(),
-					"short_name":
-					String(region.get("short_name", region_id.to_upper())).strip_edges(),
-					"probe_url": probe_url,
-					"enabled": bool(region.get("enabled", true)),
-				}
-			)
+		result.append(
+			{
+				"id": region_id,
+				"display_name": String(region.get("display_name", region_id)).strip_edges(),
+				"short_name": String(
+					region.get("short_name", region_id.to_upper())
+				).strip_edges(),
+				"probe_url": probe_url,
+				"enabled": true,
+			}
 		)
 	return result
 
