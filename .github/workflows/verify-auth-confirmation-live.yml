@@ -7,16 +7,19 @@ on:
       - ".github/workflows/verify-auth-confirmation-live.yml"
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 75
     environment: staging
     env:
+      TARGET_SHA: 7aa157ae04c3555b305ca17fc02441464b8e2001
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
 
@@ -24,15 +27,80 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify live confirmation route and Supabase Auth configuration
+      - name: Locate merged deployment runs
         run: |
           set -euo pipefail
           mkdir -p build/live-auth-verification
+          locate_run() {
+            local workflow="$1"
+            local run_id=""
+            for _ in $(seq 1 120); do
+              run_id="$(
+                gh run list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --workflow "$workflow" \
+                  --branch main \
+                  --limit 30 \
+                  --json databaseId,headSha \
+                  --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
+                  | head -n 1
+              )"
+              [ -n "$run_id" ] && break
+              sleep 5
+            done
+            test -n "$run_id" || {
+              echo "Deployment workflow run was not found: $workflow" >&2
+              exit 2
+            }
+            printf '%s' "$run_id"
+          }
+
+          RIVET_RUN_ID="$(locate_run deploy-rivet-control-staging.yml)"
+          SUPABASE_RUN_ID="$(locate_run deploy-supabase-staging.yml)"
+          echo "RIVET_RUN_ID=$RIVET_RUN_ID" >> "$GITHUB_ENV"
+          echo "SUPABASE_RUN_ID=$SUPABASE_RUN_ID" >> "$GITHUB_ENV"
+          python - "$RIVET_RUN_ID" "$SUPABASE_RUN_ID" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          Path("build/live-auth-verification/deployment-runs.json").write_text(
+              json.dumps(
+                  {
+                      "target_sha": "7aa157ae04c3555b305ca17fc02441464b8e2001",
+                      "rivet_run_id": int(sys.argv[1]),
+                      "supabase_run_id": int(sys.argv[2]),
+                  },
+                  indent=2,
+              ) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Wait for Rivet deployment
+        run: |
+          set -euo pipefail
+          gh run watch "$RIVET_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$RIVET_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
+            > build/live-auth-verification/rivet-deployment.json
+
+      - name: Wait for Supabase deployment
+        run: |
+          set -euo pipefail
+          gh run watch "$SUPABASE_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$SUPABASE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
+            > build/live-auth-verification/supabase-deployment.json
+
+      - name: Verify live confirmation route and Supabase Auth configuration
+        run: |
+          set -euo pipefail
           python - <<'PY'
           import json
           import os
           import time
-          import urllib.error
           import urllib.parse
           import urllib.request
           from pathlib import Path
@@ -54,7 +122,7 @@ jobs:
           route_body = ""
           route_status = 0
           last_error = ""
-          for attempt in range(18):
+          for _ in range(30):
               try:
                   request = urllib.request.Request(
                       route,
@@ -68,7 +136,7 @@ jobs:
                   last_error = f"unexpected route response: {route_status}"
               except Exception as exc:
                   last_error = str(exc)
-              time.sleep(10)
+              time.sleep(5)
           else:
               raise SystemExit(f"live confirmation route did not become ready: {last_error}")
 
@@ -109,6 +177,7 @@ jobs:
 
           report = {
               "ok": True,
+              "target_sha": os.environ["TARGET_SHA"],
               "confirmation_route": route,
               "route_status": route_status,
               "site_url_matches": True,
@@ -130,4 +199,4 @@ jobs:
           name: colony-live-auth-verification
           retention-days: 2
           if-no-files-found: warn
-          path: build/live-auth-verification/report.json
+          path: build/live-auth-verification/
