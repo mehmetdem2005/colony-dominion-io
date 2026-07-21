@@ -9,6 +9,7 @@ on:
       - "network/**"
       - "autoload/**"
       - "gameplay/match/**"
+      - "tools/configure_android_ci.gd"
       - "config/backend_config.json"
       - "project.godot"
       - "export_presets.cfg"
@@ -19,6 +20,7 @@ on:
       - "network/**"
       - "autoload/**"
       - "gameplay/match/**"
+      - "tools/configure_android_ci.gd"
       - "config/backend_config.json"
       - "project.godot"
       - "export_presets.cfg"
@@ -31,12 +33,17 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 50
     permissions:
       contents: read
     env:
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/colony-debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
     steps:
       - uses: actions/checkout@v6
 
@@ -49,11 +56,41 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Install validation tools
         run: python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
 
       - name: Install Godot and export templates
-        run: tools/install_godot_ci.sh
+        run: |
+          set -euo pipefail
+          tools/install_godot_ci.sh
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          test -f "$TEMPLATE_DIR/android_debug.apk"
+
+      - name: Configure Android SDK and debug signing
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "build-tools;35.0.1" \
+            "platforms;android-35"
+          keytool -keyalg RSA -genkeypair \
+            -alias androiddebugkey \
+            -keypass android \
+            -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" \
+            -storepass android \
+            -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
+            -validity 10000 \
+            -deststoretype PKCS12
+          "$GODOT_BIN" --headless --editor --path . \
+            --script res://tools/configure_android_ci.gd
 
       - name: Install control-plane dependencies
         working-directory: backend/rivet-control
@@ -68,6 +105,81 @@ jobs:
 
       - name: Build validated dedicated-server package
         run: tools/build_dedicated_server.sh
+
+      - name: Run query-safe URL regression
+        run: "$GODOT_BIN" --headless --path . --script res://tests/query_safe_url_regression_test.gd
+
+      - name: Verify live Rivet control surface
+        run: |
+          set -euo pipefail
+          mkdir -p build/online-test
+          python - <<'PY'
+          import json
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          config = json.loads(Path("config/backend_config.json").read_text(encoding="utf-8"))
+          base = str(config["rivet_control_base_url"]).strip()
+
+          def endpoint(path: str) -> str:
+              parsed = urllib.parse.urlsplit(base)
+              full_path = parsed.path.rstrip("/") + "/" + path.lstrip("/")
+              return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, full_path, parsed.query, ""))
+
+          def get_json(path: str) -> dict:
+              request = urllib.request.Request(
+                  endpoint(path),
+                  headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"{path} returned HTTP {response.status}")
+                  return json.loads(response.read().decode("utf-8"))
+
+          health = get_json("/v1/health")
+          regions = get_json("/v1/regions")
+          if health.get("ok") is not True:
+              raise SystemExit(f"Rivet health failed: {health}")
+          enabled_regions = [r.get("id") for r in regions.get("regions", []) if r.get("enabled")]
+          if not enabled_regions:
+              raise SystemExit(f"No enabled Rivet region: {regions}")
+
+          payload = json.dumps({
+              "player_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "APKSmoke",
+              "region_preference": "auto",
+              "selected_region_id": enabled_regions[0],
+              "build_id": config["build_id"],
+              "protocol_version": config["protocol_version"],
+          }).encode("utf-8")
+          request = urllib.request.Request(
+              endpoint("/v1/matchmaking/join"),
+              data=payload,
+              method="POST",
+              headers={"Accept": "application/json", "Content-Type": "application/json"},
+          )
+          try:
+              urllib.request.urlopen(request, timeout=30)
+          except urllib.error.HTTPError as error:
+              if error.code != 401:
+                  raise SystemExit(f"Auth boundary returned HTTP {error.code}") from error
+          else:
+              raise SystemExit("Unauthenticated matchmaking request was accepted")
+
+          report = {
+              "health": True,
+              "enabled_regions": enabled_regions,
+              "auth_boundary": True,
+              "build_id": config["build_id"],
+              "protocol_version": config["protocol_version"],
+          }
+          Path("build/online-test/live-control-smoke.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(report))
+          PY
 
       - name: Validate current Rivet CLI contract
         working-directory: backend/rivet-control
@@ -93,14 +205,43 @@ jobs:
             --headless --version | tee build-rivet-godot-version.txt
           grep -q "4.6.3" build-rivet-godot-version.txt
 
-      - name: Upload validation evidence
+      - name: Build Android online test APK
+        run: |
+          set -uo pipefail
+          mkdir -p build/android build/online-test
+          set +e
+          "$GODOT_BIN" --headless --path . \
+            --export-debug "Android" \
+            build/android/colony-dominion-online-test.apk \
+            2>&1 | tee build/online-test/android-export.log
+          EXPORT_CODE=${PIPESTATUS[0]}
+          set -e
+          echo "$EXPORT_CODE" > build/online-test/android-export-exit-code.txt
+          if [ "$EXPORT_CODE" -ne 0 ]; then
+            tail -n 120 build/online-test/android-export.log >&2 || true
+            exit "$EXPORT_CODE"
+          fi
+          test -s build/android/colony-dominion-online-test.apk
+          unzip -t build/android/colony-dominion-online-test.apk >/dev/null
+          sha256sum build/android/colony-dominion-online-test.apk \
+            | tee build/android/SHA256SUMS.txt
+          stat --printf='%s\n' build/android/colony-dominion-online-test.apk \
+            > build/android/apk-size-bytes.txt
+
+      - name: Upload validation evidence and online APK
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: rivet-control-validation
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
           path: |
             build-rivet-cli-help.txt
             build-rivet-godot-version.txt
             build/ci-logs/
+            build/android/colony-dominion-online-test.apk
+            build/android/SHA256SUMS.txt
+            build/android/apk-size-bytes.txt
+            build/online-test/live-control-smoke.json
+            build/online-test/android-export.log
+            build/online-test/android-export-exit-code.txt
