@@ -1,0 +1,100 @@
+name: Apply OAuth External Callback Hotfix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-oauth-callback-hotfix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/oauth-external-callback-url
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Apply trusted external callback URL fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          function_path = Path("backend/supabase/functions/oauth-google-handoff/index.ts")
+          source = function_path.read_text(encoding="utf-8")
+          old = '''function functionBaseUrl(request: Request): string {
+            const url = new URL(request.url);
+            const marker = "/oauth-google-handoff";
+            const index = url.pathname.indexOf(marker);
+            if (index < 0) throw new Error("Function route is invalid");
+            return `${url.origin}${url.pathname.slice(0, index + marker.length)}`;
+          }'''
+          new = '''function functionBaseUrl(): string {
+            return `${requiredEnvironment("SUPABASE_URL")}/functions/v1/oauth-google-handoff`;
+          }'''
+          if old not in source:
+              raise SystemExit("Expected request-derived functionBaseUrl implementation was not found")
+          source = source.replace(old, new, 1)
+          source = source.replace("functionBaseUrl(request)", "functionBaseUrl()")
+          if "functionBaseUrl(request)" in source or "return `${url.origin}" in source:
+              raise SystemExit("Request-derived external callback URL remains")
+          function_path.write_text(source, encoding="utf-8")
+
+          test_path = Path("tests/google_oauth_bot_backfill_test.gd")
+          test = test_path.read_text(encoding="utf-8")
+          marker_block = '''\t\t\t"cache-control",
+\t\t],'''
+          replacement = '''\t\t\t"cache-control",
+\t\t\t'requiredEnvironment("SUPABASE_URL")',
+\t\t\t"/functions/v1/oauth-google-handoff",
+\t\t\t"functionBaseUrl()",
+\t\t],'''
+          if marker_block not in test:
+              raise SystemExit("OAuth source marker block was not found")
+          test = test.replace(marker_block, replacement, 1)
+          insertion_point = '''\t_assert_contains(
+\t\t"res://backend/supabase/migrations/202607210006_google_oauth_handoffs.sql",'''
+          negative_check = '''\tvar oauth_function_source := FileAccess.get_file_as_string(
+\t\t"res://backend/supabase/functions/oauth-google-handoff/index.ts"
+\t)
+\tif oauth_function_source.contains("functionBaseUrl(request)"):
+\t\tfailures.append("OAuth callback URL must not be derived from the internal request URL")
+\tif oauth_function_source.contains("return `${url.origin}"):
+\t\tfailures.append("OAuth callback URL must not use the Edge proxy origin")
+\n'''
+          if insertion_point not in test:
+              raise SystemExit("OAuth migration assertion insertion point was not found")
+          test = test.replace(insertion_point, negative_check + insertion_point, 1)
+          test_path.write_text(test, encoding="utf-8")
+          PY
+
+          python -m pip install --disable-pip-version-check gdtoolkit
+          gdlint tests/google_oauth_bot_backfill_test.gd
+          gdformat --check tests/google_oauth_bot_backfill_test.gd
+          grep -q 'requiredEnvironment("SUPABASE_URL")}/functions/v1/oauth-google-handoff' \
+            backend/supabase/functions/oauth-google-handoff/index.ts
+          ! grep -q 'functionBaseUrl(request)' backend/supabase/functions/oauth-google-handoff/index.ts
+          git diff --check
+
+      - name: Commit hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/supabase/functions/oauth-google-handoff/index.ts \
+            tests/google_oauth_bot_backfill_test.gd
+          git commit -m "Fix external Google OAuth callback URL"
+          git push origin HEAD:fix/oauth-external-callback-url
