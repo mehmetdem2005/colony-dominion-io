@@ -2,7 +2,7 @@ name: Final Rivet Release Observer
 
 on:
   pull_request:
-    types: [synchronize, reopened]
+    types: [opened, synchronize, reopened]
 
 permissions:
   actions: read
@@ -13,16 +13,17 @@ jobs:
   observe:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'rivet-live-deployment-monitor'
+      github.event.pull_request.head.ref == 'rivet-final-release-observer-v2'
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     env:
       GH_TOKEN: ${{ github.token }}
       TARGET_SHA: ed81689f1a5aea2e54e55c85e1635dbd7337f291
+      OBSERVER_BRANCH: rivet-final-release-observer-v2
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: rivet-live-deployment-monitor
+          ref: ${{ env.OBSERVER_BRANCH }}
           fetch-depth: 0
 
       - name: Locate and wait for final deployment
@@ -92,4 +93,4 @@ jobs:
             exit 0
           fi
           git commit -m "Snapshot final Rivet release"
-          git push origin HEAD:rivet-live-deployment-monitor
+          git push origin "HEAD:$OBSERVER_BRANCH"
