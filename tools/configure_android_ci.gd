@@ -6,7 +6,9 @@ func _initialize() -> void:
 	var settings: EditorSettings = EditorInterface.get_editor_settings()
 	var android_sdk: String = OS.get_environment("ANDROID_SDK_ROOT").strip_edges()
 	var java_home: String = OS.get_environment("JAVA_HOME").strip_edges()
-	var debug_keystore: String = OS.get_environment("GODOT_ANDROID_KEYSTORE_DEBUG_PATH").strip_edges()
+	var debug_keystore: String = (
+		OS.get_environment("GODOT_ANDROID_KEYSTORE_DEBUG_PATH").strip_edges()
+	)
 	if android_sdk.is_empty() or not DirAccess.dir_exists_absolute(android_sdk):
 		push_error("ANDROID_SDK_ROOT is missing or invalid: %s" % android_sdk)
 		quit(2)
