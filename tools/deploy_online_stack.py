@@ -235,6 +235,7 @@ def verify_supabase_schema(token: str, project_ref: str) -> dict[str, Any]:
         "bans",
         "account_deletion_requests",
         "rating_history",
+        "oauth_handoffs",
     }
     query = """
 with expected(table_name) as (
@@ -242,7 +243,7 @@ with expected(table_name) as (
     ('profiles'),('player_preferences'),('seasons'),('player_ratings'),
     ('legal_documents'),('legal_acceptances'),('matches'),
     ('match_participants'),('player_reports'),('bans'),
-    ('account_deletion_requests'),('rating_history')
+    ('account_deletion_requests'),('rating_history'),('oauth_handoffs')
 )
 select
   expected.table_name,
@@ -398,9 +399,10 @@ def deploy_rivet_control(
     env["SUPABASE_SECRET_KEY"] = supabase_secret_key
     env["SUPPORTED_BUILD_ID"] = build_id
     env["PROTOCOL_VERSION"] = str(protocol_version)
-    env["MIN_PLAYERS"] = "2"
+    env["MIN_PLAYERS"] = "1"
     env["MAX_PLAYERS"] = "10"
     env["QUEUE_TTL_SECONDS"] = "120"
+    env["BOT_BACKFILL_WAIT_SECONDS"] = "30"
     env["RIVET_PROJECT"] = project
     env["RIVET_ENVIRONMENT"] = environment
     env["RIVET_GAME_SERVER_BUILD_TAG"] = game_server_build_tag
@@ -430,7 +432,7 @@ def deploy_rivet_control(
 
 def read_client_protocol(root: Path) -> tuple[str, int]:
     config = json.loads((root / "config" / "backend_config.json").read_text(encoding="utf-8"))
-    build_id = str(config.get("build_id", "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"))
+    build_id = str(config.get("build_id", "PHASE-05.5-GOOGLE-BOT-BACKFILL"))
     protocol_version = int(config.get("protocol_version", 3))
     return build_id, protocol_version
 

@@ -709,14 +709,20 @@ func receive_authoritative_command(peer_id: int, command: Dictionary) -> bool:
 	return _command_router.receive(peer_id, command) if _command_router != null else false
 
 
-func assign_peer_to_team(peer_id: int, team_id: int) -> bool:
+func assign_peer_to_team(peer_id: int, team_id: int, display_name: String = "") -> bool:
 	return (
-		_command_router.assign_peer_to_team(peer_id, team_id) if _command_router != null else false
+		_command_router.assign_peer_to_team(peer_id, team_id, display_name)
+		if _command_router != null
+		else false
 	)
 
 
-func assign_peer_to_available_team(peer_id: int) -> int:
-	return _command_router.assign_peer_to_available_team(peer_id) if _command_router != null else -1
+func assign_peer_to_available_team(peer_id: int, display_name: String = "") -> int:
+	return (
+		_command_router.assign_peer_to_available_team(peer_id, display_name)
+		if _command_router != null
+		else -1
+	)
 
 
 func get_team_for_peer(peer_id: int) -> int:

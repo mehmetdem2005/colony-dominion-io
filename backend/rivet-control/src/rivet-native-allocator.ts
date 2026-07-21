@@ -35,8 +35,12 @@ export async function allocateRivetGameServer(
   client: RuntimeActorClient,
   region: RegionDefinition,
   players: QueueEntry[],
+  targetPlayers: number = MAX_PLAYERS,
 ): Promise<AllocationResult> {
-  if (players.length === 0 || players.length > MAX_PLAYERS) {
+  if (!Number.isInteger(targetPlayers) || targetPlayers < 1 || targetPlayers > MAX_PLAYERS) {
+    throw new Error(`Target player count must be between 1 and ${MAX_PLAYERS}`);
+  }
+  if (players.length === 0 || players.length > targetPlayers) {
     throw new Error(`Rivet game actor requires between 1 and ${MAX_PLAYERS} players`);
   }
   const buildId = players[0]?.buildId ?? "";
@@ -66,7 +70,10 @@ export async function allocateRivetGameServer(
       buildId,
       protocolVersion,
       expectedPlayers: players.length,
-      maxPlayers: MAX_PLAYERS,
+      maxPlayers: targetPlayers,
+      humanPlayerCount: players.length,
+      botCount: Math.max(0, targetPlayers - players.length),
+      ranked: players.length === targetPlayers,
       matchSeed,
       serverAuthToken,
     },
@@ -97,6 +104,9 @@ export async function allocateRivetGameServer(
       regionShortName: region.shortName,
       expiresAt: Date.now() + ASSIGNMENT_TTL_MS,
       protocolVersion,
+      humanPlayers: players.length,
+      botPlayers: Math.max(0, targetPlayers - players.length),
+      ranked: players.length === targetPlayers,
     },
     joinTickets,
     serverAuthToken,

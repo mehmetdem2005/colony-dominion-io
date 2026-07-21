@@ -3,7 +3,7 @@ extends Control
 
 const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
 const ONLINE_SCENE_PATH: String = "res://scenes/online_game.tscn"
-const BUILD_ID: String = "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"
+const BUILD_ID: String = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 
 var _name_input: LineEdit
 var _offline_button: Button
@@ -475,9 +475,15 @@ func _on_matchmaking_status(status: Dictionary) -> void:
 	var state: String = String(status.get("status", "queued"))
 	if state == "queued":
 		var position: int = int(status.get("position", -1))
-		_show_status(
-			"Eşleştirme sürüyor%s" % (" • sıra %d" % (position + 1) if position >= 0 else ""), false
+		var humans := maxi(int(status.get("human_players_waiting", 1)), 1)
+		var target := maxi(int(status.get("target_players", 10)), humans)
+		var seconds := maxi(int(status.get("bot_backfill_seconds_remaining", 0)), 0)
+		var message := (
+			"Eşleştirme • %d/%d insan • %d sn sonra botlarla tamamlanır" % [humans, target, seconds]
 		)
+		if position > 0:
+			message += " • sıra %d" % (position + 1)
+		_show_status(message, false)
 
 
 func _on_connection_state_changed(_state: int, message: String) -> void:

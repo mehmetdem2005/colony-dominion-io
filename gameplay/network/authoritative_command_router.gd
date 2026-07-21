@@ -81,7 +81,7 @@ func receive(peer_id: int, command: Dictionary) -> bool:
 	return succeeded
 
 
-func assign_peer_to_team(peer_id: int, team_id: int) -> bool:
+func assign_peer_to_team(peer_id: int, team_id: int, display_name: String = "") -> bool:
 	var controllers: Array = _get_controllers()
 	if peer_id <= 0 or team_id < 0 or team_id >= controllers.size():
 		return false
@@ -97,12 +97,14 @@ func assign_peer_to_team(peer_id: int, team_id: int) -> bool:
 	_peer_to_team[peer_id] = team_id
 	controller.is_human = true
 	controller.owner_peer_id = peer_id
+	if not display_name.strip_edges().is_empty():
+		controller.set_display_name(display_name)
 	controller.set_simulation_tier(ColonyController.SimulationTier.FULL)
 	_notify_interest_changed()
 	return true
 
 
-func assign_peer_to_available_team(peer_id: int) -> int:
+func assign_peer_to_available_team(peer_id: int, display_name: String = "") -> int:
 	if _peer_to_team.has(peer_id):
 		return int(_peer_to_team[peer_id])
 	var controllers: Array = _get_controllers()
@@ -113,7 +115,7 @@ func assign_peer_to_available_team(peer_id: int) -> int:
 			and not controller.eliminated
 			and not _peer_to_team.values().has(team_id)
 		):
-			return team_id if assign_peer_to_team(peer_id, team_id) else -1
+			return team_id if assign_peer_to_team(peer_id, team_id, display_name) else -1
 	return -1
 
 

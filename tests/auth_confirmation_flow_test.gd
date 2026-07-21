@@ -58,7 +58,11 @@ func _run() -> void:
 	)
 	_assert_source_contains(
 		"res://.github/workflows/deploy-supabase-staging.yml",
-		["functions deploy auth-confirmed", "--no-verify-jwt"],
+		[
+			"functions deploy auth-confirmed",
+			"functions deploy oauth-google-handoff",
+			"--no-verify-jwt",
+		],
 		failures
 	)
 

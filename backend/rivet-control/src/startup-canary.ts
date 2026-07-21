@@ -17,7 +17,7 @@ export async function runStartupCanary(): Promise<void> {
       matchId,
       serverId,
       regionId: "canary",
-      buildId: process.env.SUPPORTED_BUILD_ID ?? "PHASE-05.4-RIVET-FULL-ONLINE",
+      buildId: process.env.SUPPORTED_BUILD_ID ?? "PHASE-05.5-GOOGLE-BOT-BACKFILL",
       protocolVersion: Number(process.env.PROTOCOL_VERSION ?? 4),
       expectedPlayers: 1,
       maxPlayers: 1,

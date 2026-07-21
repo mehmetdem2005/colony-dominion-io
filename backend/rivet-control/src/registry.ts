@@ -48,7 +48,20 @@ function readStatus(state: MatchmakerState, queueTicketId: string): QueueStatus 
   if (terminal) return terminal;
   for (const queue of Object.values(state.queues)) {
     const position = queue.findIndex((entry) => entry.queueTicketId === queueTicketId);
-    if (position >= 0) return { status: "queued", queue_ticket_id: queueTicketId, position };
+    if (position >= 0) {
+      const entry = queue[position]!;
+      return {
+        status: "queued",
+        queue_ticket_id: queueTicketId,
+        position,
+        joined_at_ms: entry.joinedAt,
+        oldest_joined_at_ms: queue.reduce(
+          (oldest, candidate) => Math.min(oldest, candidate.joinedAt),
+          queue[0]!.joinedAt,
+        ),
+        human_players_waiting: queue.length,
+      };
+    }
   }
   return { status: "expired", queue_ticket_id: queueTicketId, message: "Queue ticket was not found" };
 }
@@ -75,12 +88,26 @@ export const matchmaker = actor({
         queued.regionPreference = entry.regionPreference;
         c.state.ticketOwners[queued.queueTicketId] = queued.playerId;
         c.state.activeTicketByPlayer[queued.playerId] = queued.queueTicketId;
-        return { status: "queued", queue_ticket_id: queued.queueTicketId, position: existingIndex };
+        return {
+          status: "queued", queue_ticket_id: queued.queueTicketId, position: existingIndex,
+          joined_at_ms: queued.joinedAt,
+          oldest_joined_at_ms: queue.reduce(
+            (oldest, candidate) => Math.min(oldest, candidate.joinedAt), queue[0]!.joinedAt,
+          ),
+          human_players_waiting: queue.length,
+        };
       }
       queue.push(entry);
       c.state.ticketOwners[entry.queueTicketId] = entry.playerId;
       c.state.activeTicketByPlayer[entry.playerId] = entry.queueTicketId;
-      return { status: "queued", queue_ticket_id: entry.queueTicketId, position: queue.length - 1 };
+      return {
+        status: "queued", queue_ticket_id: entry.queueTicketId, position: queue.length - 1,
+        joined_at_ms: entry.joinedAt,
+        oldest_joined_at_ms: queue.reduce(
+          (oldest, candidate) => Math.min(oldest, candidate.joinedAt), queue[0]!.joinedAt,
+        ),
+        human_players_waiting: queue.length,
+      };
     },
     isTicketOwner: (c, queueTicketId: string, playerId: string): boolean => {
       ensureIndexes(c.state);
@@ -263,6 +290,16 @@ export const matchmaker = actor({
       return readStatus(c.state, queueTicketId);
     },
     queueSize: (c, regionId: string): number => getQueue(c.state, regionId).length,
+    queueStats: (c, regionId: string): { size: number; oldestJoinedAt: number } => {
+      const queue = getQueue(c.state, regionId);
+      return {
+        size: queue.length,
+        oldestJoinedAt: queue.reduce(
+          (oldest, entry) => oldest === 0 ? entry.joinedAt : Math.min(oldest, entry.joinedAt),
+          0,
+        ),
+      };
+    },
   },
 });
 

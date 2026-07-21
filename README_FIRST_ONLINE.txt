@@ -1,7 +1,7 @@
 PHASE 05.3 — ONLINE PRODUCTION COMPLETION
 
 Open OPEN_THIS_PROJECT.txt first.
-Expected build marker: PHASE-05.3-ONLINE-PRODUCTION-COMPLETION
+Expected build marker: PHASE-05.5-GOOGLE-BOT-BACKFILL
 
 Offline play remains independent of every backend. Online play requires the five Supabase migrations, the Rivet control plane, and the exported Godot dedicated-server container.
 

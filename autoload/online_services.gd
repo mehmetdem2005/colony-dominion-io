@@ -7,6 +7,7 @@ signal legal_sync_completed(succeeded: bool, message: String)
 
 var config: BackendRuntimeConfig
 var auth: SupabaseAuthClient
+var oauth: SupabaseOAuthHandoff
 var data: SupabaseDataClient
 var region_probe: RegionProbeService
 var matchmaking: RivetMatchmakingClient
@@ -29,6 +30,11 @@ func _ready() -> void:
 		config.supabase_url, config.supabase_publishable_key, config.persist_refresh_token
 	)
 	auth.session_changed.connect(_on_auth_session_changed)
+
+	oauth = SupabaseOAuthHandoff.new()
+	oauth.name = "SupabaseOAuthHandoff"
+	add_child(oauth)
+	oauth.configure(config.supabase_url, config.supabase_publishable_key)
 
 	data = SupabaseDataClient.new()
 	data.name = "SupabaseData"
@@ -134,6 +140,17 @@ func select_region(region_id: String) -> void:
 	_apply_region_selection(region_id, false)
 	regions_changed.emit()
 	_sync_preferences_deferred()
+
+
+func sign_in_google() -> Dictionary:
+	if not is_instance_valid(oauth):
+		return {"ok": false, "error": "Google giriş servisi hazır değil"}
+	return await oauth.sign_in_google(auth)
+
+
+func cancel_google_sign_in() -> void:
+	if is_instance_valid(oauth):
+		oauth.cancel()
 
 
 func sync_legal_acceptances() -> Dictionary:
@@ -271,9 +288,15 @@ func _consume_queue_status(status: Dictionary) -> Dictionary:
 		NetworkSession.set_connection_state(NetworkSession.ConnectionState.FAILED, message)
 		return {"assigned": false, "terminal": true, "error": message}
 	var position: int = int(status.get("position", -1))
-	var message: String = "Uygun maç aranıyor"
-	if position >= 0:
-		message = "Sırada: %d" % (position + 1)
+	var human_players := maxi(int(status.get("human_players_waiting", 1)), 1)
+	var target_players := maxi(int(status.get("target_players", 10)), human_players)
+	var seconds_remaining := maxi(int(status.get("bot_backfill_seconds_remaining", 0)), 0)
+	var message: String = (
+		"Oyuncular aranıyor • %d/%d insan • %d sn sonra botlarla tamamlanacak"
+		% [human_players, target_players, seconds_remaining]
+	)
+	if position > 0:
+		message += " • sıra %d" % (position + 1)
 	NetworkSession.set_connection_state(NetworkSession.ConnectionState.MATCHMAKING, message)
 	return {"assigned": false, "terminal": false}
 
@@ -369,6 +392,9 @@ func _is_valid_assignment(assignment: Dictionary) -> bool:
 	var join_ticket: String = String(assignment.get("join_ticket", ""))
 	var protocol_version: int = int(assignment.get("protocol_version", 0))
 	var expires_at: int = int(assignment.get("expires_at", 0))
+	var human_players: int = int(assignment.get("human_players", 0))
+	var bot_players: int = int(assignment.get("bot_players", 0))
+	var ranked: bool = bool(assignment.get("ranked", false))
 	return (
 		not match_id.is_empty()
 		and not server_id.is_empty()
@@ -378,5 +404,8 @@ func _is_valid_assignment(assignment: Dictionary) -> bool:
 		and join_ticket.length() >= 16
 		and join_ticket.length() <= 256
 		and protocol_version == config.protocol_version
+		and human_players >= 1
+		and human_players + bot_players == NetworkProtocol.DEFAULT_MAX_PLAYERS
+		and (not ranked or bot_players == 0)
 		and expires_at > Time.get_unix_time_from_system() * 1000.0
 	)

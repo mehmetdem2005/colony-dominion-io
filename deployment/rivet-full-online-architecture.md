@@ -19,7 +19,7 @@ The production runtime uses Rivet Compute and Rivet Actors only. No Oracle, exte
 
 ## Production contract
 
-- Build ID: `PHASE-05.4-RIVET-FULL-ONLINE`
+- Build ID: `PHASE-05.5-GOOGLE-BOT-BACKFILL`
 - Protocol: `4`
 - Client transport: `WebSocketMultiplayerPeer`
 - Public endpoint: Rivet actor gateway `wss://.../websocket/`

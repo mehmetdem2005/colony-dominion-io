@@ -143,6 +143,12 @@ func configure(
 	_request_redraw()
 
 
+func set_commander_display_name(value: String) -> void:
+	if definition == null or definition.role != &"commander":
+		return
+	_configure_name_label(value.strip_edges().left(24))
+
+
 func set_squad_id(value: int) -> void:
 	var next_id: int = clampi(value, 0, 1)
 	if squad_id == next_id:

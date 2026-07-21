@@ -10,6 +10,9 @@ export type GameServerActorInput = {
   protocolVersion: number;
   expectedPlayers: number;
   maxPlayers: number;
+  humanPlayerCount: number;
+  botCount: number;
+  ranked: boolean;
   matchSeed: number;
   serverAuthToken: string;
 };
@@ -101,6 +104,12 @@ async function waitForGodotReady(runtime: GameRuntime): Promise<void> {
 }
 
 async function startRuntime(actorId: string, state: GameServerActorState): Promise<GameRuntime> {
+  if (state.humanPlayerCount + state.botCount !== state.maxPlayers) {
+    throw new Error("Human and bot player counts must equal maxPlayers");
+  }
+  if (state.ranked && state.botCount > 0) {
+    throw new Error("Bot-backfilled matches cannot be ranked");
+  }
   const existing = runtimes.get(actorId);
   if (existing && !existing.exited) return existing;
 
@@ -129,12 +138,14 @@ async function startRuntime(actorId: string, state: GameServerActorState): Promi
         PROTOCOL_VERSION: String(state.protocolVersion),
         EXPECTED_PLAYERS: String(state.expectedPlayers),
         MAX_PLAYERS: String(state.maxPlayers),
+        HUMAN_PLAYER_COUNT: String(state.humanPlayerCount),
+        BOT_COUNT: String(state.botCount),
         MATCH_SEED: String(state.matchSeed),
         GAME_SERVER_AUTH_TOKEN: state.serverAuthToken,
         CONTROL_BASE_URL: `http://127.0.0.1:${controlPortForParent}`,
         GAME_PORT: String(gamePort),
         CONTROL_PORT: String(controlPort),
-        RANKED_MATCH: "1",
+        RANKED_MATCH: state.ranked ? "1" : "0",
         HOME: "/tmp",
         XDG_DATA_HOME: "/tmp/.local/share",
       },
@@ -287,6 +298,11 @@ export const gameServer = actor({
     protocolVersion: requireInteger(input.protocolVersion, "protocolVersion", 1, 65_535),
     expectedPlayers: requireInteger(input.expectedPlayers, "expectedPlayers", 1, 10),
     maxPlayers: requireInteger(input.maxPlayers, "maxPlayers", input.expectedPlayers, 10),
+    humanPlayerCount: requireInteger(
+      input.humanPlayerCount, "humanPlayerCount", input.expectedPlayers, input.maxPlayers,
+    ),
+    botCount: requireInteger(input.botCount, "botCount", 0, input.maxPlayers),
+    ranked: Boolean(input.ranked),
     matchSeed: requireInteger(input.matchSeed, "matchSeed", 1, 2_147_483_647),
     serverAuthToken: requireText(input.serverAuthToken, "serverAuthToken"),
     status: "starting",

@@ -23,7 +23,7 @@ const REQUIRED_FILES: Array[String] = [
 	"res://backend/supabase/migrations/202607190004_ranked_schema.sql",
 	"res://backend/supabase/migrations/202607190005_authoritative_ranked_results.sql",
 ]
-const BUILD_ID: String = "PHASE-05.4-RIVET-FULL-ONLINE"
+const BUILD_ID: String = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 
 
 func _initialize() -> void:
@@ -42,6 +42,7 @@ func _run() -> void:
 	_validate_mobile_input_and_orientation(failures)
 	_validate_ui_lifecycle(failures)
 	_validate_consent_and_auth_confirmation(failures)
+	_validate_google_oauth_and_bot_backfill(failures)
 	var config: String = FileAccess.get_file_as_string("res://config/backend_config.json")
 	if not config.contains(BUILD_ID) or not config.contains('"protocol_version": 4'):
 		failures.append("Client backend configuration is not pinned to Phase 05.4")
@@ -135,6 +136,25 @@ func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
 	for marker in ["_local_nest", "_refresh_local_lifecycle", "_set_camera_anchor"]:
 		if not online_client.contains(marker):
 			failures.append("Online elimination recovery is missing: %s" % marker)
+
+
+func _validate_google_oauth_and_bot_backfill(failures: PackedStringArray) -> void:
+	var oauth_bridge := FileAccess.get_file_as_string("res://network/supabase_oauth_handoff.gd")
+	for marker in ["Crypto.new()", "OS.shell_open", "x-colony-oauth-secret"]:
+		if not oauth_bridge.contains(marker):
+			failures.append("Google OAuth handoff is missing: %s" % marker)
+	var policy := FileAccess.get_file_as_string(
+		"res://backend/rivet-control/src/matchmaking-policy.ts"
+	)
+	for marker in ["bot_backfill", "full_human_lobby", "waitRemainingMs"]:
+		if not policy.contains(marker):
+			failures.append("Bot backfill policy is missing: %s" % marker)
+	var actor := FileAccess.get_file_as_string(
+		"res://backend/rivet-control/src/game-server-actor.ts"
+	)
+	for marker in ["BOT_COUNT", "HUMAN_PLAYER_COUNT", 'RANKED_MATCH: state.ranked ? "1" : "0"']:
+		if not actor.contains(marker):
+			failures.append("Dedicated bot authority is missing: %s" % marker)
 
 
 func _validate_consent_and_auth_confirmation(failures: PackedStringArray) -> void:

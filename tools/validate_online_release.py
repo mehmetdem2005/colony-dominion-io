@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_BUILD = "PHASE-05.4-RIVET-FULL-ONLINE"
+EXPECTED_BUILD = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 EXPECTED_PROTOCOL = 4
 
 
@@ -65,11 +65,15 @@ def validate() -> dict[str, object]:
     migrations = sorted((ROOT / "backend/supabase/migrations").glob("*.sql"))
     names = [path.name for path in migrations]
     require(len(names) == len(set(name.split("_", 1)[0] for name in names)), "duplicate migration version")
-    require(names[-2:] == [
+    require(names[-3:] == [
         "202607190004_ranked_schema.sql",
         "202607190005_authoritative_ranked_results.sql",
-    ], "ranked migration order mismatch")
-    ranked_sql = migrations[-1].read_text(encoding="utf-8").lower()
+        "202607210006_google_oauth_handoffs.sql",
+    ], "production migration order mismatch")
+    ranked_sql = migrations[-2].read_text(encoding="utf-8").lower()
+    oauth_sql = migrations[-1].read_text(encoding="utf-8").lower()
+    for marker in ("oauth_handoffs", "enable row level security", "revoke all"):
+        require(marker in oauth_sql, f"OAuth handoff SQL marker missing: {marker}")
     for marker in (
         "pg_advisory_xact_lock",
         "rating_history",
@@ -81,7 +85,7 @@ def validate() -> dict[str, object]:
 
     require_markers(
         "backend/rivet-control/src/registry.ts",
-        ("releaseMatch", "registerServerCredential", "queueTicketId"),
+        ("releaseMatch", "registerServerCredential", "queueTicketId", "queueStats"),
     )
     require_markers(
         "backend/rivet-control/src/runtime-registry.ts",
@@ -125,11 +129,16 @@ def validate() -> dict[str, object]:
             "waitForGodotReady",
             "stopRuntime",
             "c.destroy()",
+            "BOT_COUNT",
+            "RANKED_MATCH",
         ),
     )
     require_markers(
         "backend/rivet-control/src/rivet-native-allocator.ts",
-        ("gameServer.create", "getGatewayUrl", "websocketUrl", "MAX_PLAYERS = 10"),
+        (
+            "gameServer.create", "getGatewayUrl", "websocketUrl", "MAX_PLAYERS = 10",
+            "humanPlayerCount", "botCount", "ranked",
+        ),
     )
     require_markers(
         "backend/rivet-control/src/server-full-online.ts",
@@ -138,11 +147,32 @@ def validate() -> dict[str, object]:
             "runtimeRegistry.handler",
             "Rivet full-online",
             "maxPlayers",
+            "BOT_BACKFILL_WAIT_SECONDS",
+            "evaluateMatchmakingWindow",
         ),
     )
     require_markers(
         "backend/rivet-control/src/startup-canary.ts",
         ("RIVET_GAME_ACTOR_CANARY_OK", "webSocket", "shutdown"),
+    )
+    require_markers(
+        "backend/rivet-control/src/matchmaking-policy.ts",
+        ("bot_backfill", "full_human_lobby", "waitRemainingMs", "ranked"),
+    )
+    require_markers(
+        "backend/supabase/functions/oauth-google-handoff/index.ts",
+        ("SUPABASE_SERVICE_ROLE_KEY", "oauth_handoffs", "/callback/", "refresh_token"),
+    )
+    require_markers(
+        "network/supabase_oauth_handoff.gd",
+        ("Crypto.new()", "OS.shell_open", "x-colony-oauth-secret", "sign_in_refresh_token"),
+    )
+    require_markers(
+        "tools/deploy_supabase_staging.py",
+        (
+            "external_google_enabled", "GOOGLE_OAUTH_CLIENT_ID",
+            "smtp.resend.com", "RESEND_API_KEY", "AUTH_SMTP_ADMIN_EMAIL",
+        ),
     )
 
     dockerfile = read("backend/rivet-control/Dockerfile")
@@ -164,7 +194,7 @@ def validate() -> dict[str, object]:
     require('architectures/arm64-v8a=true' in export_text, "Android arm64 architecture missing")
     require('permissions/internet=true' in export_text, "Android INTERNET permission missing")
     require("config/*.json,legal/*.json,legal/*.md" in export_text, "Android legal/config export filter missing")
-    require('version/name="0.5.4"' in export_text, "Android version mismatch")
+    require('version/name="0.5.5"' in export_text, "Android version mismatch")
 
     deploy_workflow = read(".github/workflows/deploy-rivet-control-staging.yml")
     for marker in (
@@ -174,6 +204,7 @@ def validate() -> dict[str, object]:
         "--export-debug \"Android\"",
         "colony-dominion-rivet-staging.apk",
         "FULL_END_TO_END_RELEASE_READY=true",
+        "BOT_BACKFILL_WAIT_SECONDS",
     ):
         require(marker in deploy_workflow, f"deployment workflow marker missing: {marker}")
 
@@ -212,6 +243,8 @@ def validate() -> dict[str, object]:
         "public_control_gateway": True,
         "android_staging_artifact": True,
         "max_players": 10,
+        "bot_backfill_wait_seconds": 30,
+        "google_oauth_handoff": True,
         "migrations": names,
         "text_files_scanned": scanned,
         "external_hosting": False,
