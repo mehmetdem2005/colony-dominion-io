@@ -37,20 +37,50 @@ func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
 	if not _active_request_id.is_empty():
 		return {"ok": false, "error": "Google giriş işlemi zaten devam ediyor"}
 
+	var preparation := _prepare_pkce_handoff()
+	if not bool(preparation.get("ok", false)):
+		return preparation
+	var code_challenge := String(preparation.get("code_challenge", ""))
+	var begin_result := await _begin_remote_handoff(code_challenge)
+	code_challenge = ""
+	if not bool(begin_result.get("ok", false)):
+		_clear_active()
+		return begin_result
+
+	var authorize_url := String(begin_result.get("authorize_url", ""))
+	var poll_interval := float(begin_result.get("poll_interval", DEFAULT_POLL_INTERVAL_SECONDS))
+	var open_error: Error = OS.shell_open(authorize_url)
+	if open_error != OK:
+		await _cancel_remote()
+		_clear_active()
+		return {"ok": false, "error": "Google giriş sayfası açılamadı"}
+	return await _poll_pkce_result(auth_client, poll_interval)
+
+
+func cancel() -> void:
+	_cancelled = true
+
+
+func _prepare_pkce_handoff() -> Dictionary:
 	_cancelled = false
 	_active_request_id = _uuid_v4()
 	_active_secret = _random_hex(32)
 	_active_code_verifier = _random_base64_url(PKCE_VERIFIER_BYTE_COUNT)
 	var code_challenge := _sha256_base64_url(_active_code_verifier)
-	if (
-		_active_request_id.is_empty()
-		or _active_secret.is_empty()
-		or _active_code_verifier.length() != 43
-		or code_challenge.length() != 43
-	):
+	var valid := (
+		not _active_request_id.is_empty()
+		and not _active_secret.is_empty()
+		and _active_code_verifier.length() == 43
+		and code_challenge.length() == 43
+	)
+	if not valid:
+		code_challenge = ""
 		_clear_active()
 		return {"ok": false, "error": "Güvenli Google PKCE oturumu başlatılamadı"}
+	return {"ok": true, "code_challenge": code_challenge}
 
+
+func _begin_remote_handoff(code_challenge: String) -> Dictionary:
 	var begin_response: Dictionary = await (
 		_http
 		. request_json(
@@ -64,34 +94,28 @@ func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
 			}
 		)
 	)
-	code_challenge = ""
 	if not bool(begin_response.get("ok", false)):
-		var begin_error := _extract_error(begin_response, "Google giriş servisine ulaşılamadı")
-		_clear_active()
-		return {"ok": false, "error": begin_error}
-	var begin_body_variant: Variant = begin_response.get("body", {})
-	if not begin_body_variant is Dictionary:
-		_clear_active()
+		return {
+			"ok": false,
+			"error": _extract_error(begin_response, "Google giriş servisine ulaşılamadı"),
+		}
+	var body_variant: Variant = begin_response.get("body", {})
+	if not body_variant is Dictionary:
 		return {"ok": false, "error": "Google giriş yanıtı geçersiz"}
-	var begin_body: Dictionary = begin_body_variant
-	if String(begin_body.get("flow_type", "")) != "pkce":
-		_clear_active()
+	var body: Dictionary = body_variant
+	if String(body.get("flow_type", "")) != "pkce":
 		return {"ok": false, "error": "Google giriş güvenlik protokolü geçersiz"}
-	var authorize_url := String(begin_body.get("authorize_url", "")).strip_edges()
+	var authorize_url := String(body.get("authorize_url", "")).strip_edges()
 	if not _is_safe_authorize_url(authorize_url):
-		_clear_active()
 		return {"ok": false, "error": "Google giriş adresi güvenlik denetiminden geçemedi"}
-	var poll_interval := clampf(
-		float(begin_body.get("poll_interval_ms", 1000)) / 1000.0,
-		0.75,
-		3.0
-	)
-	var open_error: Error = OS.shell_open(authorize_url)
-	if open_error != OK:
-		await _cancel_remote()
-		_clear_active()
-		return {"ok": false, "error": "Google giriş sayfası açılamadı"}
+	return {
+		"ok": true,
+		"authorize_url": authorize_url,
+		"poll_interval": clampf(float(body.get("poll_interval_ms", 1000)) / 1000.0, 0.75, 3.0),
+	}
 
+
+func _poll_pkce_result(auth_client: SupabaseAuthClient, poll_interval: float) -> Dictionary:
 	var deadline_msec := Time.get_ticks_msec() + roundi(POLL_TIMEOUT_SECONDS * 1000.0)
 	while not _cancelled and Time.get_ticks_msec() < deadline_msec:
 		await get_tree().create_timer(poll_interval, true, false, true).timeout
@@ -102,33 +126,10 @@ func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
 			_endpoint("/poll/%s" % _active_request_id.uri_encode()),
 			_poll_headers()
 		)
-		var status := int(poll_response.get("status", 0))
-		if bool(poll_response.get("ok", false)):
-			var poll_body_variant: Variant = poll_response.get("body", {})
-			if not poll_body_variant is Dictionary:
-				continue
-			var poll_body: Dictionary = poll_body_variant
-			if String(poll_body.get("flow_type", "")) != "pkce":
-				_clear_active()
-				return {"ok": false, "error": "Google giriş güvenlik protokolü değişti"}
-			if not bool(poll_body.get("ready", false)):
-				continue
-			var auth_code := String(poll_body.get("auth_code", "")).strip_edges()
-			var code_verifier := _active_code_verifier
-			if auth_code.length() < 8 or code_verifier.length() < 43:
-				auth_code = ""
-				code_verifier = ""
-				_clear_active()
-				return {"ok": false, "error": "Google PKCE yanıtı geçersiz"}
-			_clear_active()
-			var exchange_result := await auth_client.sign_in_pkce_code(auth_code, code_verifier)
-			auth_code = ""
-			code_verifier = ""
-			return exchange_result
-		if status in [400, 401, 403, 404, 410]:
-			var poll_error := _extract_error(poll_response, "Google girişi tamamlanamadı")
-			_clear_active()
-			return {"ok": false, "error": poll_error}
+		var terminal_result := await _consume_poll_response(poll_response, auth_client)
+		if bool(terminal_result.get("terminal", false)):
+			terminal_result.erase("terminal")
+			return terminal_result
 
 	await _cancel_remote()
 	var cancelled := _cancelled
@@ -139,8 +140,48 @@ func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
 	}
 
 
-func cancel() -> void:
-	_cancelled = true
+func _consume_poll_response(
+	poll_response: Dictionary, auth_client: SupabaseAuthClient
+) -> Dictionary:
+	var result: Dictionary = {"terminal": false}
+	var status := int(poll_response.get("status", 0))
+	if not bool(poll_response.get("ok", false)):
+		if status in [400, 401, 403, 404, 410]:
+			var poll_error := _extract_error(poll_response, "Google girişi tamamlanamadı")
+			_clear_active()
+			result = {"terminal": true, "ok": false, "error": poll_error}
+		return result
+
+	var body_variant: Variant = poll_response.get("body", {})
+	if not body_variant is Dictionary:
+		return result
+	var body: Dictionary = body_variant
+	if String(body.get("flow_type", "")) != "pkce":
+		_clear_active()
+		result = {
+			"terminal": true,
+			"ok": false,
+			"error": "Google giriş güvenlik protokolü değişti",
+		}
+	elif bool(body.get("ready", false)):
+		result = await _exchange_ready_pkce_result(body, auth_client)
+	return result
+
+
+func _exchange_ready_pkce_result(body: Dictionary, auth_client: SupabaseAuthClient) -> Dictionary:
+	var auth_code := String(body.get("auth_code", "")).strip_edges()
+	var code_verifier := _active_code_verifier
+	if auth_code.length() < 8 or code_verifier.length() < 43:
+		auth_code = ""
+		code_verifier = ""
+		_clear_active()
+		return {"terminal": true, "ok": false, "error": "Google PKCE yanıtı geçersiz"}
+	_clear_active()
+	var exchange_result := await auth_client.sign_in_pkce_code(auth_code, code_verifier)
+	auth_code = ""
+	code_verifier = ""
+	exchange_result["terminal"] = true
+	return exchange_result
 
 
 func _cancel_remote() -> void:
@@ -192,21 +233,21 @@ func _extract_error(response: Dictionary, fallback: String) -> String:
 
 
 func _localize_error(message: String) -> String:
+	var localized := message
 	match message:
 		"handoff_expired", "handoff_expired_or_completed":
-			return "Google giriş süresi doldu. Yeniden dene."
+			localized = "Google giriş süresi doldu. Yeniden dene."
 		"handoff_store_unavailable", "oauth_handoff_unavailable":
-			return "Google giriş servisi geçici olarak kullanılamıyor."
+			localized = "Google giriş servisi geçici olarak kullanılamıyor."
 		"handoff_secret_mismatch", "invalid_handoff_secret":
-			return "Google giriş güvenlik doğrulaması başarısız oldu."
+			localized = "Google giriş güvenlik doğrulaması başarısız oldu."
 		"google_oauth_cancelled":
-			return "Google girişi iptal edildi."
+			localized = "Google girişi iptal edildi."
 		"google_oauth_unavailable":
-			return "Google giriş servisi geçici olarak kullanılamıyor."
+			localized = "Google giriş servisi geçici olarak kullanılamıyor."
 		"invalid_pkce_handoff_request", "unsupported_oauth_flow":
-			return "Google PKCE güvenlik protokolü doğrulanamadı."
-		_:
-			return message
+			localized = "Google PKCE güvenlik protokolü doğrulanamadı."
+	return localized
 
 
 func _is_safe_authorize_url(value: String) -> bool:
