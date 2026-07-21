@@ -1,0 +1,34 @@
+name: Snapshot Auth Matchmaking Source
+
+on:
+  push:
+    branches: [work/google-bot-backfill]
+    paths:
+      - ".github/workflows/snapshot-source-auth-matchmaking.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Package source
+        run: |
+          set -euo pipefail
+          mkdir -p build/source-snapshot
+          tar \
+            --exclude=.git \
+            --exclude=build \
+            --exclude=.godot \
+            -czf build/source-snapshot/colony-source.tar.gz .
+          sha256sum build/source-snapshot/colony-source.tar.gz \
+            > build/source-snapshot/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: colony-auth-matchmaking-source
+          retention-days: 2
+          if-no-files-found: error
+          path: build/source-snapshot/
