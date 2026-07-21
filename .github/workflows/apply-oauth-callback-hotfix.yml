@@ -1,6 +1,10 @@
 name: Apply OAuth External Callback Hotfix
 
 on:
+  push:
+    branches: [fix/oauth-external-callback-url]
+    paths:
+      - ".github/workflows/apply-oauth-callback-hotfix.yml"
   pull_request:
     branches: [main]
     paths:
@@ -99,4 +103,4 @@ jobs:
           git commit -m "Fix external Google OAuth callback URL"
           git push origin HEAD:fix/oauth-external-callback-url
 
-# revision: 1
+# revision: 2
