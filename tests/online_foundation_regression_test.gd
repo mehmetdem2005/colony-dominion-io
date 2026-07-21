@@ -42,8 +42,22 @@ func _run() -> void:
 	else:
 		var config: Dictionary = config_variant
 		var regions_variant: Variant = config.get("regions", [])
-		if not regions_variant is Array or (regions_variant as Array).size() < 7:
-			_failures.append("Client region catalog must expose all seven geographic groups")
+		if not regions_variant is Array or (regions_variant as Array).size() != 1:
+			_failures.append("Client must expose only regions that are actually deployed")
+		else:
+			var region_variant: Variant = (regions_variant as Array)[0]
+			if not region_variant is Dictionary:
+				_failures.append("Deployed client region is invalid")
+			else:
+				var region: Dictionary = region_variant
+				if String(region.get("id", "")) != "eu":
+					_failures.append("Current deployed region must be Europe")
+				if not bool(region.get("enabled", false)):
+					_failures.append("Europe region is not enabled")
+				if not String(region.get("probe_url", "")).contains(
+					"/request/v1/health/ping?"
+				):
+					_failures.append("Europe probe URL is not query-safe")
 		if int(config.get("protocol_version", 0)) != 4:
 			_failures.append("Client configuration is not pinned to protocol 4")
 		var config_lower: String = config_text.to_lower()
@@ -163,7 +177,7 @@ func _validate_offline_autoload_contract() -> void:
 
 func _finish() -> void:
 	if _failures.is_empty():
-		print("PHASE_05_4_RIVET_FULL_ONLINE_FOUNDATION_OK")
+		print("PHASE_05_5_RIVET_FULL_ONLINE_FOUNDATION_OK")
 		quit(0)
 		return
 	for failure in _failures:
