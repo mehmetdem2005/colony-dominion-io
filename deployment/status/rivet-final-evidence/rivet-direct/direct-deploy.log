@@ -1,0 +1,2 @@
+RIVET_DIRECT_DEPLOY_FAILED: Cloud API PUT projects/colonyio-3bo7/namespaces/staging-4x4s/managed-pools/default?org=yOqDe3oynkJcMLHZfQ5xc1ocXMBBTjvG failed: HTTP 409: {"message":"Compute pool is currently being deployed to, please wait"}
+RIVET_DIRECT_UPSERT project=colonyio-3bo7 namespace=staging-4x4s image=colony-rivet-full-online:65437753b2bb

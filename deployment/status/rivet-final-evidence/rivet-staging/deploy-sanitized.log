@@ -1,4 +1,0 @@
-===== RIVET FULL-ONLINE DEPLOY ATTEMPT 1/4 =====
- INFO inspecting Rivet Cloud token
- INFO enabling managed pool
-Error: Cloud API error 500 Internal Server Error: {"message":"Internal Server Error"}

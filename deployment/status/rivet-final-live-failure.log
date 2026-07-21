@@ -1,100 +1,42 @@
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	﻿2026-07-21T06:31:07.7150192Z ##[group]Run set -uo pipefail
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7150576Z ^[[36;1mset -uo pipefail^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7150901Z ^[[36;1mRAW_LOG="$RUNNER_TEMP/rivet-full-online-deploy.log"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7151336Z ^[[36;1mATTEMPT_LOG="$RUNNER_TEMP/rivet-full-online-attempt.log"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7151815Z ^[[36;1mSUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7152180Z ^[[36;1mDEPLOY_STATUS=1^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7152421Z ^[[36;1mMAX_ATTEMPTS=4^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7152648Z ^[[36;1m: > "$RAW_LOG"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7152870Z ^[[36;1m^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7153110Z ^[[36;1mfor ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7153417Z ^[[36;1m  : > "$ATTEMPT_LOG"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7153858Z ^[[36;1m  echo "===== RIVET FULL-ONLINE DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7154328Z ^[[36;1m  set +e^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7154579Z ^[[36;1m  npx --yes @rivetkit/cli@latest deploy \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7154904Z ^[[36;1m    --token "$RIVET_CLOUD_TOKEN" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7155267Z ^[[36;1m    --namespace staging \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7155589Z ^[[36;1m    --dockerfile backend/rivet-control/Dockerfile \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7155923Z ^[[36;1m    --build-context . \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7156174Z ^[[36;1m    --yes \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7156426Z ^[[36;1m    --image colony-rivet-full-online \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7156778Z ^[[36;1m    --tag "${GITHUB_SHA:0:12}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7157059Z ^[[36;1m    --cpu 2 \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7157307Z ^[[36;1m    --memory 2Gi \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7157598Z ^[[36;1m    --instance-request-concurrency 80 \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7157926Z ^[[36;1m    --min-scale 0 \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7158169Z ^[[36;1m    --max-scale 4 \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7158428Z ^[[36;1m    --max-concurrent-actors 3 \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7159170Z ^[[36;1m    --env "NODE_ENV=production" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7159503Z ^[[36;1m    --env "SUPABASE_URL=${SUPABASE_URL}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7159881Z ^[[36;1m    --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7160272Z ^[[36;1m    --env "SUPPORTED_BUILD_ID=${SUPPORTED_BUILD_ID}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7160639Z ^[[36;1m    --env "PROTOCOL_VERSION=${PROTOCOL_VERSION}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7160980Z ^[[36;1m    --env "MIN_PLAYERS=${MIN_PLAYERS}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7161288Z ^[[36;1m    --env "MAX_PLAYERS=${MAX_PLAYERS}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7161617Z ^[[36;1m    --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7161990Z ^[[36;1m    --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7162330Z ^[[36;1m    --env "RIVET_STARTUP_CANARY=1" \^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7162663Z ^[[36;1m    2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7163252Z ^[[36;1m  DEPLOY_STATUS=${PIPESTATUS[0]}^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7163525Z ^[[36;1m  set -e^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7163733Z ^[[36;1m^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7163951Z ^[[36;1m  if [ "$DEPLOY_STATUS" -eq 0 ]; then^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7164236Z ^[[36;1m    break^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7164443Z ^[[36;1m  fi^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7165133Z ^[[36;1m  if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7165857Z ^[[36;1m    break^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7166053Z ^[[36;1m  fi^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7167075Z ^[[36;1m  if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7168216Z ^[[36;1m    if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7168547Z ^[[36;1m      sleep $((15 * (2 ** (ATTEMPT - 1))))^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7169057Z ^[[36;1m      continue^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7169277Z ^[[36;1m    fi^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7169659Z ^[[36;1m  fi^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7169850Z ^[[36;1m  break^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7170055Z ^[[36;1mdone^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7170241Z ^[[36;1m^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7170555Z ^[[36;1mpython - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7170932Z ^[[36;1mimport os^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7171149Z ^[[36;1mimport re^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7171349Z ^[[36;1mimport sys^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7171579Z ^[[36;1mfrom pathlib import Path^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7171829Z ^[[36;1m^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7172133Z ^[[36;1mraw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7172748Z ^[[36;1mfor name in ("RIVET_CLOUD_TOKEN", "SUPABASE_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7173279Z ^[[36;1m    value = os.environ.get(name, "")^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7173571Z ^[[36;1m    if value:^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7173825Z ^[[36;1m        raw = raw.replace(value, "***")^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7174159Z ^[[36;1mraw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7174531Z ^[[36;1mPath(sys.argv[2]).write_text(raw, encoding="utf-8")^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7174846Z ^[[36;1mPY^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7175057Z ^[[36;1mtest "$DEPLOY_STATUS" -eq 0^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7175493Z ^[[36;1mgrep -Eqi 'pool status[[:space:]]+status=ready' build/rivet-staging/deploy-sanitized.log^[[0m
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7274798Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7275171Z env:
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7275589Z   RIVET_CLOUD_TOKEN: ***
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7275946Z   SUPABASE_ACCESS_TOKEN: ***
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7276298Z   SUPABASE_SECRET_KEY: ***
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7276566Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7277002Z   SUPABASE_PUBLISHABLE_KEY: ***
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7277251Z   REGIONS_JSON: 
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7277512Z   SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7277830Z   PROTOCOL_VERSION: 4
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7278066Z   MIN_PLAYERS: 2
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7278273Z   MAX_PLAYERS: 10
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7278483Z   QUEUE_TTL_SECONDS: 120
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7278838Z   GODOT_VERSION: 4.6.3
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7279218Z   GODOT_BIN: /home/runner/work/colony-dominion-io/colony-dominion-io/.godot-bin/godot
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7279701Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7280132Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7280556Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7280938Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7281343Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7281925Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7282518Z   EFFECTIVE_REGIONS_JSON: [{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7283050Z ##[endgroup]
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:07.7504783Z ===== RIVET FULL-ONLINE DEPLOY ATTEMPT 1/4 =====
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:11.6529386Z ^[[32m INFO^[[0m inspecting Rivet Cloud token
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:31:11.9844402Z ^[[32m INFO^[[0m enabling managed pool
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:33:09.2723102Z Error: Cloud API error 500 Internal Server Error: {"message":"Internal Server Error"}
-deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:33:09.3288034Z ##[error]Process completed with exit code 1.
+deploy-direct	Directly upsert managed pool and wait for ready	﻿2026-07-21T07:09:26.5440337Z ##[group]Run set -euo pipefail
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5440677Z ^[[36;1mset -euo pipefail^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5440951Z ^[[36;1mexport NODE_ENV=production^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5441367Z ^[[36;1mexport SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5441818Z ^[[36;1mexport REGIONS_JSON="$EFFECTIVE_REGIONS_JSON"^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5442158Z ^[[36;1mexport RIVET_STARTUP_CANARY=1^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5442501Z ^[[36;1mpython tools/deploy_rivet_managed_pool_direct.py \^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5442870Z ^[[36;1m  --namespace staging \^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5443179Z ^[[36;1m  --image-repository "$IMAGE_REPOSITORY" \^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5443513Z ^[[36;1m  --image-tag "$IMAGE_TAG" \^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5443852Z ^[[36;1m  --report build/rivet-direct/direct-deploy.json \^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5444190Z ^[[36;1m  --timeout-seconds 720 \^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5444849Z ^[[36;1m  2>&1 | tee build/rivet-direct/direct-deploy.log^[[0m
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5540292Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5540720Z env:
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5541126Z   RIVET_CLOUD_TOKEN: ***
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5541534Z   SUPABASE_ACCESS_TOKEN: ***
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5541930Z   SUPABASE_SECRET_KEY: ***
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5542239Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5542739Z   SUPABASE_PUBLISHABLE_KEY: ***
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543033Z   REGIONS_JSON: 
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543325Z   SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543699Z   PROTOCOL_VERSION: 4
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5543960Z   MIN_PLAYERS: 2
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5544198Z   MAX_PLAYERS: 10
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5544772Z   QUEUE_TTL_SECONDS: 120
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5545050Z   GODOT_VERSION: 4.6.3
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5545501Z   GODOT_BIN: /home/runner/work/colony-dominion-io/colony-dominion-io/.godot-bin/godot
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5546046Z   IMAGE_REPOSITORY: colony-rivet-full-online
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5546469Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5546997Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5547509Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5547969Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5548433Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5548907Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5549817Z   EFFECTIVE_REGIONS_JSON: [{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5550475Z   IMAGE_TAG: 65437753b2bb
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5550873Z   IMAGE_REF: registry.rivet.dev/colony-rivet-full-online:65437753b2bb
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:26.5551309Z ##[endgroup]
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:50.6886787Z RIVET_DIRECT_DEPLOY_FAILED: Cloud API PUT projects/colonyio-3bo7/namespaces/staging-4x4s/managed-pools/default?org=yOqDe3oynkJcMLHZfQ5xc1ocXMBBTjvG failed: HTTP 409: {"message":"Compute pool is currently being deployed to, please wait"}
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:50.6889498Z RIVET_DIRECT_UPSERT project=colonyio-3bo7 namespace=staging-4x4s image=colony-rivet-full-online:65437753b2bb
+deploy-direct	Directly upsert managed pool and wait for ready	2026-07-21T07:09:50.7005504Z ##[error]Process completed with exit code 1.
