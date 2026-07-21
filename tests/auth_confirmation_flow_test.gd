@@ -73,7 +73,7 @@ func _run() -> void:
 	_assert_source_contains(
 		"res://tools/deploy_supabase_staging.py",
 		[
-			"functions/v1/oauth-google-handoff",
+			"oauth-google-handoff/callback/**",
 			"external_google_enabled",
 			"google_callback_pattern",
 			"localhost_removed",
