@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  actions: read
+  actions: write
   contents: write
   pull-requests: read
 
@@ -18,7 +18,6 @@ jobs:
     timeout-minutes: 70
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: 8617b2e331f068facb9205b4a0cbc8a08cee79b7
       OBSERVER_BRANCH: rivet-final-release-observer-v2
       TARGET_WORKFLOW: deploy-rivet-full-online-direct.yml
       TARGET_ARTIFACT: colony-dominion-rivet-direct-staging
@@ -28,23 +27,42 @@ jobs:
           ref: ${{ env.OBSERVER_BRANCH }}
           fetch-depth: 0
 
-      - name: Locate and wait for final deployment
+      - name: Dispatch, locate, and wait for final deployment
         shell: bash
         run: |
           set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
           mkdir -p deployment/status
+          TARGET_SHA="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+          echo "TARGET_SHA=$TARGET_SHA"
+
+          find_run() {
+            gh run list \
+              --repo "$REPO" \
+              --workflow "$TARGET_WORKFLOW" \
+              --branch main \
+              --limit 30 \
+              --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
+              | head -n 1
+          }
+
           RUN_ID=""
+          for _ in $(seq 1 12); do
+            RUN_ID="$(find_run)"
+            [ -n "$RUN_ID" ] && break
+            sleep 5
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            gh workflow run "$TARGET_WORKFLOW" \
+              --repo "$REPO" \
+              --ref main \
+              -f confirmation=DEPLOY-RIVET-FULL-ONLINE-DIRECT
+          fi
+
           for _ in $(seq 1 180); do
-            RUN_ID="$(
-              gh run list \
-                --repo "$GITHUB_REPOSITORY" \
-                --workflow "$TARGET_WORKFLOW" \
-                --branch main \
-                --limit 30 \
-                --json databaseId,headSha \
-                --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
-                | head -n 1
-            )"
+            RUN_ID="$(find_run)"
             [ -n "$RUN_ID" ] && break
             sleep 5
           done
@@ -52,15 +70,15 @@ jobs:
           echo "RIVET_LIVE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
 
           set +e
-          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run watch "$RUN_ID" --repo "$REPO" --exit-status
           WATCH_STATUS=$?
           set -e
 
           gh run view "$RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
+            --repo "$REPO" \
             --json databaseId,status,conclusion,event,headSha,url,attempt,workflowName,createdAt,updatedAt \
             > deployment/status/rivet-final-live-run.json
-          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed \
+          gh run view "$RUN_ID" --repo "$REPO" --log-failed \
             > deployment/status/rivet-final-live-failure.log 2>&1 || true
           if [ "$WATCH_STATUS" -eq 0 ]; then
             rm -f deployment/status/rivet-final-live-failure.log
