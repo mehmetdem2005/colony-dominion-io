@@ -61,6 +61,13 @@ def parse_json(raw: bytes, *, context: str) -> Any:
         raise DeploymentError(f"{context} returned invalid JSON") from exc
 
 
+def is_transient_http(status: int, message: str) -> bool:
+    if status in TRANSIENT_HTTP:
+        return True
+    normalized = message.casefold()
+    return status == 409 and "currently being deployed" in normalized
+
+
 def request_api(
     token: str,
     method: str,
@@ -96,7 +103,7 @@ def request_api(
                 return ApiResponse(404, parse_json(raw, context=path) if raw else None)
             message = raw.decode("utf-8", errors="replace")[:1000]
             last_error = f"HTTP {exc.code}: {message}"
-            if exc.code not in TRANSIENT_HTTP or attempt == max_attempts:
+            if not is_transient_http(exc.code, message) or attempt == max_attempts:
                 raise DeploymentError(f"Cloud API {method} {path} failed: {last_error}") from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last_error = str(exc)
@@ -203,7 +210,7 @@ def main() -> int:
         "RIVET_DIRECT_UPSERT "
         f"project={project} namespace={namespace} image={args.image_repository}:{args.image_tag}"
     )
-    request_api(token, "PUT", endpoint, body=body, max_attempts=10)
+    request_api(token, "PUT", endpoint, body=body, max_attempts=15)
 
     deadline = time.monotonic() + max(args.timeout_seconds, 60)
     last_status = "unknown"
