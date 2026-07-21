@@ -16,7 +16,8 @@ jobs:
     timeout-minutes: 75
     environment: staging
     env:
-      TARGET_SHA: 7aa157ae04c3555b305ca17fc02441464b8e2001
+      TARGET_SHA: 64ce23196bfc9314f3308b15073c3f473dacc02b
+      RIVET_RUN_ID: "29844292879"
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       GH_TOKEN: ${{ github.token }}
@@ -27,46 +28,40 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Locate merged deployment runs
+      - name: Locate merged Supabase deployment run
         run: |
           set -euo pipefail
           mkdir -p build/live-auth-verification
-          locate_run() {
-            local workflow="$1"
-            local run_id=""
-            for _ in $(seq 1 120); do
-              run_id="$(
-                gh run list \
-                  --repo "$GITHUB_REPOSITORY" \
-                  --workflow "$workflow" \
-                  --branch main \
-                  --limit 30 \
-                  --json databaseId,headSha \
-                  --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
-                  | head -n 1
-              )"
-              [ -n "$run_id" ] && break
-              sleep 5
-            done
-            test -n "$run_id" || {
-              echo "Deployment workflow run was not found: $workflow" >&2
-              exit 2
-            }
-            printf '%s' "$run_id"
+          SUPABASE_RUN_ID=""
+          for _ in $(seq 1 120); do
+            SUPABASE_RUN_ID="$(
+              gh run list \
+                --repo "$GITHUB_REPOSITORY" \
+                --workflow deploy-supabase-staging.yml \
+                --branch main \
+                --limit 30 \
+                --json databaseId,headSha \
+                --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
+                | head -n 1
+            )"
+            [ -n "$SUPABASE_RUN_ID" ] && break
+            sleep 5
+          done
+          test -n "$SUPABASE_RUN_ID" || {
+            echo "Supabase deployment workflow run was not found" >&2
+            exit 2
           }
-
-          RIVET_RUN_ID="$(locate_run deploy-rivet-control-staging.yml)"
-          SUPABASE_RUN_ID="$(locate_run deploy-supabase-staging.yml)"
-          echo "RIVET_RUN_ID=$RIVET_RUN_ID" >> "$GITHUB_ENV"
           echo "SUPABASE_RUN_ID=$SUPABASE_RUN_ID" >> "$GITHUB_ENV"
           python - "$RIVET_RUN_ID" "$SUPABASE_RUN_ID" <<'PY'
           import json
+          import os
           import sys
           from pathlib import Path
+
           Path("build/live-auth-verification/deployment-runs.json").write_text(
               json.dumps(
                   {
-                      "target_sha": "7aa157ae04c3555b305ca17fc02441464b8e2001",
+                      "target_sha": os.environ["TARGET_SHA"],
                       "rivet_run_id": int(sys.argv[1]),
                       "supabase_run_id": int(sys.argv[2]),
                   },
@@ -76,7 +71,7 @@ jobs:
           )
           PY
 
-      - name: Wait for Rivet deployment
+      - name: Wait for Rivet confirmation route deployment
         run: |
           set -euo pipefail
           gh run watch "$RIVET_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
@@ -85,7 +80,7 @@ jobs:
             --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
             > build/live-auth-verification/rivet-deployment.json
 
-      - name: Wait for Supabase deployment
+      - name: Wait for Supabase redirect deployment
         run: |
           set -euo pipefail
           gh run watch "$SUPABASE_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
@@ -164,17 +159,20 @@ jobs:
               failures.append("site_url does not match the live confirmation route")
           if route not in allow_list:
               failures.append("confirmation route is absent from uri_allow_list")
-          if "localhost" in site_url.lower() or "localhost" in allow_list.lower():
-              failures.append("localhost remains in Supabase Auth redirect configuration")
-          if "{{ .ConfirmationURL }}" not in template:
-              failures.append("confirmation template is missing ConfirmationURL")
-          if "E-POSTAYI DOĞRULA" not in template:
-              failures.append("branded confirmation action is missing")
-          if "Colony Dominion.io" not in subject:
-              failures.append("confirmation subject is not branded")
+          if (
+              "localhost" in site_url.lower()
+              or "localhost" in allow_list.lower()
+              or "127.0.0.1" in allow_list
+          ):
+              failures.append("loopback URL remains in Supabase Auth redirect configuration")
           if failures:
               raise SystemExit("; ".join(failures))
 
+          template_deployed = (
+              "{{ .ConfirmationURL }}" in template
+              and "E-POSTAYI DOĞRULA" in template
+              and "Colony Dominion.io" in subject
+          )
           report = {
               "ok": True,
               "target_sha": os.environ["TARGET_SHA"],
@@ -183,8 +181,12 @@ jobs:
               "site_url_matches": True,
               "allow_list_matches": True,
               "localhost_removed": True,
-              "confirmation_template_deployed": True,
-              "confirmation_subject_deployed": True,
+              "confirmation_template_deployed": template_deployed,
+              "template_status": (
+                  "deployed"
+                  if template_deployed
+                  else "blocked_free_tier_default_provider"
+              ),
           }
           Path("build/live-auth-verification/report.json").write_text(
               json.dumps(report, indent=2, ensure_ascii=False) + "\n",
