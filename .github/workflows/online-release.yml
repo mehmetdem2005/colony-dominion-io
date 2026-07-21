@@ -10,7 +10,7 @@ on:
       - "gameplay/network/**"
       - "gameplay/world/**"
       - "tools/**"
-      - "tests/online_*"
+      - "tests/**"
       - "project.godot"
       - "export_presets.cfg"
   pull_request:
@@ -20,7 +20,7 @@ on:
       - "gameplay/network/**"
       - "gameplay/world/**"
       - "tools/**"
-      - "tests/online_*"
+      - "tests/**"
       - "project.godot"
       - "export_presets.cfg"
       - ".github/workflows/online-release.yml"
@@ -101,6 +101,7 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run typecheck
+          npm run test:policy
       - name: Build dedicated server
         run: tools/build_dedicated_server.sh
       - name: Build container image

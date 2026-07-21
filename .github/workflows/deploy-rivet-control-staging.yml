@@ -39,11 +39,12 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
       REGIONS_JSON: ${{ vars.REGIONS_JSON }}
-      SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
+      SUPPORTED_BUILD_ID: PHASE-05.5-GOOGLE-BOT-BACKFILL
       PROTOCOL_VERSION: "4"
-      MIN_PLAYERS: "2"
+      MIN_PLAYERS: "1"
       MAX_PLAYERS: "10"
       QUEUE_TTL_SECONDS: "120"
+      BOT_BACKFILL_WAIT_SECONDS: "30"
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
 
@@ -72,7 +73,7 @@ jobs:
           test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
-          test "$MIN_PLAYERS" = "2"
+          test "$MIN_PLAYERS" = "1"
           test "$MAX_PLAYERS" = "10"
           test "$PROTOCOL_VERSION" = "4"
           echo "::add-mask::$RIVET_CLOUD_TOKEN"
@@ -241,6 +242,7 @@ jobs:
               --env "MIN_PLAYERS=${MIN_PLAYERS}" \
               --env "MAX_PLAYERS=${MAX_PLAYERS}" \
               --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
+              --env "BOT_BACKFILL_WAIT_SECONDS=${BOT_BACKFILL_WAIT_SECONDS}" \
               --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \
               --env "RIVET_STARTUP_CANARY=1" \
               2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"
@@ -253,7 +255,7 @@ jobs:
             if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
               break
             fi
-            if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
+            if grep -Eqi '429 Too Many Requests|500 Internal Server Error|internal server error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
               if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
                 sleep $((15 * (2 ** (ATTEMPT - 1))))
                 continue
@@ -385,7 +387,7 @@ jobs:
             --write-out '%{http_code}' \
             --header 'Content-Type: application/json' \
             --request POST \
-            --data '{"player_id":"00000000-0000-4000-8000-000000000001","display_name":"Canary","region_preference":"auto","build_id":"PHASE-05.4-RIVET-FULL-ONLINE","protocol_version":4}' \
+            --data '{"player_id":"00000000-0000-4000-8000-000000000001","display_name":"Canary","region_preference":"auto","build_id":"PHASE-05.5-GOOGLE-BOT-BACKFILL","protocol_version":4}' \
             "$RIVET_CONTROL_BASE_URL/v1/matchmaking/join")"
           test "$UNAUTHORIZED_CODE" = "401"
 
@@ -437,7 +439,7 @@ jobs:
               raise SystemExit("refusing to embed a Supabase secret key")
           config = {
               "environment": "production",
-              "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
+              "build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
               "protocol_version": 4,
               "supabase_url": os.environ["SUPABASE_URL"].rstrip("/"),
               "supabase_publishable_key": publishable_key,
@@ -511,10 +513,11 @@ jobs:
               "memory": "2Gi",
               "max_concurrent_actors_per_instance": 3,
               "max_scale": 4,
-              "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
+              "build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
               "protocol_version": 4,
-              "min_players": 2,
+              "min_players": 1,
               "max_players": 10,
+              "bot_backfill_wait_seconds": 30,
           }
           Path("build/rivet-staging/status.json").write_text(
               json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

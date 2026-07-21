@@ -130,6 +130,7 @@ jobs:
           set -euo pipefail
           npm install --no-audit --no-fund
           npm run typecheck
+          npm run test:policy
           npm run build
 
       - name: Build validated dedicated server
@@ -148,6 +149,12 @@ jobs:
           set -euo pipefail
           "$GODOT_BIN" --headless --path . \
             --script res://tests/auth_confirmation_flow_test.gd
+
+      - name: Run Google OAuth and bot backfill regression
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path . \
+            --script res://tests/google_oauth_bot_backfill_test.gd
 
       - name: Verify live Rivet control surface
         run: |

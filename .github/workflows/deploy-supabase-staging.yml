@@ -26,6 +26,11 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       COLONY_PROJECT_NAME: ${{ vars.COLONY_PROJECT_NAME }}
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      AUTH_SMTP_ADMIN_EMAIL: ${{ vars.AUTH_SMTP_ADMIN_EMAIL }}
+      AUTH_SMTP_SENDER_NAME: ${{ vars.AUTH_SMTP_SENDER_NAME || 'Colony Dominion.io' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -65,6 +70,28 @@ jobs:
           npx --yes supabase@latest functions deploy auth-confirmed \
             --project-ref "$SUPABASE_PROJECT_REF" \
             --no-verify-jwt
+
+      - name: Deploy Google OAuth handoff Edge Function
+        timeout-minutes: 8
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          npx --yes supabase@latest functions deploy oauth-google-handoff \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --no-verify-jwt
+
+      - name: Verify Google OAuth handoff Edge Function
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          FUNCTION_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/health"
+          curl --fail --silent --show-error \
+            --retry 12 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            "$FUNCTION_URL" \
+            | tee build/diagnostics/google-oauth-handoff-health.json \
+            | grep -q 'colony-google-oauth-handoff'
 
       - name: Verify public auth confirmation Edge Function
         timeout-minutes: 3
@@ -108,7 +135,7 @@ jobs:
           if expected_ref and supabase.get("project_ref") != expected_ref:
               raise SystemExit("deployment report points to the wrong Supabase project")
           verification = supabase.get("verification", {})
-          if verification.get("verified_table_count", 0) < 12:
+          if verification.get("verified_table_count", 0) < 13:
               raise SystemExit("Supabase table verification did not pass")
           for key in (
               "authoritative_result_function",
@@ -126,9 +153,32 @@ jobs:
           )
           if site_url != expected_site_url:
               raise SystemExit("Supabase Auth site URL does not point to the Edge Function")
-          for key in ("redirect_allowlisted", "localhost_removed"):
+          for key in ("redirect_allowlisted", "google_callback_allowlisted", "localhost_removed"):
               if not auth_confirmation.get(key):
                   raise SystemExit(f"Supabase Auth confirmation verification failed: {key}")
+          smtp = supabase.get("smtp", {})
+          smtp_credentials_present = bool(
+              os.environ.get("RESEND_API_KEY", "").strip()
+              and os.environ.get("AUTH_SMTP_ADMIN_EMAIL", "").strip()
+          )
+          expected_smtp_status = "configured" if smtp_credentials_present else "credentials_missing"
+          if str(smtp.get("status", "")) != expected_smtp_status:
+              raise SystemExit(f"Unexpected SMTP status: {smtp.get('status')}")
+          if smtp_credentials_present and not smtp.get("configured"):
+              raise SystemExit("Resend credentials exist but SMTP is not configured")
+          google_oauth = supabase.get("google_oauth", {})
+          google_status = str(google_oauth.get("status", ""))
+          credentials_present = bool(
+              os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+              and os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+          )
+          expected_google_status = "enabled" if credentials_present else "credentials_missing"
+          if google_status != expected_google_status:
+              raise SystemExit(
+                  f"Unexpected Google OAuth provider status: {google_status}"
+              )
+          if credentials_present and not google_oauth.get("enabled"):
+              raise SystemExit("Google OAuth credentials exist but provider is not enabled")
           template_status = str(auth_confirmation.get("template_status", ""))
           if template_status not in {
               "deployed",
@@ -158,4 +208,6 @@ jobs:
             config/backend_config.json
             backend/supabase/email_templates/confirmation.html
             backend/supabase/functions/auth-confirmed/index.ts
+            backend/supabase/functions/oauth-google-handoff/index.ts
+            backend/supabase/migrations/202607210006_google_oauth_handoffs.sql
             build/diagnostics/

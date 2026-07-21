@@ -95,6 +95,7 @@ jobs:
             tests/online_security_contract_test.gd
             tests/online_transport_regression_test.gd
             tests/online_production_completion_test.gd
+            tests/google_oauth_bot_backfill_test.gd
           )
           for test_path in "${tests[@]}"; do
             "$GODOT_BIN" --headless --path . --script "res://$test_path"
