@@ -1,4 +1,4 @@
-target_sha=92a6ba55658208d27a2dc86a9a11d6588f47d5e7
-workflow=deploy-rivet-control-staging.yml
-artifact=colony-dominion-rivet-full-online-staging
-observer_version=3
+target_sha=8617b2e331f068facb9205b4a0cbc8a08cee79b7
+workflow=deploy-rivet-full-online-direct.yml
+artifact=colony-dominion-rivet-direct-staging
+observer_version=4
