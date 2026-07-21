@@ -13,6 +13,8 @@ run/max_fps.mobile=60
 
 [autoload]
 AudioSystem="*res://audio/scripts/audio_system.gd"
+DisplaySettings="*res://autoload/display_settings.gd"
+InputSettings="*res://autoload/input_settings.gd"
 UnitCatalog="*res://autoload/unit_catalog.gd"
 NetworkSession="*res://autoload/network_session.gd"
 GameSession="*res://autoload/game_session.gd"

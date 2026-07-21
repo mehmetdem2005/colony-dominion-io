@@ -13,6 +13,7 @@ var _region_button: Button
 var _account_button: Button
 var _legal_button: Button
 var _profile_button: Button
+var _settings_button: Button
 var _status_label: Label
 var _region_status: Label
 var _account_status: Label
@@ -21,6 +22,7 @@ var _region_panel: RegionSelectorPanel
 var _auth_panel: AuthPanel
 var _legal_panel: LegalGatePanel
 var _profile_panel: OnlineProfilePanel
+var _settings_panel: SettingsPanel
 var _starting: bool = false
 var _matchmaking: bool = false
 var _matchmaking_generation: int = 0
@@ -164,6 +166,15 @@ func _build_menu() -> void:
 	_profile_button.pressed.connect(_open_profile_panel)
 	account_row.add_child(_profile_button)
 
+	_settings_button = Button.new()
+	_settings_button.text = "⚙ AYARLAR"
+	_settings_button.custom_minimum_size = Vector2(440.0, 52.0)
+	_settings_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_settings_button.add_theme_font_size_override("font_size", 18)
+	_settings_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_settings_button.pressed.connect(_open_settings)
+	box.add_child(_settings_button)
+
 	_status_label = Label.new()
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -211,6 +222,10 @@ func _build_modals() -> void:
 	_profile_panel = OnlineProfilePanel.new()
 	_profile_panel.closed.connect(_on_modal_closed)
 	add_child(_profile_panel)
+
+	_settings_panel = SettingsPanel.new()
+	_settings_panel.closed.connect(_on_settings_closed)
+	add_child(_settings_panel)
 
 
 func _connect_services() -> void:
@@ -398,6 +413,16 @@ func _open_profile_panel() -> void:
 	_profile_panel.open_panel()
 
 
+func _open_settings() -> void:
+	_set_modal_visible(true)
+	_settings_panel.open_panel()
+
+
+func _on_settings_closed() -> void:
+	_set_modal_visible(false)
+	_refresh_status()
+
+
 func _on_account_pressed() -> void:
 	if OnlineServices.auth.has_session():
 		GameTransport.clear_persisted_reconnect_session()
@@ -510,6 +535,7 @@ func _set_buttons_enabled(enabled: bool) -> void:
 	_account_button.disabled = not enabled
 	_legal_button.disabled = not enabled
 	_profile_button.disabled = not enabled
+	_settings_button.disabled = not enabled
 	_name_input.editable = enabled
 
 

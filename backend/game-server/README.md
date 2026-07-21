@@ -1,4 +1,4 @@
-# Godot Dedicated Game Server — Phase 05.3
+# Godot Dedicated Game Server — Phase 05.4
 
 Export the `Dedicated Server` preset first:
 
@@ -9,7 +9,7 @@ godot --headless --path . --export-release "Dedicated Server"
 Build the authoritative server image from the Godot project root:
 
 ```bash
-docker build -f backend/game-server/Dockerfile -t colony-dominion-server:05.3.0 .
+docker build -f backend/game-server/Dockerfile -t colony-dominion-server:05.4.0 .
 ```
 
 The container now includes:
