@@ -1,0 +1,199 @@
+name: Verify Google Auth Bot Backfill Live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-google-bot-live.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: staging
+    env:
+      TARGET_SHA: 6a65b15c51461b5e0cb9881e748bd5b75455b21a
+      GH_TOKEN: ${{ github.token }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Locate main deployment runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/live-google-bot
+          locate_run() {
+            local workflow="$1"
+            local run_id=""
+            for _ in $(seq 1 120); do
+              run_id="$(
+                gh run list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --workflow "$workflow" \
+                  --branch main \
+                  --limit 50 \
+                  --json databaseId,headSha \
+                  --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
+                  | head -n 1
+              )"
+              [ -n "$run_id" ] && break
+              sleep 5
+            done
+            test -n "$run_id" || {
+              echo "Deployment run not found: $workflow" >&2
+              exit 2
+            }
+            printf '%s' "$run_id"
+          }
+          SUPABASE_RUN_ID="$(locate_run deploy-supabase-staging.yml)"
+          RIVET_RUN_ID="$(locate_run deploy-rivet-control-staging.yml)"
+          echo "SUPABASE_RUN_ID=$SUPABASE_RUN_ID" >> "$GITHUB_ENV"
+          echo "RIVET_RUN_ID=$RIVET_RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for Supabase deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run watch "$SUPABASE_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$SUPABASE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
+            > build/live-google-bot/supabase-run.json
+
+      - name: Wait for Rivet deployment
+        id: rivet
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          gh run watch "$RIVET_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          status=$?
+          gh run view "$RIVET_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
+            > build/live-google-bot/rivet-run.json
+          echo "RIVET_WATCH_STATUS=$status" >> "$GITHUB_ENV"
+          exit "$status"
+
+      - name: Verify live OAuth handoff and Auth configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import secrets
+          import urllib.error
+          import urllib.request
+          import uuid
+          from pathlib import Path
+
+          token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
+          project_ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
+          if not token or not project_ref:
+              raise SystemExit("Supabase staging verification credentials are missing")
+
+          supabase_url = f"https://{project_ref}.supabase.co"
+          function_url = f"{supabase_url}/functions/v1/oauth-google-handoff"
+
+          def request(url: str, method: str = "GET", body=None, headers=None):
+              payload = None if body is None else json.dumps(body).encode("utf-8")
+              merged = {
+                  "accept": "application/json",
+                  "content-type": "application/json",
+                  "user-agent": "Colony-Live-Google-Bot-Verification/1.0",
+              }
+              if headers:
+                  merged.update(headers)
+              req = urllib.request.Request(url, data=payload, method=method, headers=merged)
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  raw = response.read().decode("utf-8", errors="replace")
+                  return response.status, json.loads(raw) if raw else {}
+
+          status, health = request(function_url)
+          if status != 200 or health.get("service") != "colony-google-oauth-handoff":
+              raise SystemExit("OAuth handoff health endpoint is not ready")
+
+          request_id = str(uuid.uuid4())
+          secret = secrets.token_urlsafe(48)
+          secret_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+          status, started = request(
+              f"{function_url}/begin",
+              method="POST",
+              body={"request_id": request_id, "secret_hash": secret_hash},
+          )
+          authorize_url = str(started.get("authorize_url", ""))
+          if status != 200 or not authorize_url.startswith(f"{supabase_url}/auth/v1/authorize"):
+              raise SystemExit("OAuth handoff begin flow failed")
+          callback_url = f"{function_url}/callback/{request_id}"
+          if callback_url not in authorize_url and "redirect_to=" not in authorize_url:
+              raise SystemExit("OAuth authorize URL is missing callback routing")
+          status, cancelled = request(
+              f"{function_url}/cancel/{request_id}",
+              method="DELETE",
+              headers={"x-colony-oauth-secret": secret},
+          )
+          if status != 200 or not cancelled.get("ok"):
+              raise SystemExit("OAuth handoff cleanup failed")
+
+          config_request = urllib.request.Request(
+              f"https://api.supabase.com/v1/projects/{project_ref}/config/auth",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/json",
+                  "User-Agent": "Colony-Live-Google-Bot-Verification/1.0",
+              },
+          )
+          with urllib.request.urlopen(config_request, timeout=30) as response:
+              auth = json.loads(response.read().decode("utf-8"))
+
+          allow_list = str(auth.get("uri_allow_list", ""))
+          callback_pattern = f"{function_url}/callback/**"
+          if callback_pattern not in allow_list:
+              raise SystemExit("Google OAuth callback pattern is absent from Auth allow-list")
+          if "localhost" in allow_list.lower() or "127.0.0.1" in allow_list:
+              raise SystemExit("Loopback URL remains in Auth allow-list")
+
+          rivet = json.loads(Path("build/live-google-bot/rivet-run.json").read_text(encoding="utf-8"))
+          report = {
+              "ok": True,
+              "target_sha": os.environ["TARGET_SHA"],
+              "supabase_run_id": int(os.environ["SUPABASE_RUN_ID"]),
+              "rivet_run_id": int(os.environ["RIVET_RUN_ID"]),
+              "oauth_handoff_health": True,
+              "oauth_begin_cancel_roundtrip": True,
+              "google_callback_allowlisted": True,
+              "google_provider_enabled": bool(auth.get("external_google_enabled")),
+              "google_client_id_present": bool(str(auth.get("external_google_client_id", "")).strip()),
+              "smtp_host": str(auth.get("smtp_host", "")),
+              "smtp_user": str(auth.get("smtp_user", "")),
+              "smtp_admin_email_present": bool(str(auth.get("smtp_admin_email", "")).strip()),
+              "rivet_conclusion": str(rivet.get("conclusion", "")),
+          }
+          Path("build/live-google-bot/report.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report, ensure_ascii=False))
+          if report["rivet_conclusion"] != "success":
+              raise SystemExit("Rivet 05.5 deployment did not complete successfully")
+          PY
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: colony-live-google-bot-verification
+          retention-days: 2
+          if-no-files-found: warn
+          path: build/live-google-bot/
