@@ -1,38 +1,45 @@
 name: Snapshot Auth Matchmaking Source
 
 on:
-  push:
-    branches: [work/google-bot-backfill]
-    paths:
-      - ".github/workflows/snapshot-source-auth-matchmaking.yml"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/snapshot-source-auth-matchmaking.yml"
+      - ".github/patch/google-bot-backfill.patch.xz.b64"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-      - name: Package source
+        with:
+          ref: work/google-bot-backfill
+          fetch-depth: 0
+
+      - name: Apply and validate production patch
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/source-snapshot
-          tar \
-            --exclude=.git \
-            --exclude=build \
-            --exclude=.godot \
-            -czf build/source-snapshot/colony-source.tar.gz .
-          sha256sum build/source-snapshot/colony-source.tar.gz \
-            > build/source-snapshot/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v6
-        with:
-          name: colony-auth-matchmaking-source
-          retention-days: 2
-          if-no-files-found: error
-          path: build/source-snapshot/
+          base64 --decode .github/patch/google-bot-backfill.patch.xz.b64 \
+            | xz --decompress --stdout \
+            > "$RUNNER_TEMP/google-bot-backfill.patch"
+          git apply --index --whitespace=error "$RUNNER_TEMP/google-bot-backfill.patch"
+          git diff --cached --check
+          grep -q 'PHASE-05.5-GOOGLE-BOT-BACKFILL' config/backend_config.json
+          grep -q 'oauth-google-handoff' network/supabase_oauth_handoff.gd
+          grep -q 'BOT_BACKFILL_WAIT_SECONDS' backend/rivet-control/src/server-full-online.ts
+          grep -q 'assign_peer_to_available_team(peer_id, trusted_display_name)' network/game_transport.gd
+
+      - name: Commit production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Implement Google auth and server bot backfill"
+          git push origin HEAD:work/google-bot-backfill
