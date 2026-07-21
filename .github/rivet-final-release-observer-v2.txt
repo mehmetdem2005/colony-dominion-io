@@ -1,0 +1,3 @@
+target_sha=ed81689f1a5aea2e54e55c85e1635dbd7337f291
+workflow=deploy-rivet-control-staging.yml
+artifact=colony-dominion-rivet-full-online-staging
