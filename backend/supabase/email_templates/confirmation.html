@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>E-posta adresini doğrula</title>
+</head>
+<body style="margin:0;padding:0;background:#0b0d0d;color:#f4f2e9;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#0b0d0d;padding:28px 14px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;background:#121515;border:1px solid #394140;border-radius:22px;overflow:hidden;">
+          <tr>
+            <td style="padding:34px 30px 10px;text-align:center;">
+              <div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:2px;color:#f1b83b;">COLONY DOMINION ID</div>
+              <h1 style="margin:12px 0 0;font-size:30px;line-height:38px;color:#f4f2e9;">E-posta adresini doğrula</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 30px 0;text-align:center;color:#b8bfba;font-size:16px;line-height:26px;">
+              Hesabını etkinleştirmek ve çevrim içi maçlara katılmak için aşağıdaki düğmeye dokun.
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:28px 30px 18px;">
+              <a href="{{ .ConfirmationURL }}" style="display:inline-block;min-width:240px;padding:16px 24px;border:1px solid #ffd06b;border-radius:14px;background:#f1b83b;color:#17130a;text-decoration:none;font-size:16px;line-height:20px;font-weight:700;text-align:center;">E-POSTAYI DOĞRULA</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 30px 26px;text-align:center;color:#7f8984;font-size:13px;line-height:21px;">
+              Bu bağlantı yalnızca hesap doğrulaması içindir. Colony Dominion.io senden bu e-postada şifre veya ödeme bilgisi istemez.
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 24px;background:#0d1010;border-top:1px solid #2d3433;color:#7f8984;font-size:12px;line-height:19px;word-break:break-all;">
+              Düğme açılmazsa bağlantıyı tarayıcıya kopyala:<br>
+              <a href="{{ .ConfirmationURL }}" style="color:#f1b83b;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

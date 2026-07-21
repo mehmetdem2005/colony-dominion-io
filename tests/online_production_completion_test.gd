@@ -11,6 +11,11 @@ const REQUIRED_FILES: Array[String] = [
 	"res://scenes/online_soak_client.tscn",
 	"res://ui/main_menu_layout_guard.gd",
 	"res://ui/hud_elimination_lifecycle.gd",
+	"res://ui/main_menu_modal_visibility.gd",
+	"res://ui/colony_ui_kit.gd",
+	"res://ui/legal_consent_card.gd",
+	"res://backend/rivet-control/src/auth-confirmation-page.ts",
+	"res://backend/supabase/email_templates/confirmation.html",
 	"res://backend/rivet-control/src/game-server-actor.ts",
 	"res://backend/rivet-control/src/rivet-native-allocator.ts",
 	"res://backend/rivet-control/src/startup-canary.ts",
@@ -36,6 +41,7 @@ func _run() -> void:
 		failures.append("Online capacity must match the ten colony slots")
 	_validate_mobile_input_and_orientation(failures)
 	_validate_ui_lifecycle(failures)
+	_validate_consent_and_auth_confirmation(failures)
 	var config: String = FileAccess.get_file_as_string("res://config/backend_config.json")
 	if not config.contains(BUILD_ID) or not config.contains('"protocol_version": 4'):
 		failures.append("Client backend configuration is not pinned to Phase 05.4")
@@ -112,6 +118,8 @@ func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
 		and not menu_scene.contains("main_menu_layout_guard.gd")
 	):
 		failures.append("Main menu must retain the safe-area layout guard")
+	if not menu_scene.contains("main_menu_modal_visibility.gd"):
+		failures.append("Main menu must hide its base panel behind modal content")
 	var hud_scene := FileAccess.get_file_as_string("res://scenes/ui/hud.tscn")
 	if not hud_scene.contains("hud_elimination_lifecycle.gd"):
 		failures.append("Offline HUD must retain the local elimination lifecycle controller")
@@ -127,3 +135,26 @@ func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
 	for marker in ["_local_nest", "_refresh_local_lifecycle", "_set_camera_anchor"]:
 		if not online_client.contains(marker):
 			failures.append("Online elimination recovery is missing: %s" % marker)
+
+
+func _validate_consent_and_auth_confirmation(failures: PackedStringArray) -> void:
+	var legal_panel := FileAccess.get_file_as_string("res://ui/legal_gate_panel.gd")
+	for marker in ["LegalConsentCard", "_update_continue_state", "ONAYLARI KAYDET VE DEVAM ET"]:
+		if not legal_panel.contains(marker):
+			failures.append("Professional consent flow is missing: %s" % marker)
+	if legal_panel.contains("CheckBox.new()"):
+		failures.append("Consent flow must not use tiny default checkboxes")
+	var auth_client := FileAccess.get_file_as_string("res://network/supabase_auth_client.gd")
+	for marker in ["redirect_to=", "resend_signup_confirmation", "_auth_endpoint"]:
+		if not auth_client.contains(marker):
+			failures.append("Supabase confirmation flow is missing: %s" % marker)
+	var control_server := FileAccess.get_file_as_string(
+		"res://backend/rivet-control/src/server-full-online.ts"
+	)
+	if not control_server.contains("/v1/auth/confirmed"):
+		failures.append("Public auth confirmation page route is missing")
+	var confirmation_template := FileAccess.get_file_as_string(
+		"res://backend/supabase/email_templates/confirmation.html"
+	)
+	if not confirmation_template.contains("{{ .ConfirmationURL }}"):
+		failures.append("Supabase confirmation template must retain ConfirmationURL")

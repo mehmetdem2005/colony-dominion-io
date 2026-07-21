@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu.gd" id="1_main_menu"]
 [ext_resource type="Script" path="res://ui/main_menu_layout_guard.gd" id="2_layout"]
+[ext_resource type="Script" path="res://ui/main_menu_modal_visibility.gd" id="3_modal_visibility"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -15,3 +16,7 @@ script = ExtResource("1_main_menu")
 [node name="ResponsiveLayoutGuard" type="Node" parent="."]
 process_mode = 3
 script = ExtResource("2_layout")
+
+[node name="ModalVisibilityController" type="Node" parent="."]
+process_mode = 3
+script = ExtResource("3_modal_visibility")

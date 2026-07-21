@@ -62,14 +62,16 @@ func sign_in_email(email: String, password: String) -> Dictionary:
 	return _consume_auth_response(response)
 
 
-func sign_up_email(email: String, password: String, display_name: String) -> Dictionary:
+func sign_up_email(
+	email: String, password: String, display_name: String, redirect_url: String = ""
+) -> Dictionary:
 	if not is_configured():
 		return _fail("Supabase istemci ayarları eksik")
 	var response: Dictionary = await (
 		_http
 		. request_json(
 			HTTPClient.METHOD_POST,
-			"%s/auth/v1/signup" % _base_url,
+			_auth_endpoint("signup", redirect_url),
 			_base_headers(),
 			{
 				"email": email.strip_edges(),
@@ -85,6 +87,20 @@ func sign_up_email(email: String, password: String, display_name: String) -> Dic
 			if body.has("access_token"):
 				_set_session(body)
 			return {"ok": true, "body": body}
+	return _fail(_extract_error(response))
+
+
+func resend_signup_confirmation(email: String, redirect_url: String = "") -> Dictionary:
+	if not is_configured():
+		return _fail("Supabase istemci ayarları eksik")
+	var response: Dictionary = await _http.request_json(
+		HTTPClient.METHOD_POST,
+		_auth_endpoint("resend", redirect_url),
+		_base_headers(),
+		{"type": "signup", "email": email.strip_edges()}
+	)
+	if bool(response.get("ok", false)):
+		return {"ok": true, "body": response.get("body", {})}
 	return _fail(_extract_error(response))
 
 
@@ -148,6 +164,14 @@ func _clear_session() -> void:
 	_session.clear()
 	SecureLocalVault.remove(SESSION_PATH)
 	session_changed.emit({})
+
+
+func _auth_endpoint(path: String, redirect_url: String = "") -> String:
+	var endpoint := "%s/auth/v1/%s" % [_base_url, path.trim_prefix("/")]
+	var redirect := redirect_url.strip_edges()
+	if redirect.begins_with("https://"):
+		return "%s?redirect_to=%s" % [endpoint, redirect.uri_encode()]
+	return endpoint
 
 
 func _base_headers() -> PackedStringArray:
