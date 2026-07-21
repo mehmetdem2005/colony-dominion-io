@@ -17,7 +17,7 @@ func _ready() -> void:
 
 
 func configure(base_url: String, build_id: String, protocol_version: int) -> void:
-	_base_url = base_url.trim_suffix("/")
+	_base_url = base_url.strip_edges()
 	_build_id = build_id
 	_protocol_version = maxi(protocol_version, 1)
 
@@ -29,14 +29,8 @@ func is_configured() -> bool:
 	)
 
 
-# The RivetKit Engine gateway base URL may carry a routing query string
-# (rvt-namespace, rvt-token, ...). Insert the REST path before that query so the
-# composed request URL stays valid.
 func _endpoint_url(path_suffix: String) -> String:
-	var query_index: int = _base_url.find("?")
-	if query_index < 0:
-		return _base_url + path_suffix
-	return _base_url.substr(0, query_index) + path_suffix + _base_url.substr(query_index)
+	return QuerySafeUrl.append_path(_base_url, path_suffix)
 
 
 func join_queue(
