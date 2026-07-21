@@ -80,10 +80,14 @@ func _validate_mobile_input_and_orientation(failures: PackedStringArray) -> void
 	)
 	if not touch_emulation:
 		failures.append("Android touch-to-button mouse emulation must remain enabled")
-	var orientation: int = int(ProjectSettings.get_setting("display/window/handheld/orientation", -1))
+	var orientation: int = int(
+		ProjectSettings.get_setting("display/window/handheld/orientation", -1)
+	)
 	if orientation != DisplayServer.SCREEN_SENSOR:
 		failures.append("Android orientation must remain in sensor mode")
-	var viewport_width: int = int(ProjectSettings.get_setting("display/window/size/viewport_width", 0))
+	var viewport_width: int = int(
+		ProjectSettings.get_setting("display/window/size/viewport_width", 0)
+	)
 	var viewport_height: int = int(
 		ProjectSettings.get_setting("display/window/size/viewport_height", 0)
 	)
