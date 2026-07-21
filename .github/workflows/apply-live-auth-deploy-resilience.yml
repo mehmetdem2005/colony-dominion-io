@@ -7,6 +7,12 @@ on:
     paths:
       - ".github/patch/live-auth-deploy-resilience.b64"
       - ".github/workflows/apply-live-auth-deploy-resilience.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/patch/live-auth-deploy-resilience.b64"
+      - ".github/workflows/apply-live-auth-deploy-resilience.yml"
 
 permissions:
   contents: write
