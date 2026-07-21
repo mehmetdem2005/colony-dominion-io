@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  prepare-workflow-commit:
+  prepare-workflow-blobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -42,7 +42,7 @@ jobs:
           from pathlib import Path
           import yaml
 
-          paths = (
+          for path in (
               Path('.github/workflows/build-online-test-apk.yml'),
               Path('.github/workflows/deploy-rivet-control-staging-v2.yml'),
               Path('.github/workflows/deploy-rivet-control-staging.yml'),
@@ -50,8 +50,7 @@ jobs:
               Path('.github/workflows/deploy-supabase-staging.yml'),
               Path('.github/workflows/online-release.yml'),
               Path('.github/workflows/validate-rivet-control.yml'),
-          )
-          for path in paths:
+          ):
               with path.open(encoding='utf-8') as handle:
                   if not isinstance(yaml.safe_load(handle), dict):
                       raise SystemExit(f'Invalid workflow: {path}')
@@ -60,7 +59,7 @@ jobs:
           grep -q 'BOT_BACKFILL_WAIT_SECONDS' .github/workflows/deploy-rivet-control-staging.yml
           grep -q 'GOOGLE_OAUTH_CLIENT_ID' .github/workflows/deploy-supabase-staging.yml
 
-      - name: Create Git commit object without moving branch
+      - name: Create workflow blobs and report
         shell: bash
         run: |
           set -euo pipefail
@@ -94,7 +93,7 @@ jobs:
                       'Authorization': f'Bearer {token}',
                       'Accept': 'application/vnd.github+json',
                       'X-GitHub-Api-Version': '2022-11-28',
-                      'User-Agent': 'Colony-Workflow-Commit-Builder/1.0',
+                      'User-Agent': 'Colony-Workflow-Blob-Builder/1.0',
                       'Content-Type': 'application/json',
                   },
               )
@@ -112,35 +111,20 @@ jobs:
                   {'content': Path(path).read_text(encoding='utf-8'), 'encoding': 'utf-8'},
               )
               entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': blob['sha']})
-          tree = request(
-              'POST',
-              f'/repos/{repo}/git/trees',
-              {'base_tree': parent['tree']['sha'], 'tree': entries},
-          )
-          commit = request(
-              'POST',
-              f'/repos/{repo}/git/commits',
-              {
-                  'message': 'Update Google auth and bot backfill release workflows',
-                  'tree': tree['sha'],
-                  'parents': [parent_sha],
-              },
-          )
           report = {
               'branch': branch,
               'parent_sha': parent_sha,
-              'tree_sha': tree['sha'],
-              'commit_sha': commit['sha'],
-              'paths': paths,
+              'base_tree_sha': parent['tree']['sha'],
+              'tree_entries': entries,
           }
-          output = Path('build/workflow-commit/workflow-commit.json')
+          output = Path('build/workflow-commit/workflow-blobs.json')
           output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
           print(json.dumps(report))
           PY
 
       - uses: actions/upload-artifact@v6
         with:
-          name: colony-google-bot-workflow-commit
+          name: colony-google-bot-workflow-blobs
           retention-days: 2
           if-no-files-found: error
-          path: build/workflow-commit/workflow-commit.json
+          path: build/workflow-commit/workflow-blobs.json
