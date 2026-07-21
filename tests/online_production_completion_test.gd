@@ -1,5 +1,7 @@
 extends SceneTree
 
+# Release gate for elimination recovery and safe-area UI behavior on Android.
+
 const REQUIRED_FILES: Array[String] = [
 	"res://network/reconnect_session_store.gd",
 	"res://network/secure_local_vault.gd",
@@ -7,6 +9,8 @@ const REQUIRED_FILES: Array[String] = [
 	"res://autoload/rivet_online_services.gd",
 	"res://tools/online_soak_client.gd",
 	"res://scenes/online_soak_client.tscn",
+	"res://ui/main_menu_layout_guard.gd",
+	"res://ui/hud_elimination_lifecycle.gd",
 	"res://backend/rivet-control/src/game-server-actor.ts",
 	"res://backend/rivet-control/src/rivet-native-allocator.ts",
 	"res://backend/rivet-control/src/startup-canary.ts",
@@ -31,6 +35,7 @@ func _run() -> void:
 	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
 		failures.append("Online capacity must match the ten colony slots")
 	_validate_mobile_input_and_orientation(failures)
+	_validate_ui_lifecycle(failures)
 	var config: String = FileAccess.get_file_as_string("res://config/backend_config.json")
 	if not config.contains(BUILD_ID) or not config.contains('"protocol_version": 4'):
 		failures.append("Client backend configuration is not pinned to Phase 05.4")
@@ -98,3 +103,27 @@ func _validate_mobile_input_and_orientation(failures: PackedStringArray) -> void
 	)
 	if stretch_aspect != "expand":
 		failures.append("Portrait and landscape support requires stretch aspect expand")
+
+
+func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
+	var menu_scene := FileAccess.get_file_as_string("res://scenes/main_menu.tscn")
+	if (
+		not menu_scene.contains("MainMenuLayoutGuard")
+		and not menu_scene.contains("main_menu_layout_guard.gd")
+	):
+		failures.append("Main menu must retain the safe-area layout guard")
+	var hud_scene := FileAccess.get_file_as_string("res://scenes/ui/hud.tscn")
+	if not hud_scene.contains("hud_elimination_lifecycle.gd"):
+		failures.append("Offline HUD must retain the local elimination lifecycle controller")
+	var online_hud := FileAccess.get_file_as_string("res://ui/online_match_hud.gd")
+	for marker in ["_apply_responsive_layout", "set_lifecycle_state", "_layout_portrait_controls"]:
+		if not online_hud.contains(marker):
+			failures.append("Online HUD lifecycle/layout is missing: %s" % marker)
+	if online_hud.contains("Vector2(1092.0, 528.0)"):
+		failures.append("Online HUD must not return to the fixed 1280x720 control layout")
+	var online_client := FileAccess.get_file_as_string(
+		"res://gameplay/network/online_match_client.gd"
+	)
+	for marker in ["_local_nest", "_refresh_local_lifecycle", "_set_camera_anchor"]:
+		if not online_client.contains(marker):
+			failures.append("Online elimination recovery is missing: %s" % marker)

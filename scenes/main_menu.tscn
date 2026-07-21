@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu.gd" id="1_main_menu"]
+[ext_resource type="Script" path="res://ui/main_menu_layout_guard.gd" id="2_layout"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -10,3 +11,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_main_menu")
+
+[node name="ResponsiveLayoutGuard" type="Node" parent="."]
+process_mode = 3
+script = ExtResource("2_layout")

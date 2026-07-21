@@ -8,11 +8,15 @@ var world_bounds := Rect2(-18000.0, -12000.0, 36000.0, 24000.0)
 var _world_stream: WorldStreamManager
 var _proxies: Dictionary = {}
 var _local_commander: NetworkEntityProxy = null
+var _local_nest: NetworkEntityProxy = null
 var _movement_input := Vector2.ZERO
 var _joystick_input := Vector2.ZERO
 var _input_left: float = 0.0
 var _latest_player_state: Dictionary = {}
 var _leaving: bool = false
+var _input_enabled: bool = true
+var _had_local_anchor: bool = false
+var _lifecycle_state: StringName = &"connecting"
 
 @onready var ground_root: Node2D = $World/Ground
 @onready var decoration_root: Node2D = $World/Decorations
@@ -24,7 +28,7 @@ var _leaving: bool = false
 
 func _ready() -> void:
 	if not GameTransport.is_authenticated():
-		push_error("Online match scene opened without an authenticated ENet session")
+		push_error("Online match scene opened without an authenticated game session")
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 		return
 	GameSession.bind_match(self)
@@ -37,7 +41,7 @@ func _ready() -> void:
 	hud.command_requested.connect(_on_command_requested)
 	hud.exit_requested.connect(_exit_to_menu)
 	camera.set_world_bounds(world_bounds)
-	camera.set_safe_frame_insets(Vector4(24.0, 96.0, 24.0, 208.0))
+	camera.set_safe_frame_insets(Vector4(24.0, 112.0, 24.0, 224.0))
 	_world_stream = WORLD_STREAM_SCRIPT.new() as WorldStreamManager
 	add_child(_world_stream)
 	_world_stream.configure(
@@ -51,13 +55,23 @@ func _exit_tree() -> void:
 		GameTransport.snapshot_received.disconnect(_on_snapshot_received)
 	if GameTransport.player_state_received.is_connected(_on_player_state_received):
 		GameTransport.player_state_received.disconnect(_on_player_state_received)
+	if GameTransport.client_disconnected.is_connected(_on_disconnected):
+		GameTransport.client_disconnected.disconnect(_on_disconnected)
+	if GameTransport.reconnect_failed.is_connected(_on_reconnect_failed):
+		GameTransport.reconnect_failed.disconnect(_on_reconnect_failed)
+	if GameTransport.match_ended.is_connected(_on_match_ended):
+		GameTransport.match_ended.disconnect(_on_match_ended)
 	AudioSystem.enter_menu()
 
 
 func _physics_process(delta: float) -> void:
-	var keyboard: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var keyboard := Vector2.ZERO
+	if _input_enabled:
+		keyboard = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	_movement_input = (
-		keyboard.limit_length(1.0) if keyboard.length_squared() > 0.01 else _joystick_input
+		keyboard.limit_length(1.0)
+		if keyboard.length_squared() > 0.01
+		else (_joystick_input if _input_enabled else Vector2.ZERO)
 	)
 	if is_instance_valid(_local_commander):
 		_local_commander.set_prediction_input(_movement_input)
@@ -65,7 +79,8 @@ func _physics_process(delta: float) -> void:
 	if _input_left <= 0.0:
 		_input_left = 1.0 / NetworkProtocol.INPUT_HZ
 		GameTransport.send_command(&"move", {"vector": _movement_input})
-	_handle_keyboard_commands()
+	if _input_enabled:
+		_handle_keyboard_commands()
 
 
 func _on_snapshot_received(snapshot: Dictionary) -> void:
@@ -86,6 +101,7 @@ func _on_snapshot_received(snapshot: Dictionary) -> void:
 	elif despawned_variant is Array:
 		for entity_id_variant in despawned_variant:
 			_remove_proxy(int(entity_id_variant))
+	_refresh_local_lifecycle()
 
 
 func _apply_entity_snapshot(data: Dictionary, server_tick: int) -> void:
@@ -101,12 +117,14 @@ func _apply_entity_snapshot(data: Dictionary, server_tick: int) -> void:
 		)
 		_proxies[entity_id] = proxy
 	proxy.apply_snapshot(data, server_tick)
-	var is_local: bool = (
-		int(data.get("team", -1)) == GameTransport.get_local_team_id()
-		and StringName(data.get("kind", &"")) == &"commander"
-	)
-	if is_local:
+	var local_team: bool = int(data.get("team", -1)) == GameTransport.get_local_team_id()
+	if not local_team:
+		return
+	var kind := StringName(data.get("kind", &""))
+	if kind == &"commander":
 		_bind_local_commander(proxy)
+	elif kind == &"nest":
+		_bind_local_nest(proxy)
 
 
 func _bind_local_commander(proxy: NetworkEntityProxy) -> void:
@@ -116,10 +134,14 @@ func _bind_local_commander(proxy: NetworkEntityProxy) -> void:
 		_local_commander.set_local_commander(false)
 	_local_commander = proxy
 	_local_commander.set_local_commander(true)
-	camera.set_target(_local_commander)
-	if is_instance_valid(_world_stream):
-		_world_stream.set_interest_target(_local_commander)
-		_world_stream.prime_initial_area()
+	_had_local_anchor = true
+
+
+func _bind_local_nest(proxy: NetworkEntityProxy) -> void:
+	if _local_nest == proxy:
+		return
+	_local_nest = proxy
+	_had_local_anchor = true
 
 
 func _remove_proxy(entity_id: int) -> void:
@@ -128,22 +150,75 @@ func _remove_proxy(entity_id: int) -> void:
 	if not is_instance_valid(proxy):
 		return
 	if proxy == _local_commander:
+		_local_commander.set_local_commander(false)
 		_local_commander = null
-		camera.set_target(null)
+	if proxy == _local_nest:
+		_local_nest = null
 	proxy.queue_free()
+
+
+func _refresh_local_lifecycle() -> void:
+	if _lifecycle_state == &"finished":
+		return
+	if is_instance_valid(_local_commander):
+		_set_lifecycle(&"active")
+		_set_camera_anchor(_local_commander)
+		return
+	if is_instance_valid(_local_nest):
+		_set_lifecycle(
+			&"respawning",
+			"Komutanın öldü. Kamera yuvayı takip ediyor; yeniden doğduğunda kontrol otomatik dönecek."
+		)
+		_set_camera_anchor(_local_nest)
+		return
+	if _had_local_anchor:
+		_set_lifecycle(
+			&"eliminated",
+			"Yuvan ve komutanın yok edildi. Maçtan güvenli biçimde ana menüye dönebilirsin."
+		)
+		_set_camera_anchor(null)
+
+
+func _set_lifecycle(state: StringName, detail: String = "") -> void:
+	var changed: bool = _lifecycle_state != state
+	_lifecycle_state = state
+	_input_enabled = state == &"active"
+	if not _input_enabled:
+		_joystick_input = Vector2.ZERO
+		_movement_input = Vector2.ZERO
+		if is_instance_valid(_local_commander):
+			_local_commander.set_prediction_input(Vector2.ZERO)
+	if changed or state != &"active":
+		hud.set_lifecycle_state(state, detail)
+
+
+func _set_camera_anchor(anchor: Node2D) -> void:
+	camera.set_target(anchor)
+	if not is_instance_valid(_world_stream):
+		return
+	if is_instance_valid(anchor):
+		_world_stream.set_interest_target(anchor)
+		_world_stream.prime_initial_area()
+	else:
+		_world_stream.clear_interest_targets()
 
 
 func _on_player_state_received(state: Dictionary) -> void:
 	_latest_player_state = state.duplicate(true)
 	hud.apply_player_state(state)
+	if bool(state.get("eliminated", false)):
+		_set_lifecycle(&"eliminated", "Sunucu koloninin elendiğini doğruladı.")
 
 
 func _on_movement_changed(value: Vector2) -> void:
-	_joystick_input = value.limit_length(1.0) if value.is_finite() else Vector2.ZERO
+	_joystick_input = (
+		value.limit_length(1.0) if _input_enabled and value.is_finite() else Vector2.ZERO
+	)
 
 
 func _on_command_requested(command_type: StringName, payload: Dictionary) -> void:
-	GameTransport.send_command(command_type, payload)
+	if _input_enabled:
+		GameTransport.send_command(command_type, payload)
 
 
 func _handle_keyboard_commands() -> void:
@@ -162,10 +237,11 @@ func _handle_keyboard_commands() -> void:
 
 
 func _on_match_ended(winner_name: String) -> void:
-	hud.show_toast("Kazanan: %s" % winner_name)
+	_lifecycle_state = &"finished"
+	_input_enabled = false
 	_movement_input = Vector2.ZERO
-	await get_tree().create_timer(3.0, true, false, true).timeout
-	_exit_to_menu()
+	var player_won: bool = winner_name.strip_edges() == GameSession.player_name.strip_edges()
+	hud.show_match_result(winner_name, player_won)
 
 
 func _on_disconnected(message: String) -> void:
@@ -182,6 +258,7 @@ func _exit_to_menu() -> void:
 	if _leaving:
 		return
 	_leaving = true
+	_input_enabled = false
 	GameTransport.disconnect_from_game("Maçtan çıkıldı")
 	GameSession.clear()
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
