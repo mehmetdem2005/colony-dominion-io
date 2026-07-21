@@ -1,0 +1,30 @@
+name: Temporary Source Snapshot
+
+on:
+  push:
+    branches:
+      - fix/consent-auth-polish
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Package text source
+        run: |
+          set -euo pipefail
+          git ls-files \
+            | grep -E '\.(gd|ts|tsx|js|json|toml|yml|yaml|html|cfg|tscn|tres|md|sql)$' \
+            > source-files.txt
+          tar -czf source-snapshot.tar.gz -T source-files.txt
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: colony-source-snapshot
+          retention-days: 1
+          path: source-snapshot.tar.gz
