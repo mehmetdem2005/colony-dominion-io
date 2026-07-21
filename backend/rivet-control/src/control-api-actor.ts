@@ -8,6 +8,7 @@ const exactRoutes = new Map<string, ReadonlySet<string>>([
   ["/v1/health/config", new Set(["GET"])],
   ["/v1/health/ping", new Set(["GET"])],
   ["/v1/regions", new Set(["GET"])],
+  ["/v1/auth/confirmed", new Set(["GET"])],
   ["/v1/matchmaking/join", new Set(["POST"])],
 ]);
 
