@@ -33,7 +33,7 @@ on public.oauth_handoffs(completed_at)
 where completed_at is not null;
 
 comment on column public.oauth_handoffs.auth_code is
-  'Single-use Supabase PKCE authorization code; never an access or refresh token.';
+  'single-use Supabase PKCE authorization code; never an access or refresh token.';
 comment on column public.oauth_handoffs.callback_nonce_hash is
   'SHA-256 hash binding the browser callback path to one handoff.';
 comment on column public.oauth_handoffs.flow_type is
