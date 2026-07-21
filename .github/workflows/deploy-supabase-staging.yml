@@ -2,6 +2,14 @@ name: Deploy Supabase Staging
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/supabase/**"
+      - "tools/deploy_supabase_staging.py"
+      - "tools/deploy_online_stack.py"
+      - "config/backend_config.json"
+      - ".github/workflows/deploy-supabase-staging.yml"
 
 concurrency:
   group: colony-supabase-staging
@@ -84,6 +92,13 @@ jobs:
                   raise SystemExit(f"Supabase function verification failed: {key}")
           if len(supabase.get("migrations_applied", [])) < 5:
               raise SystemExit("not all expected Supabase migrations were applied")
+          auth_confirmation = supabase.get("auth_confirmation", {})
+          site_url = str(auth_confirmation.get("site_url", ""))
+          if not site_url.startswith("https://") or "localhost" in site_url.lower():
+              raise SystemExit("Supabase Auth confirmation URL is not production-safe")
+          for key in ("redirect_allowlisted", "confirmation_template", "localhost_removed"):
+              if not auth_confirmation.get(key):
+                  raise SystemExit(f"Supabase Auth confirmation verification failed: {key}")
           print("SUPABASE_STAGING_SCHEMA_OK")
           PY
 
@@ -97,4 +112,5 @@ jobs:
             deployment/deployment_audit.json
             deployment/last_deployment.json
             config/backend_config.json
+            backend/supabase/email_templates/confirmation.html
             build/diagnostics/
