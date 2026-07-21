@@ -1,0 +1,133 @@
+name: Verify Auth Confirmation Live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-auth-confirmation-live.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify live confirmation route and Supabase Auth configuration
+        run: |
+          set -euo pipefail
+          mkdir -p build/live-auth-verification
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          config = json.loads(Path("config/backend_config.json").read_text(encoding="utf-8"))
+          base = urllib.parse.urlsplit(str(config["rivet_control_base_url"]))
+          route = urllib.parse.urlunsplit(
+              (
+                  base.scheme,
+                  base.netloc,
+                  base.path.rstrip("/") + "/v1/auth/confirmed",
+                  base.query,
+                  "",
+              )
+          )
+          if not route.startswith("https://") or "localhost" in route.lower():
+              raise SystemExit("computed confirmation route is not production-safe")
+
+          route_body = ""
+          route_status = 0
+          last_error = ""
+          for attempt in range(18):
+              try:
+                  request = urllib.request.Request(
+                      route,
+                      headers={"User-Agent": "Colony-Live-Auth-Verification/1.0"},
+                  )
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      route_status = response.status
+                      route_body = response.read().decode("utf-8", errors="replace")
+                  if route_status == 200 and "E-posta adresin doğrulandı" in route_body:
+                      break
+                  last_error = f"unexpected route response: {route_status}"
+              except Exception as exc:
+                  last_error = str(exc)
+              time.sleep(10)
+          else:
+              raise SystemExit(f"live confirmation route did not become ready: {last_error}")
+
+          token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
+          project_ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
+          if not token or not project_ref:
+              raise SystemExit("Supabase staging verification credentials are missing")
+          request = urllib.request.Request(
+              f"https://api.supabase.com/v1/projects/{project_ref}/config/auth",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/json",
+                  "User-Agent": "Colony-Live-Auth-Verification/1.0",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              auth_config = json.loads(response.read().decode("utf-8"))
+
+          site_url = str(auth_config.get("site_url", "")).strip()
+          allow_list = str(auth_config.get("uri_allow_list", ""))
+          template = str(auth_config.get("mailer_templates_confirmation_content", ""))
+          subject = str(auth_config.get("mailer_subjects_confirmation", ""))
+          failures = []
+          if site_url != route:
+              failures.append("site_url does not match the live confirmation route")
+          if route not in allow_list:
+              failures.append("confirmation route is absent from uri_allow_list")
+          if "localhost" in site_url.lower() or "localhost" in allow_list.lower():
+              failures.append("localhost remains in Supabase Auth redirect configuration")
+          if "{{ .ConfirmationURL }}" not in template:
+              failures.append("confirmation template is missing ConfirmationURL")
+          if "E-POSTAYI DOĞRULA" not in template:
+              failures.append("branded confirmation action is missing")
+          if "Colony Dominion.io" not in subject:
+              failures.append("confirmation subject is not branded")
+          if failures:
+              raise SystemExit("; ".join(failures))
+
+          report = {
+              "ok": True,
+              "confirmation_route": route,
+              "route_status": route_status,
+              "site_url_matches": True,
+              "allow_list_matches": True,
+              "localhost_removed": True,
+              "confirmation_template_deployed": True,
+              "confirmation_subject_deployed": True,
+          }
+          Path("build/live-auth-verification/report.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report, ensure_ascii=False))
+          PY
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: colony-live-auth-verification
+          retention-days: 2
+          if-no-files-found: warn
+          path: build/live-auth-verification/report.json
