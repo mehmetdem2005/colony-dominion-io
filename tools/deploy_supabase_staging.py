@@ -145,10 +145,7 @@ def configure_auth_confirmation(
     token: str,
     project_ref: str,
 ) -> dict[str, Any]:
-    client_config_path = root / "config" / "backend_config.json"
-    client_config = json.loads(client_config_path.read_text(encoding="utf-8"))
-    control_base_url = str(client_config.get("rivet_control_base_url", "")).strip()
-    confirmation_url = append_path_before_query(control_base_url, "/v1/auth/confirmed")
+    confirmation_url = f"https://{project_ref}.supabase.co/functions/v1/auth-confirmed"
     if "localhost" in confirmation_url.casefold():
         raise module.DeployError("Production auth confirmation URL must not use localhost")
 
