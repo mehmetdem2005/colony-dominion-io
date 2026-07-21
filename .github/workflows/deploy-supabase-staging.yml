@@ -18,7 +18,7 @@ concurrency:
 jobs:
   deploy-supabase:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment: staging
     permissions:
       contents: read
@@ -28,6 +28,11 @@ jobs:
       COLONY_PROJECT_NAME: ${{ vars.COLONY_PROJECT_NAME }}
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
 
       - uses: actions/setup-python@v6
         with:
@@ -51,6 +56,28 @@ jobs:
             --project-ref "$SUPABASE_PROJECT_REF" \
             --preflight-only \
             2>&1 | tee build/diagnostics/supabase-preflight.log
+
+      - name: Deploy public auth confirmation Edge Function
+        timeout-minutes: 8
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          npx --yes supabase@latest functions deploy auth-confirmed \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --no-verify-jwt
+
+      - name: Verify public auth confirmation Edge Function
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          FUNCTION_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/auth-confirmed"
+          curl --fail --silent --show-error \
+            --retry 12 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            "$FUNCTION_URL" \
+            | tee build/diagnostics/auth-confirmation-page.html \
+            | grep -q "E-posta adresin doğrulandı"
 
       - name: Apply and verify Supabase schema
         timeout-minutes: 10
@@ -94,8 +121,11 @@ jobs:
               raise SystemExit("not all expected Supabase migrations were applied")
           auth_confirmation = supabase.get("auth_confirmation", {})
           site_url = str(auth_confirmation.get("site_url", ""))
-          if not site_url.startswith("https://") or "localhost" in site_url.lower():
-              raise SystemExit("Supabase Auth confirmation URL is not production-safe")
+          expected_site_url = (
+              f"https://{expected_ref}.supabase.co/functions/v1/auth-confirmed"
+          )
+          if site_url != expected_site_url:
+              raise SystemExit("Supabase Auth site URL does not point to the Edge Function")
           for key in ("redirect_allowlisted", "localhost_removed"):
               if not auth_confirmation.get(key):
                   raise SystemExit(f"Supabase Auth confirmation verification failed: {key}")
@@ -127,4 +157,5 @@ jobs:
             deployment/last_deployment.json
             config/backend_config.json
             backend/supabase/email_templates/confirmation.html
+            backend/supabase/functions/auth-confirmed/index.ts
             build/diagnostics/
