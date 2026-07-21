@@ -98,3 +98,5 @@ jobs:
             tests/google_oauth_bot_backfill_test.gd
           git commit -m "Fix external Google OAuth callback URL"
           git push origin HEAD:fix/oauth-external-callback-url
+
+# revision: 1
