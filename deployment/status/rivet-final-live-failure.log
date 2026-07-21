@@ -1,60 +1,284 @@
-deploy-full-online	Normalize and validate staging credentials	﻿2026-07-21T05:57:19.2225810Z ##[group]Run set -euo pipefail
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2226381Z ^[[36;1mset -euo pipefail^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2227079Z ^[[36;1mtest -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2228133Z ^[[36;1mtest -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2229238Z ^[[36;1mtest -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2230434Z ^[[36;1mtest -n "$SUPABASE_PUBLISHABLE_KEY" || { echo "SUPABASE_PUBLISHABLE_KEY is missing" >&2; exit 2; }^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2231254Z ^[[36;1mtest "$MIN_PLAYERS" = "2"^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2231693Z ^[[36;1mtest "$MAX_PLAYERS" = "10"^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2232142Z ^[[36;1mtest "$PROTOCOL_VERSION" = "4"^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2232632Z ^[[36;1mecho "::add-mask::$RIVET_CLOUD_TOKEN"^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2233207Z ^[[36;1mecho "::add-mask::$SUPABASE_SECRET_KEY"^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2234075Z ^[[36;1mecho "::add-mask::$SUPABASE_PUBLISHABLE_KEY"^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2234720Z ^[[36;1mmkdir -p build/rivet-staging build/android^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2235193Z ^[[36;1m^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2235578Z ^[[36;1mcurl --fail --silent --show-error \^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2236137Z ^[[36;1m  --connect-timeout 10 --max-time 30 \^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2236853Z ^[[36;1m  --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2237784Z ^[[36;1m  --header "Authorization: ***" \^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2238352Z ^[[36;1m  --header "Accept: application/json" \^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2239004Z ^[[36;1m  https://cloud-api.rivet.dev/tokens/api/inspect \^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2239609Z ^[[36;1m  > build/rivet-staging/token-inspect.json^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2239938Z ^[[36;1m^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2240165Z ^[[36;1mif [ -z "${REGIONS_JSON:-}" ]; then^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2240728Z ^[[36;1m  REGIONS_JSON='[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2241483Z ^[[36;1mfi^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2241745Z ^[[36;1mREGIONS_JSON="$REGIONS_JSON" python - <<'PY'^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2242068Z ^[[36;1mimport json^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2242290Z ^[[36;1mimport os^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2242560Z ^[[36;1mregions = json.loads(os.environ["REGIONS_JSON"])^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2242938Z ^[[36;1mif not isinstance(regions, list) or not regions:^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2243352Z ^[[36;1m    raise SystemExit("REGIONS_JSON must be a non-empty array")^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2244183Z ^[[36;1mif not any(isinstance(item, dict) and item.get("enabled") for item in regions):^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2244721Z ^[[36;1m    raise SystemExit("REGIONS_JSON must contain an enabled region")^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2245232Z ^[[36;1mcompact = json.dumps(regions, ensure_ascii=False, separators=(",", ":"))^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2245749Z ^[[36;1mwith open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2246210Z ^[[36;1m    output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.2246555Z ^[[36;1mPY^[[0m
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3709221Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3709708Z env:
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3710210Z   RIVET_CLOUD_TOKEN: ***
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3710656Z   SUPABASE_SECRET_KEY: ***
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3711005Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3711408Z   SUPABASE_PUBLISHABLE_KEY: 
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3711726Z   REGIONS_JSON: 
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3712053Z   SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3712494Z   PROTOCOL_VERSION: 4
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3712779Z   MIN_PLAYERS: 2
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3713042Z   MAX_PLAYERS: 10
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3713317Z   QUEUE_TTL_SECONDS: 120
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3713800Z   GODOT_VERSION: 4.6.3
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3714303Z   GODOT_BIN: /home/runner/work/colony-dominion-io/colony-dominion-io/.godot-bin/godot
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3714894Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3715723Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3716223Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3716668Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3717118Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3717569Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3717949Z ##[endgroup]
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3805381Z SUPABASE_PUBLISHABLE_KEY is missing
-deploy-full-online	Normalize and validate staging credentials	2026-07-21T05:57:19.3819990Z ##[error]Process completed with exit code 2.
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	﻿2026-07-21T06:12:58.5127541Z ##[group]Run set -uo pipefail
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5127942Z ^[[36;1mset -uo pipefail^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5128268Z ^[[36;1mRAW_LOG="$RUNNER_TEMP/rivet-full-online-deploy.log"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5128700Z ^[[36;1mATTEMPT_LOG="$RUNNER_TEMP/rivet-full-online-attempt.log"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5129169Z ^[[36;1mSUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5129533Z ^[[36;1mDEPLOY_STATUS=1^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5129769Z ^[[36;1mMAX_ATTEMPTS=4^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5129994Z ^[[36;1m: > "$RAW_LOG"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5130204Z ^[[36;1m^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5130434Z ^[[36;1mfor ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5130733Z ^[[36;1m  : > "$ATTEMPT_LOG"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5131172Z ^[[36;1m  echo "===== RIVET FULL-ONLINE DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5132158Z ^[[36;1m  set +e^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5132424Z ^[[36;1m  npx --yes @rivetkit/cli@latest deploy \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5132772Z ^[[36;1m    --token "$RIVET_CLOUD_TOKEN" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5133110Z ^[[36;1m    --namespace staging \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5133430Z ^[[36;1m    --dockerfile backend/rivet-control/Dockerfile \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5133764Z ^[[36;1m    --build-context . \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5134008Z ^[[36;1m    --yes \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5134256Z ^[[36;1m    --image colony-rivet-full-online \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5134555Z ^[[36;1m    --tag "${GITHUB_SHA:0:12}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5134824Z ^[[36;1m    --cpu 2 \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5135048Z ^[[36;1m    --memory 2Gi \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5135316Z ^[[36;1m    --instance-request-concurrency 80 \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5135609Z ^[[36;1m    --min-scale 0 \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5135847Z ^[[36;1m    --max-scale 4 \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5136092Z ^[[36;1m    --max-concurrent-actors 3 \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5136382Z ^[[36;1m    --env "NODE_ENV=production" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5136697Z ^[[36;1m    --env "SUPABASE_URL=${SUPABASE_URL}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5137300Z ^[[36;1m    --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5137692Z ^[[36;1m    --env "SUPPORTED_BUILD_ID=${SUPPORTED_BUILD_ID}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5138059Z ^[[36;1m    --env "PROTOCOL_VERSION=${PROTOCOL_VERSION}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5138419Z ^[[36;1m    --env "MIN_PLAYERS=${MIN_PLAYERS}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5138734Z ^[[36;1m    --env "MAX_PLAYERS=${MAX_PLAYERS}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5139067Z ^[[36;1m    --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5139433Z ^[[36;1m    --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5139769Z ^[[36;1m    --env "RIVET_STARTUP_CANARY=1" \^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5140095Z ^[[36;1m    2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5140420Z ^[[36;1m  DEPLOY_STATUS=${PIPESTATUS[0]}^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5140689Z ^[[36;1m  set -e^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5140894Z ^[[36;1m^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5141106Z ^[[36;1m  if [ "$DEPLOY_STATUS" -eq 0 ]; then^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5141700Z ^[[36;1m    break^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5142003Z ^[[36;1m  fi^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5142704Z ^[[36;1m  if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5143488Z ^[[36;1m    break^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5143687Z ^[[36;1m  fi^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5144740Z ^[[36;1m  if grep -Eqi '429 Too Many Requests|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5145917Z ^[[36;1m    if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5146243Z ^[[36;1m      sleep $((15 * (2 ** (ATTEMPT - 1))))^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5146525Z ^[[36;1m      continue^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5146743Z ^[[36;1m    fi^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5147124Z ^[[36;1m  fi^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5147309Z ^[[36;1m  break^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5147501Z ^[[36;1mdone^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5147681Z ^[[36;1m^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5147984Z ^[[36;1mpython - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5148442Z ^[[36;1mimport os^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5148741Z ^[[36;1mimport re^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5149043Z ^[[36;1mimport sys^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5149495Z ^[[36;1mfrom pathlib import Path^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5149923Z ^[[36;1m^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5150372Z ^[[36;1mraw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5151081Z ^[[36;1mfor name in ("RIVET_CLOUD_TOKEN", "SUPABASE_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5152083Z ^[[36;1m    value = os.environ.get(name, "")^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5152528Z ^[[36;1m    if value:^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5152874Z ^[[36;1m        raw = raw.replace(value, "***")^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5153382Z ^[[36;1mraw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5153892Z ^[[36;1mPath(sys.argv[2]).write_text(raw, encoding="utf-8")^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5169364Z ^[[36;1mPY^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5169768Z ^[[36;1mtest "$DEPLOY_STATUS" -eq 0^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5170343Z ^[[36;1mgrep -Eqi 'pool status[[:space:]]+status=ready' build/rivet-staging/deploy-sanitized.log^[[0m
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5262271Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5262625Z env:
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5263020Z   RIVET_CLOUD_TOKEN: ***
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5263365Z   SUPABASE_ACCESS_TOKEN: ***
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5263709Z   SUPABASE_SECRET_KEY: ***
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5263972Z   SUPABASE_PROJECT_REF: mlwsxeqorlfgmxqxnfoo
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5264387Z   SUPABASE_PUBLISHABLE_KEY: ***
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5264677Z   REGIONS_JSON: 
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5264931Z   SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5265238Z   PROTOCOL_VERSION: 4
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5265646Z   MIN_PLAYERS: 2
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5265861Z   MAX_PLAYERS: 10
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5266068Z   QUEUE_TTL_SECONDS: 120
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5266295Z   GODOT_VERSION: 4.6.3
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5266662Z   GODOT_BIN: /home/runner/work/colony-dominion-io/colony-dominion-io/.godot-bin/godot
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5267151Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5267567Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5267981Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5268360Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5268739Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5269125Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5269714Z   EFFECTIVE_REGIONS_JSON: [{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5270264Z ##[endgroup]
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:12:58.5384992Z ===== RIVET FULL-ONLINE DEPLOY ATTEMPT 1/4 =====
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:02.4423688Z ^[[32m INFO^[[0m inspecting Rivet Cloud token
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:02.8417918Z ^[[32m INFO^[[0m enabling managed pool
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:07.1209316Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:09.2492139Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:11.3898565Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:13.5149439Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:15.6559538Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:17.8102254Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:19.9476183Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:22.1043111Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:24.2578564Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:26.3912812Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:28.5546775Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:30.6859185Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:32.8153101Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:34.9538919Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:37.1026873Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:39.2329573Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:41.3582480Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:43.4816863Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:45.6248074Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:47.7553853Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:49.8819477Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:52.0174497Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:54.1621929Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:56.2871929Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:13:58.5166454Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:00.6527223Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:02.7865754Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:04.9165161Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:07.0462107Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:09.1774803Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:11.3060268Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:13.4479158Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:15.5958802Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:17.7202079Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:19.8430257Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:21.9884097Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:24.1175359Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:26.2418673Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:28.3913663Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:30.5267569Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:32.6569334Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:34.7868017Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:36.9366783Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:39.0664320Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:41.1885172Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:43.3274763Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:45.4615988Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:47.5849196Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:49.7127613Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:51.8446430Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:54.2642116Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:56.3951051Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:14:58.5330791Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:00.6537911Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:02.7788909Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:04.9029656Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:07.0660809Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:09.1988214Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:11.3315336Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:13.4584180Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:15.5836973Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:17.7180470Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:19.8419181Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:21.9691945Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:24.1230509Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:26.2527408Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:28.3838053Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:30.5103039Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:32.6366450Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:34.7795247Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:36.9059739Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:39.0293797Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:41.1567824Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:43.2808769Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:45.4046294Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:47.5294634Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:49.6551315Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:51.8204160Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:53.9457324Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:56.0719971Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:15:58.1959529Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:00.3977812Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:02.5366323Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:04.6584399Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:06.7977396Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:08.9267148Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:11.0593512Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:13.1904915Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:15.3228964Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:17.4454571Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:19.5850438Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:21.7076839Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:23.8315620Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:25.9579659Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:28.0792847Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:30.2045421Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:32.3338997Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:34.4582603Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:36.5905997Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:38.7176652Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:40.8409109Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:42.9773496Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:45.1038951Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:47.2485865Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:49.3725556Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:51.4976409Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:53.6302927Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:55.7752823Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:16:57.9043370Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:00.0375610Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:02.1633150Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:04.3133158Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:06.4420830Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:08.5667790Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:10.7961179Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:12.9269032Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:15.0572669Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:17.1830449Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:19.3242795Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:21.4514926Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:23.5831901Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:25.7260276Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:27.8472691Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:29.9747403Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:32.1127545Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:34.2465244Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:36.3748868Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:38.5019077Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:40.6324693Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:42.7701038Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:44.9092826Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:47.0375657Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:49.1675107Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:51.2936861Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:53.4251011Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:55.5619896Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:57.6933586Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:17:59.8214575Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:01.9584262Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:04.0863874Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:06.2202783Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:08.3556021Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:10.4912826Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:12.6204547Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:14.7433517Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:16.8829360Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:19.0127456Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:21.1360727Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:23.2604182Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:25.3922479Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:27.5182792Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:29.6440920Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:31.7657438Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:33.8895638Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:36.0293778Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:38.1526186Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:40.2757821Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:42.4007488Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:44.5337261Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:46.6952243Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:48.8293746Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:50.9595007Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:53.0931947Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:55.2210634Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:57.3457359Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:18:59.4827174Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:01.6106239Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:03.7350257Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:05.8578257Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:07.9835665Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:10.1130968Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:12.2437106Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:14.3697170Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:16.5090445Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:18.6358803Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:20.7639109Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:22.9247787Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:25.0502217Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:27.1774923Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:29.3337068Z ^[[32m INFO^[[0m pool status ^[[3mstatus^[[0m^[[2m=^[[0mdeploying
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:31.3354717Z Error: timed out waiting for managed pool to become ready
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:46.3594353Z ===== RIVET FULL-ONLINE DEPLOY ATTEMPT 2/4 =====
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:47.1617848Z ^[[32m INFO^[[0m inspecting Rivet Cloud token
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:19:47.5020424Z ^[[32m INFO^[[0m enabling managed pool
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:20:47.7069638Z Error: Cloud API error 500 Internal Server Error: {"message":"Internal Server Error"}
+deploy-full-online	Deploy full-online runtime to Rivet Compute staging	2026-07-21T06:20:47.7556060Z ##[error]Process completed with exit code 1.
