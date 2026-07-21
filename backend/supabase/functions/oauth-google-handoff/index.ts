@@ -1,18 +1,11 @@
-const JSON_HEADERS = {
-  "content-type": "application/json; charset=utf-8",
-  "cache-control": "no-store, max-age=0",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "no-referrer",
-};
-
-const HTML_HEADERS = {
-  "content-type": "text/html; charset=utf-8",
-  "cache-control": "no-store, max-age=0",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "no-referrer",
-  "content-security-policy":
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-colony-oauth'; connect-src 'self'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-};
+const JSON_HEADERS = new Headers({
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+});
 
 const REQUEST_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -20,9 +13,40 @@ const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const HANDOFF_TTL_SECONDS = 300;
 const TABLE = "oauth_handoffs";
 const FUNCTION_PATH = "/functions/v1/oauth-google-handoff";
+const SAFE_OAUTH_ERRORS = new Set([
+  "google_oauth_failed",
+  "missing_oauth_result",
+]);
+const UTF8_ENCODER = new TextEncoder();
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: JSON_HEADERS });
+}
+
+function randomNonce(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function html(htmlSource: string, nonce: string, status = 200): Response {
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Disposition": "inline",
+    "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Permissions-Policy":
+      "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "Content-Security-Policy":
+      `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src 'self'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  });
+  return new Response(UTF8_ENCODER.encode(htmlSource), { status, headers });
 }
 
 function requiredEnvironment(name: string): string {
@@ -156,23 +180,26 @@ async function begin(request: Request): Promise<Response> {
 function callbackPage(requestId: string): Response {
   const completeUrl = `${functionBaseUrl()}/complete/${requestId}`;
   const escapedCompleteUrl = JSON.stringify(completeUrl);
-  const html = `<!doctype html>
+  const nonce = randomNonce();
+  const htmlSource = `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
 <title>Colony Dominion.io — Google Girişi</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,sans-serif;background:#07110d;color:#eef7f1}*{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 0,#143d2b 0,#07110d 52%,#030805 100%)}main{width:min(520px,100%);padding:34px;border:1px solid #315d47;border-radius:24px;background:rgba(8,22,15,.96);box-shadow:0 28px 80px rgba(0,0,0,.45);text-align:center}.mark{width:58px;height:58px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;background:#c8f56a;color:#0a160e;font-weight:900;font-size:30px}h1{font-size:27px;margin:0 0 12px}p{line-height:1.55;color:#b8cabe;margin:0}.detail{margin-top:18px;padding:14px;border-radius:14px;background:#0d2a1b;color:#d9ebe0;font-size:14px}.error{background:#3a1717;color:#ffd8d8}</style>
 </head>
 <body><main><div class="mark" id="mark">…</div><h1 id="title">Google girişi tamamlanıyor</h1><p id="message">Güvenli oturum oyuna aktarılıyor. Bu sekmeyi kapatma.</p><div class="detail" id="detail">Bağlantı doğrulanıyor…</div></main>
-<script nonce="colony-oauth">
+<script nonce="${nonce}">
 (() => {
   const completeUrl = ${escapedCompleteUrl};
-  const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-  const refreshToken = params.get("refresh_token") || "";
-  const oauthError = params.get("error_description") || params.get("error") || "";
+  const fragment = location.hash;
   history.replaceState(null, document.title, location.pathname + location.search);
+  const params = new URLSearchParams(fragment.replace(/^#/, ""));
+  const refreshToken = params.get("refresh_token") || "";
+  const oauthFailed = params.has("error_description") || params.has("error");
   const title = document.getElementById("title");
   const message = document.getElementById("message");
   const detail = document.getElementById("detail");
@@ -185,19 +212,23 @@ function callbackPage(requestId: string): Response {
     if (!ok) detail.classList.add("error");
     if (ok) setTimeout(() => window.close(), 900);
   };
-  const payload = refreshToken ? { refresh_token: refreshToken } : { error: oauthError || "Google oturumu alınamadı" };
+  const payload = refreshToken
+    ? { refresh_token: refreshToken }
+    : { error: oauthFailed ? "google_oauth_failed" : "missing_oauth_result" };
   fetch(completeUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
     cache: "no-store",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
   }).then(async (response) => {
     if (!response.ok) throw new Error("Oturum aktarımı reddedildi");
-    finish(Boolean(refreshToken), refreshToken ? "Oturum oyuna güvenli biçimde aktarıldı." : payload.error);
+    finish(Boolean(refreshToken), refreshToken ? "Oturum oyuna güvenli biçimde aktarıldı." : "Google oturumu tamamlanamadı.");
   }).catch(() => finish(false, "Güvenli aktarım servisine ulaşılamadı."));
 })();
 </script></body></html>`;
-  return new Response(html, { status: 200, headers: HTML_HEADERS });
+  return html(htmlSource, nonce);
 }
 
 async function complete(
@@ -209,9 +240,12 @@ async function complete(
   }
   const body = await readJson(request);
   const refreshToken = String(body.refresh_token ?? "").trim();
-  const errorMessage = String(body.error ?? "")
-    .trim()
-    .slice(0, 500);
+  const rawError = String(body.error ?? "").trim();
+  const errorMessage = rawError
+    ? SAFE_OAUTH_ERRORS.has(rawError)
+      ? rawError
+      : "google_oauth_failed"
+    : "";
   if (!refreshToken && !errorMessage) {
     return json({ ok: false, error: "missing_oauth_result" }, 400);
   }
