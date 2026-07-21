@@ -18,8 +18,10 @@ jobs:
     timeout-minutes: 70
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: 92a6ba55658208d27a2dc86a9a11d6588f47d5e7
+      TARGET_SHA: 8617b2e331f068facb9205b4a0cbc8a08cee79b7
       OBSERVER_BRANCH: rivet-final-release-observer-v2
+      TARGET_WORKFLOW: deploy-rivet-full-online-direct.yml
+      TARGET_ARTIFACT: colony-dominion-rivet-direct-staging
     steps:
       - uses: actions/checkout@v6
         with:
@@ -36,7 +38,7 @@ jobs:
             RUN_ID="$(
               gh run list \
                 --repo "$GITHUB_REPOSITORY" \
-                --workflow deploy-rivet-control-staging.yml \
+                --workflow "$TARGET_WORKFLOW" \
                 --branch main \
                 --limit 30 \
                 --json databaseId,headSha \
@@ -74,7 +76,7 @@ jobs:
           if [ -n "${RIVET_LIVE_RUN_ID:-}" ]; then
             gh run download "$RIVET_LIVE_RUN_ID" \
               --repo "$GITHUB_REPOSITORY" \
-              --name colony-dominion-rivet-full-online-staging \
+              --name "$TARGET_ARTIFACT" \
               --dir deployment/status/rivet-final-evidence
           fi
           true
