@@ -38,10 +38,10 @@ renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
 textures/default_filters/use_nearest_mipmap_filter=false
 textures/canvas_textures/default_texture_filter=2
+textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.20, 0.13, 0.05, 1)
 
 [physics]
-
 common/physics_ticks_per_second=60
 common/max_physics_steps_per_frame=4
 common/physics_interpolation=true
@@ -79,7 +79,6 @@ gather_command={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":71)]
 }
-
 split_command={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":81)]

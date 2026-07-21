@@ -3,7 +3,7 @@ extends SceneTree
 const URL_BUILDER := preload("res://network/query_safe_url.gd")
 
 # Covers Rivet gateway URLs whose routing credentials live in the query string.
-# The Android artifact workflow uses this regression as a release gate.
+# The Android artifact workflow uses this regression as a mandatory release gate.
 
 
 func _initialize() -> void:

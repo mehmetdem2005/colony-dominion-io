@@ -9,7 +9,6 @@ on:
       - "network/**"
       - "autoload/**"
       - "gameplay/match/**"
-      - "tools/configure_android_ci.gd"
       - "tools/verify_live_rivet.py"
       - "tests/query_safe_url_regression_test.gd"
       - "config/backend_config.json"
@@ -22,7 +21,6 @@ on:
       - "network/**"
       - "autoload/**"
       - "gameplay/match/**"
-      - "tools/configure_android_ci.gd"
       - "tools/verify_live_rivet.py"
       - "tests/query_safe_url_regression_test.gd"
       - "config/backend_config.json"
@@ -79,15 +77,23 @@ jobs:
           test -f "$TEMPLATE_DIR/android_debug.apk"
 
       - name: Configure Android SDK and debug signing
+        timeout-minutes: 10
         run: |
           set -euo pipefail
+          test -d "$ANDROID_SDK_ROOT"
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
-            "platform-tools" \
-            "build-tools;35.0.1" \
-            "platforms;android-35"
+          if [ ! -d "$ANDROID_SDK_ROOT/build-tools/35.0.1" ] || \
+             [ ! -d "$ANDROID_SDK_ROOT/platforms/android-35" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null || true
+            "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
+              "platform-tools" \
+              "build-tools;35.0.1" \
+              "platforms;android-35"
+          fi
+          test -x "$ANDROID_SDK_ROOT/platform-tools/adb"
+          test -d "$ANDROID_SDK_ROOT/build-tools/35.0.1"
+          test -d "$ANDROID_SDK_ROOT/platforms/android-35"
           rm -f "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
           keytool -keyalg RSA -genkeypair \
             -alias androiddebugkey \
@@ -97,8 +103,18 @@ jobs:
             -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
             -validity 10000 \
             -deststoretype PKCS12
-          "$GODOT_BIN" --headless --editor --path . \
-            --script res://tools/configure_android_ci.gd
+          mkdir -p "$HOME/.config/godot"
+          EDITOR_SERIES="${GODOT_VERSION%.*}"
+          SETTINGS_PATH="$HOME/.config/godot/editor_settings-${EDITOR_SERIES}.tres"
+          cat > "$SETTINGS_PATH" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+          grep -q 'export/android/android_sdk_path' "$SETTINGS_PATH"
+          grep -q 'export/android/java_sdk_path' "$SETTINGS_PATH"
 
       - name: Typecheck Rivet control plane
         working-directory: backend/rivet-control
@@ -129,7 +145,7 @@ jobs:
           set -uo pipefail
           mkdir -p build/android build/online-test
           set +e
-          "$GODOT_BIN" --headless --path . \
+          "$GODOT_BIN" --verbose --headless --path . \
             --export-debug "Android" \
             build/android/colony-dominion-online-test.apk \
             2>&1 | tee build/online-test/android-export.log
@@ -137,7 +153,7 @@ jobs:
           set -e
           echo "$EXPORT_CODE" > build/online-test/android-export-exit-code.txt
           if [ "$EXPORT_CODE" -ne 0 ]; then
-            tail -n 160 build/online-test/android-export.log >&2 || true
+            tail -n 240 build/online-test/android-export.log >&2 || true
             exit "$EXPORT_CODE"
           fi
           test -s build/android/colony-dominion-online-test.apk
