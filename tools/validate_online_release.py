@@ -89,18 +89,28 @@ def validate() -> dict[str, object]:
         "duplicate migration version",
     )
     require(
-        names[-3:]
+        names[-4:]
         == [
             "202607190004_ranked_schema.sql",
             "202607190005_authoritative_ranked_results.sql",
             "202607210006_google_oauth_handoffs.sql",
+            "202607220007_google_oauth_pkce_handoffs.sql",
         ],
         "production migration order mismatch",
     )
-    ranked_sql = migrations[-2].read_text(encoding="utf-8").lower()
-    oauth_sql = migrations[-1].read_text(encoding="utf-8").lower()
+    ranked_sql = migrations[-3].read_text(encoding="utf-8").lower()
+    oauth_sql = migrations[-2].read_text(encoding="utf-8").lower()
+    pkce_sql = migrations[-1].read_text(encoding="utf-8").lower()
     for marker in ("oauth_handoffs", "enable row level security", "revoke all"):
         require(marker in oauth_sql, f"OAuth handoff SQL marker missing: {marker}")
+    for marker in (
+        "flow_type",
+        "pkce",
+        "callback_nonce_hash",
+        "auth_code",
+        "single-use supabase pkce authorization code",
+    ):
+        require(marker in pkce_sql, f"OAuth PKCE SQL marker missing: {marker}")
     for marker in (
         "pg_advisory_xact_lock",
         "rating_history",
@@ -202,11 +212,48 @@ def validate() -> dict[str, object]:
     )
     require_markers(
         "backend/supabase/functions/oauth-google-handoff/index.ts",
-        ("SUPABASE_SERVICE_ROLE_KEY", "oauth_handoffs", "/callback/", "refresh_token"),
+        (
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "oauth_handoffs",
+            "/callback/",
+            "flow_type",
+            "pkce",
+            "auth_code",
+            "callback_nonce_hash",
+            "tokens_in_browser",
+            "code_challenge_method",
+        ),
     )
+    oauth_function = read("backend/supabase/functions/oauth-google-handoff/index.ts")
+    for forbidden in (
+        "location.hash",
+        'params.get("refresh_token")',
+        "refresh_token: refreshToken",
+        'action === "complete"',
+        "/complete/",
+        "nonce-colony-oauth",
+    ):
+        require(forbidden not in oauth_function, f"implicit OAuth marker remains: {forbidden}")
     require_markers(
         "network/supabase_oauth_handoff.gd",
-        ("Crypto.new()", "OS.shell_open", "x-colony-oauth-secret", "sign_in_refresh_token"),
+        (
+            "Crypto.new()",
+            "OS.shell_open",
+            "x-colony-oauth-secret",
+            "code_challenge",
+            "sign_in_pkce_code",
+            "_active_code_verifier",
+            "flow_type",
+        ),
+    )
+    require_markers(
+        "network/supabase_auth_client.gd",
+        (
+            "grant_type=pkce",
+            "auth_code",
+            "code_verifier",
+            "PKCE_VERIFIER_PATTERN",
+        ),
     )
     require_markers(
         "ui/auth_panel.gd",
@@ -223,6 +270,15 @@ def validate() -> dict[str, object]:
     require_markers(
         "tools/deploy_supabase_staging.py",
         ("external_google_enabled", "GOOGLE_OAUTH_CLIENT_ID"),
+    )
+    require_markers(
+        ".github/workflows/deploy-supabase-staging.yml",
+        (
+            "Verify OAuth callback renders as secure UTF-8 HTML",
+            "google-oauth-callback-verification.json",
+            "tokens_in_browser",
+            "flow_type",
+        ),
     )
 
     dockerfile = read("backend/rivet-control/Dockerfile")
@@ -305,6 +361,8 @@ def validate() -> dict[str, object]:
         "max_players": 10,
         "bot_backfill_wait_seconds": 30,
         "google_oauth_handoff": True,
+        "google_oauth_flow": "pkce",
+        "tokens_in_browser": False,
         "google_only_auth_ui": True,
         "deployed_region": "eu",
         "provider_region": "fra",
