@@ -1,7 +1,7 @@
 class_name OnlineSoakClient
 extends Node
 
-const BUILD_ID: String = "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"
+const BUILD_ID: String = "PHASE-05.4-RIVET-FULL-ONLINE"
 
 var _duration_seconds: float = 120.0
 var _elapsed: float = 0.0
@@ -24,9 +24,17 @@ func _ready() -> void:
 	GameTransport.snapshot_received.connect(_on_snapshot)
 	_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
 	var now_msec: int = _started_unix_msec
+	var websocket_url: String = String(args.get("websocket-url", "")).strip_edges()
+	var transport: String = (
+		NetworkProtocol.TRANSPORT_WEBSOCKET
+		if not websocket_url.is_empty()
+		else NetworkProtocol.TRANSPORT_ENET
+	)
 	var assignment := {
 		"match_id": String(args.get("match-id", "")),
 		"server_id": String(args.get("server-id", "")),
+		"transport": transport,
+		"websocket_url": websocket_url,
 		"host": String(args.get("host", "127.0.0.1")),
 		"port": int(args.get("port", NetworkProtocol.DEFAULT_GAME_PORT)),
 		"join_ticket": String(args.get("ticket", "dev-ticket-000000000000000000000000")),
