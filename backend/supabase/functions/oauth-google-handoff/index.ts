@@ -19,6 +19,7 @@ const REQUEST_ID_PATTERN =
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const HANDOFF_TTL_SECONDS = 300;
 const TABLE = "oauth_handoffs";
+const FUNCTION_PATH = "/functions/v1/oauth-google-handoff";
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: JSON_HEADERS });
@@ -30,6 +31,14 @@ function requiredEnvironment(name: string): string {
   return value.replace(/\/$/, "");
 }
 
+function supabaseUrl(): string {
+  return requiredEnvironment("SUPABASE_URL");
+}
+
+function functionBaseUrl(): string {
+  return `${supabaseUrl()}${FUNCTION_PATH}`;
+}
+
 function serviceHeaders(): HeadersInit {
   const serviceKey = requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY");
   return {
@@ -37,14 +46,6 @@ function serviceHeaders(): HeadersInit {
     authorization: `Bearer ${serviceKey}`,
     "content-type": "application/json",
   };
-}
-
-function functionBaseUrl(request: Request): string {
-  const url = new URL(request.url);
-  const marker = "/oauth-google-handoff";
-  const index = url.pathname.indexOf(marker);
-  if (index < 0) throw new Error("Function route is invalid");
-  return `${url.origin}${url.pathname.slice(0, index + marker.length)}`;
 }
 
 function routeParts(request: Request): string[] {
@@ -61,8 +62,9 @@ function routeParts(request: Request): string[] {
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
   const length = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(length) && length > 12_000)
+  if (Number.isFinite(length) && length > 12_000) {
     throw new Error("Request body is too large");
+  }
   const parsed = await request.json().catch(() => null);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Request body must be a JSON object");
@@ -88,9 +90,8 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 async function deleteExpired(): Promise<void> {
-  const supabaseUrl = requiredEnvironment("SUPABASE_URL");
   await fetch(
-    `${supabaseUrl}/rest/v1/${TABLE}?expires_at=lt.${encodeURIComponent(new Date().toISOString())}`,
+    `${supabaseUrl()}/rest/v1/${TABLE}?expires_at=lt.${encodeURIComponent(new Date().toISOString())}`,
     {
       method: "DELETE",
       headers: serviceHeaders(),
@@ -109,11 +110,10 @@ async function begin(request: Request): Promise<Response> {
   }
 
   await deleteExpired();
-  const supabaseUrl = requiredEnvironment("SUPABASE_URL");
   const expiresAt = new Date(
     Date.now() + HANDOFF_TTL_SECONDS * 1000,
   ).toISOString();
-  const insert = await fetch(`${supabaseUrl}/rest/v1/${TABLE}`, {
+  const insert = await fetch(`${supabaseUrl()}/rest/v1/${TABLE}`, {
     method: "POST",
     headers: {
       ...serviceHeaders(),
@@ -139,8 +139,8 @@ async function begin(request: Request): Promise<Response> {
     return json({ ok: false, error: "handoff_store_unavailable" }, 503);
   }
 
-  const callbackUrl = `${functionBaseUrl(request)}/callback/${requestId}`;
-  const authorizeUrl = new URL(`${supabaseUrl}/auth/v1/authorize`);
+  const callbackUrl = `${functionBaseUrl()}/callback/${requestId}`;
+  const authorizeUrl = new URL(`${supabaseUrl()}/auth/v1/authorize`);
   authorizeUrl.searchParams.set("provider", "google");
   authorizeUrl.searchParams.set("redirect_to", callbackUrl);
   authorizeUrl.searchParams.set("scopes", "openid email profile");
@@ -153,8 +153,8 @@ async function begin(request: Request): Promise<Response> {
   });
 }
 
-function callbackPage(request: Request, requestId: string): Response {
-  const completeUrl = `${functionBaseUrl(request)}/complete/${requestId}`;
+function callbackPage(requestId: string): Response {
+  const completeUrl = `${functionBaseUrl()}/complete/${requestId}`;
   const escapedCompleteUrl = JSON.stringify(completeUrl);
   const html = `<!doctype html>
 <html lang="tr">
@@ -204,15 +204,17 @@ async function complete(
   request: Request,
   requestId: string,
 ): Promise<Response> {
-  if (!REQUEST_ID_PATTERN.test(requestId))
+  if (!REQUEST_ID_PATTERN.test(requestId)) {
     return json({ ok: false, error: "invalid_request_id" }, 400);
+  }
   const body = await readJson(request);
   const refreshToken = String(body.refresh_token ?? "").trim();
   const errorMessage = String(body.error ?? "")
     .trim()
     .slice(0, 500);
-  if (!refreshToken && !errorMessage)
+  if (!refreshToken && !errorMessage) {
     return json({ ok: false, error: "missing_oauth_result" }, 400);
+  }
   if (
     refreshToken &&
     (refreshToken.length < 16 || refreshToken.length > 4096)
@@ -220,14 +222,13 @@ async function complete(
     return json({ ok: false, error: "invalid_refresh_token" }, 400);
   }
 
-  const supabaseUrl = requiredEnvironment("SUPABASE_URL");
   const query = new URLSearchParams({
     request_id: `eq.${requestId}`,
     expires_at: `gt.${new Date().toISOString()}`,
     completed_at: "is.null",
   });
   const update = await fetch(
-    `${supabaseUrl}/rest/v1/${TABLE}?${query.toString()}`,
+    `${supabaseUrl()}/rest/v1/${TABLE}?${query.toString()}`,
     {
       method: "PATCH",
       headers: { ...serviceHeaders(), prefer: "return=representation" },
@@ -248,9 +249,8 @@ async function complete(
 async function loadHandoff(
   requestId: string,
 ): Promise<Record<string, unknown> | null> {
-  const supabaseUrl = requiredEnvironment("SUPABASE_URL");
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/${TABLE}?request_id=eq.${requestId}&select=request_id,secret_hash,refresh_token,error_message,expires_at,completed_at,consumed_at`,
+    `${supabaseUrl()}/rest/v1/${TABLE}?request_id=eq.${requestId}&select=request_id,secret_hash,refresh_token,error_message,expires_at,completed_at,consumed_at`,
     { headers: serviceHeaders(), cache: "no-store" },
   );
   if (!response.ok) return null;
@@ -261,19 +261,20 @@ async function loadHandoff(
 }
 
 async function deleteHandoff(requestId: string): Promise<void> {
-  const supabaseUrl = requiredEnvironment("SUPABASE_URL");
-  await fetch(`${supabaseUrl}/rest/v1/${TABLE}?request_id=eq.${requestId}`, {
+  await fetch(`${supabaseUrl()}/rest/v1/${TABLE}?request_id=eq.${requestId}`, {
     method: "DELETE",
     headers: serviceHeaders(),
   });
 }
 
 async function poll(request: Request, requestId: string): Promise<Response> {
-  if (!REQUEST_ID_PATTERN.test(requestId))
+  if (!REQUEST_ID_PATTERN.test(requestId)) {
     return json({ ok: false, error: "invalid_request_id" }, 400);
+  }
   const secret = request.headers.get("x-colony-oauth-secret")?.trim() ?? "";
-  if (secret.length < 32 || secret.length > 256)
+  if (secret.length < 32 || secret.length > 256) {
     return json({ ok: false, error: "invalid_handoff_secret" }, 401);
+  }
   const row = await loadHandoff(requestId);
   if (!row) return json({ ok: false, error: "handoff_not_found" }, 404);
   const suppliedHash = await sha256Hex(secret);
@@ -296,14 +297,13 @@ async function poll(request: Request, requestId: string): Promise<Response> {
   const refreshToken = String(row.refresh_token ?? "");
   if (!refreshToken) return json({ ok: true, ready: false });
 
-  const supabaseUrl = requiredEnvironment("SUPABASE_URL");
   const consumeQuery = new URLSearchParams({
     request_id: `eq.${requestId}`,
     expires_at: `gt.${new Date().toISOString()}`,
     consumed_at: "is.null",
   });
   const consume = await fetch(
-    `${supabaseUrl}/rest/v1/${TABLE}?${consumeQuery.toString()}`,
+    `${supabaseUrl()}/rest/v1/${TABLE}?${consumeQuery.toString()}`,
     {
       method: "PATCH",
       headers: { ...serviceHeaders(), prefer: "return=representation" },
@@ -326,9 +326,13 @@ async function poll(request: Request, requestId: string): Promise<Response> {
 }
 
 async function cancel(request: Request, requestId: string): Promise<Response> {
-  if (!REQUEST_ID_PATTERN.test(requestId))
+  if (!REQUEST_ID_PATTERN.test(requestId)) {
     return json({ ok: false, error: "invalid_request_id" }, 400);
+  }
   const secret = request.headers.get("x-colony-oauth-secret")?.trim() ?? "";
+  if (secret.length < 32 || secret.length > 256) {
+    return json({ ok: false, error: "invalid_handoff_secret" }, 401);
+  }
   const row = await loadHandoff(requestId);
   if (!row) return json({ ok: true });
   if (
@@ -352,19 +356,24 @@ Deno.serve(async (request) => {
         ttl_seconds: HANDOFF_TTL_SECONDS,
       });
     }
-    if (request.method === "POST" && action === "begin")
+    if (request.method === "POST" && action === "begin") {
       return await begin(request);
-    if (request.method === "GET" && action === "callback") {
-      if (!REQUEST_ID_PATTERN.test(requestId))
-        return json({ ok: false, error: "invalid_request_id" }, 400);
-      return callbackPage(request, requestId);
     }
-    if (request.method === "POST" && action === "complete")
+    if (request.method === "GET" && action === "callback") {
+      if (!REQUEST_ID_PATTERN.test(requestId)) {
+        return json({ ok: false, error: "invalid_request_id" }, 400);
+      }
+      return callbackPage(requestId);
+    }
+    if (request.method === "POST" && action === "complete") {
       return await complete(request, requestId);
-    if (request.method === "GET" && action === "poll")
+    }
+    if (request.method === "GET" && action === "poll") {
       return await poll(request, requestId);
-    if (request.method === "DELETE" && action === "cancel")
+    }
+    if (request.method === "DELETE" && action === "cancel") {
       return await cancel(request, requestId);
+    }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
