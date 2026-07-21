@@ -158,7 +158,5 @@ func _apply_toggle_button_styles() -> void:
 	_toggle_button.add_theme_stylebox_override("hover", empty)
 	_toggle_button.add_theme_stylebox_override("pressed", empty)
 	_toggle_button.add_theme_stylebox_override("disabled", empty)
-	var focus := ColonyUiKit.rounded_style(
-		Color.TRANSPARENT, Color(ColonyUiKit.ACCENT, 0.9), 2, 13
-	)
+	var focus := ColonyUiKit.rounded_style(Color.TRANSPARENT, Color(ColonyUiKit.ACCENT, 0.9), 2, 13)
 	_toggle_button.add_theme_stylebox_override("focus", focus)

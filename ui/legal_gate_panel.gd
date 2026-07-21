@@ -134,11 +134,7 @@ func _build_document_viewer() -> void:
 	_document_viewer.add_theme_stylebox_override(
 		"panel",
 		ColonyUiKit.rounded_style(
-			Color("0b0d0d"),
-			Color(ColonyUiKit.ACCENT, 0.85),
-			2,
-			22,
-			Vector4(24.0, 22.0, 24.0, 22.0)
+			Color("0b0d0d"), Color(ColonyUiKit.ACCENT, 0.85), 2, 22, Vector4(24.0, 22.0, 24.0, 22.0)
 		)
 	)
 	add_child(_document_viewer)
@@ -162,11 +158,7 @@ func _build_document_viewer() -> void:
 	_document_text.add_theme_stylebox_override(
 		"normal",
 		ColonyUiKit.rounded_style(
-			Color("111414"),
-			ColonyUiKit.BORDER,
-			1,
-			14,
-			Vector4(18.0, 16.0, 18.0, 16.0)
+			Color("111414"), ColonyUiKit.BORDER, 1, 14, Vector4(18.0, 16.0, 18.0, 16.0)
 		)
 	)
 	ColonyUiKit.apply_rich_text(_document_text, 16, 450, Color("e4e7e1"))

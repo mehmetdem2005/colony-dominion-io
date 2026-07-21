@@ -47,9 +47,7 @@ static func apply_button(button: Button, variant: StringName, height: float = 52
 	var border_hover_color: Color = palette.get("border_hover", BORDER_STRONG)
 	var text_color: Color = palette.get("text", TEXT_PRIMARY)
 	var text_hover_color: Color = palette.get("text_hover", TEXT_PRIMARY)
-	var normal := rounded_style(
-		background, border_color, 1, 14, Vector4(16.0, 12.0, 16.0, 12.0)
-	)
+	var normal := rounded_style(background, border_color, 1, 14, Vector4(16.0, 12.0, 16.0, 12.0))
 	var hover := normal.duplicate() as StyleBoxFlat
 	hover.bg_color = hover_color
 	hover.border_color = border_hover_color
@@ -83,9 +81,7 @@ static func apply_input(input: LineEdit) -> void:
 	input.add_theme_color_override("font_color", TEXT_PRIMARY)
 	input.add_theme_color_override("font_placeholder_color", Color(TEXT_MUTED, 0.92))
 	input.add_theme_color_override("caret_color", ACCENT)
-	var normal := rounded_style(
-		Color("0d1010"), BORDER, 1, 13, Vector4(16.0, 13.0, 16.0, 13.0)
-	)
+	var normal := rounded_style(Color("0d1010"), BORDER, 1, 13, Vector4(16.0, 13.0, 16.0, 13.0))
 	var focus := normal.duplicate() as StyleBoxFlat
 	focus.bg_color = Color("111514")
 	focus.border_color = ACCENT
@@ -97,11 +93,7 @@ static func apply_input(input: LineEdit) -> void:
 
 static func panel_style() -> StyleBoxFlat:
 	return rounded_style(
-		Color(SURFACE, 0.985),
-		Color(ACCENT, 0.92),
-		2,
-		24,
-		Vector4(26.0, 24.0, 26.0, 24.0)
+		Color(SURFACE, 0.985), Color(ACCENT, 0.92), 2, 24, Vector4(26.0, 24.0, 26.0, 24.0)
 	)
 
 
