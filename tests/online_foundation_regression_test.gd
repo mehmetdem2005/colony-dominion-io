@@ -54,9 +54,7 @@ func _run() -> void:
 					_failures.append("Current deployed region must be Europe")
 				if not bool(region.get("enabled", false)):
 					_failures.append("Europe region is not enabled")
-				if not String(region.get("probe_url", "")).contains(
-					"/request/v1/health/ping?"
-				):
+				if not String(region.get("probe_url", "")).contains("/request/v1/health/ping?"):
 					_failures.append("Europe probe URL is not query-safe")
 		if int(config.get("protocol_version", 0)) != 4:
 			_failures.append("Client configuration is not pinned to protocol 4")
