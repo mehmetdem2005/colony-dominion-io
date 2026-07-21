@@ -24,12 +24,15 @@ export async function ensurePublicControlGateway(): Promise<string> {
     throw new Error(`Public control gateway must use HTTPS in production: ${gatewayUrl.protocol}`);
   }
 
-  let lastError = "gateway probe did not run";
+  // Do not probe the external gateway during managed-pool startup. The external
+  // gateway intentionally waits for the pool to become ready, which would create
+  // a readiness cycle. Verify the actor locally here; CI verifies the public HTTPS
+  // route only after the managed pool reports ready.
+  let lastError = "local actor probe did not run";
   for (let attempt = 1; attempt <= 20; attempt += 1) {
     try {
-      const response = await fetch(`${publicBaseUrl}/v1/health`, {
-        headers: { accept: "application/json", "user-agent": "colony-control-bootstrap" },
-        signal: AbortSignal.timeout(10_000),
+      const response = await actorHandle.fetch("/v1/health", {
+        headers: { accept: "application/json", "user-agent": "colony-control-bootstrap-local" },
       });
       const payload = (await response.json().catch(() => null)) as { ok?: boolean } | null;
       if (response.ok && payload?.ok === true) {
@@ -38,6 +41,7 @@ export async function ensurePublicControlGateway(): Promise<string> {
           actor_key: PUBLIC_CONTROL_ACTOR_KEY,
           public_base_url: publicBaseUrl,
           health_verified: true,
+          verification_scope: "local_actor",
         }));
         return publicBaseUrl;
       }
@@ -45,8 +49,8 @@ export async function ensurePublicControlGateway(): Promise<string> {
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     }
-    await delay(Math.min(500 * attempt, 3_000));
+    await delay(Math.min(250 * attempt, 2_000));
   }
 
-  throw new Error(`Public control gateway did not become ready: ${lastError}`);
+  throw new Error(`Public control actor did not become ready locally: ${lastError}`);
 }
