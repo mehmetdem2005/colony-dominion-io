@@ -9,7 +9,6 @@ on:
       - "network/**"
       - "autoload/**"
       - "gameplay/match/**"
-      - "tools/configure_android_ci.gd"
       - "tools/verify_live_rivet.py"
       - "tests/query_safe_url_regression_test.gd"
       - "config/backend_config.json"
@@ -22,7 +21,6 @@ on:
       - "network/**"
       - "autoload/**"
       - "gameplay/match/**"
-      - "tools/configure_android_ci.gd"
       - "tools/verify_live_rivet.py"
       - "tests/query_safe_url_regression_test.gd"
       - "config/backend_config.json"
@@ -93,8 +91,14 @@ jobs:
             -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
             -validity 10000 \
             -deststoretype PKCS12
-          "$GODOT_BIN" --headless --editor --path . \
-            --script res://tools/configure_android_ci.gd
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
 
       - name: Typecheck Rivet control plane
         working-directory: backend/rivet-control
