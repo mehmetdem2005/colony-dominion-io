@@ -5,7 +5,9 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -89,7 +91,119 @@ def preflight(module, token: str, project) -> dict[str, str]:
     database_user = str(rows[0].get("database_user", "")).strip()
     if not database_name or not database_user:
         raise module.DeployError("Supabase preflight returned incomplete database metadata")
-    return {"database_name": database_name, "database_user": database_user}
+
+    auth_config = module.http_json(
+        "GET",
+        f"{module.SUPABASE_API}/projects/{project.ref}/config/auth",
+        token=token,
+        timeout=45.0,
+    )
+    if not isinstance(auth_config, dict):
+        raise module.DeployError("Supabase Auth config preflight returned an unexpected response")
+    return {
+        "database_name": database_name,
+        "database_user": database_user,
+        "auth_site_url": str(auth_config.get("site_url", "")),
+    }
+
+
+def append_path_before_query(base_url: str, path: str) -> str:
+    parsed = urllib.parse.urlsplit(base_url.strip())
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError("Auth confirmation base URL must be HTTPS")
+    base_path = parsed.path.rstrip("/")
+    suffix = "/" + path.strip("/")
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, f"{base_path}{suffix}", parsed.query, "")
+    )
+
+
+def load_confirmation_template(root: Path) -> str:
+    path = root / "backend" / "supabase" / "email_templates" / "confirmation.html"
+    if not path.is_file():
+        raise RuntimeError(f"Confirmation email template is missing: {path}")
+    content = path.read_text(encoding="utf-8").strip()
+    if "{{ .ConfirmationURL }}" not in content:
+        raise RuntimeError("Confirmation email template must use {{ .ConfirmationURL }}")
+    if len(content) < 500:
+        raise RuntimeError("Confirmation email template is unexpectedly short")
+    return content
+
+
+def parse_allow_list(value: Any) -> list[str]:
+    items: list[str] = []
+    for item in re.split(r"[,\n]", str(value or "")):
+        normalized = item.strip()
+        if normalized and normalized not in items:
+            items.append(normalized)
+    return items
+
+
+def configure_auth_confirmation(
+    module,
+    root: Path,
+    token: str,
+    project_ref: str,
+) -> dict[str, Any]:
+    client_config_path = root / "config" / "backend_config.json"
+    client_config = json.loads(client_config_path.read_text(encoding="utf-8"))
+    control_base_url = str(client_config.get("rivet_control_base_url", "")).strip()
+    confirmation_url = append_path_before_query(control_base_url, "/v1/auth/confirmed")
+    if "localhost" in confirmation_url.casefold():
+        raise module.DeployError("Production auth confirmation URL must not use localhost")
+
+    current = module.http_json(
+        "GET",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        timeout=45.0,
+    )
+    if not isinstance(current, dict):
+        raise module.DeployError("Could not read current Supabase Auth configuration")
+    allow_list = parse_allow_list(current.get("uri_allow_list", ""))
+    if confirmation_url not in allow_list:
+        allow_list.append(confirmation_url)
+
+    template = load_confirmation_template(root)
+    payload = {
+        "site_url": confirmation_url,
+        "uri_allow_list": ",".join(allow_list),
+        "mailer_subjects_confirmation": "Colony Dominion.io — E-posta adresini doğrula",
+        "mailer_templates_confirmation_content": template,
+    }
+    module.http_json(
+        "PATCH",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        body=payload,
+        timeout=60.0,
+    )
+
+    verified = module.http_json(
+        "GET",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        timeout=45.0,
+    )
+    if not isinstance(verified, dict):
+        raise module.DeployError("Could not verify Supabase Auth configuration")
+    verified_site_url = str(verified.get("site_url", "")).strip()
+    verified_allow_list = parse_allow_list(verified.get("uri_allow_list", ""))
+    verified_template = str(verified.get("mailer_templates_confirmation_content", ""))
+    if verified_site_url != confirmation_url:
+        raise module.DeployError("Supabase Auth site URL verification failed")
+    if confirmation_url not in verified_allow_list:
+        raise module.DeployError("Supabase Auth redirect allow-list verification failed")
+    if "{{ .ConfirmationURL }}" not in verified_template:
+        raise module.DeployError("Supabase confirmation email template verification failed")
+    if "localhost" in verified_site_url.casefold():
+        raise module.DeployError("Supabase Auth still points to localhost")
+    return {
+        "site_url": verified_site_url,
+        "redirect_allowlisted": True,
+        "confirmation_template": True,
+        "localhost_removed": True,
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -118,6 +232,7 @@ def main() -> int:
         raise module.DeployError("This deployer is restricted to the staging environment")
 
     migrations = validate_migrations(root)
+    load_confirmation_template(root)
     projects = module.list_supabase_projects(token)
     project = module.select_project(projects, args.project_name, args.project_ref)
     print(
@@ -131,12 +246,14 @@ def main() -> int:
     )
     publishable_key = module.get_publishable_key(token, project.ref)
     if args.preflight_only:
+        print(f"[Supabase] Current Auth site URL: {access['auth_site_url']}")
         print(f"[Supabase] Validated {len(migrations)} migration files")
         print("SUPABASE_PREFLIGHT_OK")
         return 0
 
     applied = module.run_supabase_migrations(root, token, project.ref)
     verification = module.verify_supabase_schema(token, project.ref)
+    auth_verification = configure_auth_confirmation(module, root, token, project.ref)
     module.update_client_config(
         root,
         supabase_url=project.url,
@@ -158,6 +275,7 @@ def main() -> int:
             "migration_count": len(migrations),
             "management_preflight": access,
             "verification": verification,
+            "auth_confirmation": auth_verification,
         },
         "rivet": {"status": "blocked_provider_internal_error"},
     }
