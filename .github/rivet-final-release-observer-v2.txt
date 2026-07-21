@@ -1,4 +1,4 @@
-target_sha=8617b2e331f068facb9205b4a0cbc8a08cee79b7
 workflow=deploy-rivet-full-online-direct.yml
 artifact=colony-dominion-rivet-direct-staging
-observer_version=4
+observer_version=5
+dispatch_fallback=true
