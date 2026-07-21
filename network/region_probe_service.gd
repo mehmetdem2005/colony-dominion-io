@@ -4,7 +4,8 @@ extends Node
 signal region_updated(region_id: String, metrics: Dictionary)
 signal cycle_completed(best_region_id: String)
 
-const SAMPLE_COUNT: int = 3
+const WARMUP_SAMPLE_COUNT: int = 1
+const MEASURED_SAMPLE_COUNT: int = 3
 
 var _regions: Array[Dictionary] = []
 var _timeout_seconds: float = 2.5
@@ -15,9 +16,14 @@ var _best_region_id: String = ""
 
 
 func configure(regions: Array[Dictionary], timeout_seconds: float) -> void:
+	_cycle_generation += 1
 	_regions.clear()
+	_metrics.clear()
+	_best_region_id = ""
+	_pending_count = 0
 	for region in regions:
-		_regions.append(region.duplicate(true))
+		if bool(region.get("enabled", true)):
+			_regions.append(region.duplicate(true))
 	_timeout_seconds = clampf(timeout_seconds, 0.5, 10.0)
 
 
@@ -64,7 +70,8 @@ func _probe_region(region: Dictionary, generation: int) -> void:
 	add_child(client)
 	var samples: Array[int] = []
 	var failures: int = 0
-	for sample_index in SAMPLE_COUNT:
+	var total_requests: int = WARMUP_SAMPLE_COUNT + MEASURED_SAMPLE_COUNT
+	for sample_index in total_requests:
 		var separator: String = "&" if probe_url.contains("?") else "?"
 		var sample_url: String = (
 			"%s%st=%d&s=%d"
@@ -78,6 +85,8 @@ func _probe_region(region: Dictionary, generation: int) -> void:
 		var response: Dictionary = await client.request_json(
 			HTTPClient.METHOD_GET, sample_url, PackedStringArray(["Cache-Control: no-cache"])
 		)
+		if sample_index < WARMUP_SAMPLE_COUNT:
+			continue
 		if bool(response.get("ok", false)):
 			samples.append(maxi(int(response.get("elapsed_ms", 0)), 1))
 		else:
@@ -104,7 +113,7 @@ func _build_metrics(samples: Array[int], failures: int) -> Dictionary:
 	for sample in samples:
 		deviation_total += absf(float(sample - median))
 	var jitter: int = roundi(deviation_total / float(samples.size()))
-	var packet_loss: float = float(failures) / float(SAMPLE_COUNT)
+	var packet_loss: float = float(failures) / float(MEASURED_SAMPLE_COUNT)
 	var score: float = float(median) + float(jitter) * 2.0 + packet_loss * 400.0
 	return {
 		"available": true,

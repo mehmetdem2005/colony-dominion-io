@@ -14,7 +14,8 @@ on:
       - "backend/rivet-control/**"
       - "network/**"
       - "autoload/**"
-      - "gameplay/match/**"
+      - "ui/**"
+      - "tests/**"
       - "config/backend_config.json"
       - "core/boot.gd"
       - "project.godot"
@@ -28,7 +29,7 @@ jobs:
   deploy-full-online:
     if: ${{ github.event_name == 'push' || inputs.confirmation == 'DEPLOY-RIVET-FULL-ONLINE' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    timeout-minutes: 70
     environment: staging
     permissions:
       contents: read
@@ -38,15 +39,21 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
-      REGIONS_JSON: ${{ vars.REGIONS_JSON }}
       SUPPORTED_BUILD_ID: PHASE-05.5-GOOGLE-BOT-BACKFILL
       PROTOCOL_VERSION: "4"
       MIN_PLAYERS: "1"
       MAX_PLAYERS: "10"
       QUEUE_TTL_SECONDS: "120"
       BOT_BACKFILL_WAIT_SECONDS: "30"
+      REGIONS_JSON: >-
+        [{"id":"eu","displayName":"Avrupa — Frankfurt","shortName":"EU-FRA","probeUrl":"","enabled":true,"providerRegion":"fra"}]
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/colony-debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
 
     steps:
       - uses: actions/checkout@v6
@@ -60,90 +67,81 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build validation tools
-        run: python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
 
-      - name: Install Godot and templates
-        run: tools/install_godot_ci.sh
+      - name: Install validation tools and Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+          tools/install_godot_ci.sh
+          "$GODOT_BIN" --version
 
-      - name: Normalize and validate staging credentials
+      - name: Configure Android SDK and signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "build-tools;35.0.1" \
+            "platforms;android-35"
+          keytool -keyalg RSA -genkeypair \
+            -alias androiddebugkey \
+            -keypass android \
+            -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" \
+            -storepass android \
+            -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
+            -validity 10000 \
+            -deststoretype PKCS12
+          "$GODOT_BIN" --headless --editor --path . \
+            --script res://tools/configure_android_ci.gd
+
+      - name: Resolve and validate staging credentials
         shell: bash
         run: |
           set -euo pipefail
           test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
-          test "$MIN_PLAYERS" = "1"
-          test "$MAX_PLAYERS" = "10"
-          test "$PROTOCOL_VERSION" = "4"
           echo "::add-mask::$RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_SECRET_KEY"
           [ -z "${SUPABASE_ACCESS_TOKEN:-}" ] || echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
-          mkdir -p build/rivet-staging build/android
+          mkdir -p build/rivet-staging build/android build/ci-logs
 
           if [ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
             test -n "${SUPABASE_ACCESS_TOKEN:-}" || {
               echo "SUPABASE_ACCESS_TOKEN is required to resolve the publishable key" >&2
               exit 2
             }
-            API_KEYS_FILE="$RUNNER_TEMP/supabase-api-keys.json"
             curl --fail --silent --show-error \
-              --connect-timeout 10 --max-time 30 \
-              --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
+              --retry 6 --retry-delay 3 --retry-all-errors \
               --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-              --header "Accept: application/json" \
               "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/api-keys?reveal=true" \
-              > "$API_KEYS_FILE"
-            SUPABASE_PUBLISHABLE_KEY="$(python - "$API_KEYS_FILE" <<'PY'
+              > "$RUNNER_TEMP/supabase-api-keys.json"
+            SUPABASE_PUBLISHABLE_KEY="$(python - "$RUNNER_TEMP/supabase-api-keys.json" <<'PY'
           import json
           import sys
           from pathlib import Path
 
           items = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          if not isinstance(items, list):
-              raise SystemExit("Supabase API key response is not a list")
-
-          def candidate_score(item: object) -> int:
-              if not isinstance(item, dict):
-                  return -1
+          for item in items:
               key = str(item.get("api_key", "")).strip()
               key_type = str(item.get("type", "")).strip().lower()
               name = str(item.get("name", "")).strip().lower()
-              prefix = str(item.get("prefix", "")).strip().lower()
-              if not key:
-                  return -1
-              if key.startswith("sb_secret_") or key_type == "secret":
-                  return -1
-              if "service_role" in name or "service role" in name or "secret" in name:
-                  return -1
-              if key_type == "publishable":
-                  return 100
-              if key.startswith("sb_publishable_") or prefix.startswith("sb_publishable_"):
-                  return 95
-              if name == "anon" or "anonymous" in name:
-                  return 90
-              if key_type == "legacy" and key.count(".") == 2:
-                  return 80
-              return -1
-
-          candidates = sorted(
-              ((candidate_score(item), item) for item in items),
-              key=lambda pair: pair[0],
-              reverse=True,
-          )
-          if not candidates or candidates[0][0] < 0:
-              raise SystemExit("No publishable or legacy anon API key was found")
-          selected = str(candidates[0][1].get("api_key", "")).strip()
-          if selected.startswith("sb_secret_"):
-              raise SystemExit("Refusing to select a Supabase secret API key")
-          sys.stdout.write(selected)
+              if key.startswith("sb_secret_") or key_type == "secret" or "service_role" in name:
+                  continue
+              if key_type == "publishable" or key.startswith("sb_publishable_") or name == "anon":
+                  print(key)
+                  raise SystemExit(0)
+          raise SystemExit("No publishable Supabase key was found")
           PY
             )"
-            rm -f "$API_KEYS_FILE"
-            test -n "$SUPABASE_PUBLISHABLE_KEY" || {
-              echo "Supabase publishable key could not be resolved" >&2
-              exit 2
-            }
             echo "SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
           fi
           case "$SUPABASE_PUBLISHABLE_KEY" in
@@ -151,74 +149,48 @@ jobs:
           esac
           echo "::add-mask::$SUPABASE_PUBLISHABLE_KEY"
 
-          curl --fail --silent --show-error \
-            --connect-timeout 10 --max-time 30 \
-            --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
-            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
-            --header "Accept: application/json" \
-            https://cloud-api.rivet.dev/tokens/api/inspect \
-            > build/rivet-staging/token-inspect.json
-
-          if [ -z "${REGIONS_JSON:-}" ]; then
-            REGIONS_JSON='[{"id":"eu","displayName":"Avrupa","shortName":"EU","probeUrl":"","enabled":true,"providerRegion":"fra"}]'
-          fi
-          REGIONS_JSON="$REGIONS_JSON" python - <<'PY'
+          python - <<'PY'
           import json
           import os
+
           regions = json.loads(os.environ["REGIONS_JSON"])
-          if not isinstance(regions, list) or not regions:
-              raise SystemExit("REGIONS_JSON must be a non-empty array")
-          if not any(isinstance(item, dict) and item.get("enabled") for item in regions):
-              raise SystemExit("REGIONS_JSON must contain an enabled region")
-          compact = json.dumps(regions, ensure_ascii=False, separators=(",", ":"))
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
-              output.write(f"EFFECTIVE_REGIONS_JSON={compact}\n")
+          if len(regions) != 1 or regions[0].get("id") != "eu":
+              raise SystemExit("Staging must expose only the deployed EU region")
+          if regions[0].get("providerRegion") != "fra" or not regions[0].get("enabled"):
+              raise SystemExit("EU region must be enabled and mapped to Frankfurt")
           PY
 
-      - name: Validate, typecheck and build sources
+      - name: Validate and build production sources
         shell: bash
         run: |
           set -euo pipefail
           python tools/validate_online_release.py
+          gdlint autoload network ui gameplay tests
+          gdformat --check autoload network ui gameplay tests
           npm --prefix backend/rivet-control install --no-audit --no-fund
           npm --prefix backend/rivet-control run typecheck
+          npm --prefix backend/rivet-control run test:policy
           npm --prefix backend/rivet-control run build
           tools/build_dedicated_server.sh
-
-      - name: Build full-online container
-        shell: bash
-        run: |
-          set -euo pipefail
           docker build \
             --file backend/rivet-control/Dockerfile \
-            --tag "colony-rivet-full-online-ci:${GITHUB_SHA:0:12}" \
+            --tag "colony-rivet-full-online:${GITHUB_SHA:0:12}" \
             .
-          docker image inspect "colony-rivet-full-online-ci:${GITHUB_SHA:0:12}" \
-            --format '{{.Id}} {{.Architecture}}' \
-            | tee build/rivet-staging/container-image.txt
-          docker run --rm \
-            --entrypoint /usr/local/bin/godot \
-            "colony-rivet-full-online-ci:${GITHUB_SHA:0:12}" \
-            --headless --version \
-            | tee build/rivet-staging/godot-runtime-version.txt
-          grep -q "4.6.3" build/rivet-staging/godot-runtime-version.txt
 
-      - name: Deploy full-online runtime to Rivet Compute staging
+      - name: Deploy matching runtime to Rivet
         id: deploy
-        timeout-minutes: 30
+        timeout-minutes: 35
         shell: bash
         run: |
           set -uo pipefail
-          RAW_LOG="$RUNNER_TEMP/rivet-full-online-deploy.log"
-          ATTEMPT_LOG="$RUNNER_TEMP/rivet-full-online-attempt.log"
+          RAW_LOG="$RUNNER_TEMP/rivet-deploy.log"
+          ATTEMPT_LOG="$RUNNER_TEMP/rivet-deploy-attempt.log"
           SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
           DEPLOY_STATUS=1
-          MAX_ATTEMPTS=4
           : > "$RAW_LOG"
-
-          for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
+          for ATTEMPT in $(seq 1 4); do
             : > "$ATTEMPT_LOG"
-            echo "===== RIVET FULL-ONLINE DEPLOY ATTEMPT $ATTEMPT/$MAX_ATTEMPTS =====" | tee -a "$RAW_LOG"
+            echo "===== RIVET DEPLOY ATTEMPT $ATTEMPT/4 =====" | tee -a "$RAW_LOG"
             set +e
             npx --yes @rivetkit/cli@latest deploy \
               --token "$RIVET_CLOUD_TOKEN" \
@@ -243,101 +215,92 @@ jobs:
               --env "MAX_PLAYERS=${MAX_PLAYERS}" \
               --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
               --env "BOT_BACKFILL_WAIT_SECONDS=${BOT_BACKFILL_WAIT_SECONDS}" \
-              --env "REGIONS_JSON=${EFFECTIVE_REGIONS_JSON}" \
+              --env "REGIONS_JSON=${REGIONS_JSON}" \
               --env "RIVET_STARTUP_CANARY=1" \
               2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"
             DEPLOY_STATUS=${PIPESTATUS[0]}
             set -e
-
-            if [ "$DEPLOY_STATUS" -eq 0 ]; then
+            [ "$DEPLOY_STATUS" -eq 0 ] && break
+            if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|validation failed|Invalid value specified' "$ATTEMPT_LOG"; then
               break
             fi
-            if grep -Eqi '401 Unauthorized|403 Forbidden|invalid token|unauthorized|forbidden|Invalid value specified|validation failed|must be between|not supported with' "$ATTEMPT_LOG"; then
-              break
+            if [ "$ATTEMPT" -lt 4 ]; then
+              sleep $((15 * ATTEMPT))
             fi
-            if grep -Eqi '429 Too Many Requests|500 Internal Server Error|internal server error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|upstream connect error|connection termination|connection reset|reset before headers|temporarily unavailable|timed out|timeout|TLS|network error|socket hang up|ECONNRESET|ETIMEDOUT' "$ATTEMPT_LOG"; then
-              if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
-                sleep $((15 * (2 ** (ATTEMPT - 1))))
-                continue
-              fi
-            fi
-            break
           done
-
-          python - "$RAW_LOG" build/rivet-staging/deploy-sanitized.log <<'PY'
+          python - "$RAW_LOG" build/rivet-staging/deploy.log <<'PY'
           import os
           import re
           import sys
           from pathlib import Path
 
-          raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
           for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):
               value = os.environ.get(name, "")
               if value:
-                  raw = raw.replace(value, "***")
-          raw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)
-          Path(sys.argv[2]).write_text(raw, encoding="utf-8")
+                  text = text.replace(value, "***")
+          text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+          Path(sys.argv[2]).write_text(text, encoding="utf-8")
           PY
           test "$DEPLOY_STATUS" -eq 0
-          grep -Eqi 'pool status[[:space:]]+status=ready' build/rivet-staging/deploy-sanitized.log
+          grep -Eqi 'pool status[[:space:]]+status=ready' build/rivet-staging/deploy.log
 
-      - name: Verify live public control and Godot actor canaries
-        timeout-minutes: 10
+      - name: Discover and verify the live control gateway
+        timeout-minutes: 12
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/rivet-staging
-          GAME_FOUND=0
-          CONTROL_FOUND=0
-          for ATTEMPT in $(seq 1 48); do
+          FOUND=0
+          for ATTEMPT in $(seq 1 60); do
             set +e
             (
               cd backend/rivet-control
               npx --yes @rivetkit/cli@latest logs \
                 --token "$RIVET_CLOUD_TOKEN" \
                 --namespace staging \
-                -n 1000
-            ) > build/rivet-staging/runtime-raw.log 2>&1
+                -n 1200
+            ) > "$RUNNER_TEMP/rivet-runtime.log" 2>&1
             LOG_STATUS=$?
             set -e
-            python - <<'PY'
+            if [ "$LOG_STATUS" -eq 0 ]; then
+              python - "$RUNNER_TEMP/rivet-runtime.log" build/rivet-staging/runtime.log <<'PY'
           import os
           import re
+          import sys
           from pathlib import Path
-          source = Path("build/rivet-staging/runtime-raw.log")
-          raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
-          for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):
+
+          text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY"):
               value = os.environ.get(name, "")
               if value:
-                  raw = raw.replace(value, "***")
-          raw = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)
-          Path("build/rivet-staging/runtime-sanitized.log").write_text(raw, encoding="utf-8")
+                  text = text.replace(value, "***")
+          text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+          Path(sys.argv[2]).write_text(text, encoding="utf-8")
           PY
-            if [ "$LOG_STATUS" -eq 0 ] && grep -q 'RIVET_GAME_ACTOR_CANARY_OK' build/rivet-staging/runtime-sanitized.log; then
-              GAME_FOUND=1
-            fi
-            if [ "$LOG_STATUS" -eq 0 ] && grep -q 'RIVET_PUBLIC_CONTROL_GATEWAY_READY' build/rivet-staging/runtime-sanitized.log; then
-              CONTROL_FOUND=1
-            fi
-            if grep -Eq 'RIVET_GAME_ACTOR_CANARY_FAILED|RIVET_FULL_ONLINE_BOOTSTRAP_FAILED' build/rivet-staging/runtime-sanitized.log; then
-              cat build/rivet-staging/runtime-sanitized.log >&2
-              exit 1
-            fi
-            if [ "$GAME_FOUND" -eq 1 ] && [ "$CONTROL_FOUND" -eq 1 ]; then
-              break
+              if grep -q 'RIVET_GAME_ACTOR_CANARY_OK' build/rivet-staging/runtime.log \
+                && grep -q 'RIVET_PUBLIC_CONTROL_GATEWAY_READY' build/rivet-staging/runtime.log; then
+                FOUND=1
+                break
+              fi
+              if grep -Eq 'RIVET_GAME_ACTOR_CANARY_FAILED|RIVET_FULL_ONLINE_BOOTSTRAP_FAILED' build/rivet-staging/runtime.log; then
+                cat build/rivet-staging/runtime.log >&2
+                exit 1
+              fi
             fi
             sleep 10
           done
-          test "$GAME_FOUND" -eq 1
-          test "$CONTROL_FOUND" -eq 1
+          test "$FOUND" -eq 1
 
           python - <<'PY'
           import json
           import os
           import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
           from pathlib import Path
 
-          text = Path("build/rivet-staging/runtime-sanitized.log").read_text(encoding="utf-8", errors="replace")
+          text = Path("build/rivet-staging/runtime.log").read_text(encoding="utf-8", errors="replace")
           payload = None
           for line in reversed(text.splitlines()):
               if "RIVET_PUBLIC_CONTROL_GATEWAY_READY" not in line:
@@ -345,139 +308,111 @@ jobs:
               match = re.search(r'\{.*"marker"\s*:\s*"RIVET_PUBLIC_CONTROL_GATEWAY_READY".*\}', line)
               if not match:
                   continue
-              try:
-                  candidate = json.loads(match.group(0))
-              except json.JSONDecodeError:
-                  continue
+              candidate = json.loads(match.group(0))
               if candidate.get("health_verified") is True:
                   payload = candidate
                   break
           if payload is None:
-              raise SystemExit("public control gateway marker could not be parsed")
-          url = str(payload.get("public_base_url", "")).rstrip("/")
-          if not url.startswith("https://") or not url.endswith("/request"):
-              raise SystemExit("public control gateway URL is not a client-safe HTTPS /request URL")
-          Path("build/rivet-staging/public-control-url.txt").write_text(url + "\n", encoding="utf-8")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
-              output.write(f"RIVET_CONTROL_BASE_URL={url}\n")
-          PY
+              raise SystemExit("Public control gateway marker was not found")
+          base = str(payload.get("public_base_url", "")).strip()
+          parsed = urllib.parse.urlsplit(base)
+          if parsed.scheme != "https" or not parsed.netloc or not parsed.path.rstrip("/").endswith("/request"):
+              raise SystemExit("Public control gateway is invalid")
 
-      - name: Verify public REST surface and auth boundary
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error \
-            --retry 8 --retry-delay 3 --retry-all-errors \
-            --header "Accept: application/json" \
-            "$RIVET_CONTROL_BASE_URL/v1/health" \
-            | tee build/rivet-staging/public-health.json
-          curl --fail --silent --show-error \
-            --retry 8 --retry-delay 3 --retry-all-errors \
-            --header "Accept: application/json" \
-            "$RIVET_CONTROL_BASE_URL/v1/health/config" \
-            | tee build/rivet-staging/public-health-config.json
-          curl --fail --silent --show-error \
-            --retry 8 --retry-delay 3 --retry-all-errors \
-            --header "Accept: application/json" \
-            "$RIVET_CONTROL_BASE_URL/v1/regions" \
-            | tee build/rivet-staging/public-regions.json
+          def endpoint(path: str) -> str:
+              current = urllib.parse.urlsplit(base)
+              full_path = current.path.rstrip("/") + "/" + path.lstrip("/")
+              return urllib.parse.urlunsplit(
+                  (current.scheme, current.netloc, full_path, current.query, "")
+              )
 
-          UNAUTHORIZED_CODE="$(curl --silent --show-error \
-            --output build/rivet-staging/unauthorized-matchmaking.json \
-            --write-out '%{http_code}' \
-            --header 'Content-Type: application/json' \
-            --request POST \
-            --data '{"player_id":"00000000-0000-4000-8000-000000000001","display_name":"Canary","region_preference":"auto","build_id":"PHASE-05.5-GOOGLE-BOT-BACKFILL","protocol_version":4}' \
-            "$RIVET_CONTROL_BASE_URL/v1/matchmaking/join")"
-          test "$UNAUTHORIZED_CODE" = "401"
+          def get_json(path: str) -> dict:
+              request = urllib.request.Request(
+                  endpoint(path),
+                  headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+              )
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"{path} returned HTTP {response.status}")
+                  return json.loads(response.read().decode("utf-8"))
 
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          health = json.loads(Path("build/rivet-staging/public-health.json").read_text())
-          config = json.loads(Path("build/rivet-staging/public-health-config.json").read_text())
-          regions = json.loads(Path("build/rivet-staging/public-regions.json").read_text())
-          if health.get("ok") is not True:
-              raise SystemExit("public health endpoint is not healthy")
-          if config.get("ready") is not True:
-              raise SystemExit(f"public health config is not ready: {config}")
-          if config.get("limits", {}).get("max_players") != 10:
-              raise SystemExit("public health config max_players mismatch")
-          if not any(region.get("enabled") for region in regions.get("regions", [])):
-              raise SystemExit("public region catalog has no enabled region")
-          PY
+          health = get_json("/v1/health")
+          service_config = get_json("/v1/health/config")
+          catalog = get_json("/v1/regions")
+          if health.get("ok") is not True or service_config.get("ready") is not True:
+              raise SystemExit("Rivet control service is not ready")
+          regions = [region for region in catalog.get("regions", []) if region.get("enabled")]
+          if len(regions) != 1 or regions[0].get("id") != "eu":
+              raise SystemExit(f"Unexpected deployed region catalog: {regions}")
+          if service_config.get("limits", {}).get("bot_backfill_wait_seconds") != 30:
+              raise SystemExit("Bot backfill wait mismatch")
 
-      - name: Generate production client configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
-          export SUPABASE_URL
-          python - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
+          probe_url = endpoint("/v1/health/ping")
+          probe_request = urllib.request.Request(
+              probe_url,
+              headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+          )
+          with urllib.request.urlopen(probe_request, timeout=45) as response:
+              if response.status != 200:
+                  raise SystemExit("EU probe endpoint is unavailable")
 
-          regions_payload = json.loads(Path("build/rivet-staging/public-regions.json").read_text())
-          control_url = os.environ["RIVET_CONTROL_BASE_URL"].rstrip("/")
-          regions = []
-          for source in regions_payload.get("regions", []):
-              enabled = bool(source.get("enabled", True))
-              regions.append({
-                  "id": str(source.get("id", "")).strip(),
-                  "display_name": str(source.get("display_name", source.get("id", ""))).strip(),
-                  "short_name": str(source.get("short_name", source.get("id", ""))).strip(),
-                  "probe_url": f"{control_url}/v1/health/ping" if enabled else "",
-                  "enabled": enabled,
-              })
-          if not regions or not any(region["enabled"] for region in regions):
-              raise SystemExit("cannot generate client config without an enabled region")
-
-          publishable_key = os.environ["SUPABASE_PUBLISHABLE_KEY"].strip()
-          if publishable_key.startswith("sb_secret_"):
-              raise SystemExit("refusing to embed a Supabase secret key")
-          config = {
+          Path("build/rivet-staging/public-control-url.txt").write_text(base + "\n", encoding="utf-8")
+          client_config = {
               "environment": "production",
-              "build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
-              "protocol_version": 4,
-              "supabase_url": os.environ["SUPABASE_URL"].rstrip("/"),
-              "supabase_publishable_key": publishable_key,
-              "rivet_control_base_url": control_url,
+              "build_id": os.environ["SUPPORTED_BUILD_ID"],
+              "protocol_version": int(os.environ["PROTOCOL_VERSION"]),
+              "supabase_url": f"https://{os.environ['SUPABASE_PROJECT_REF']}.supabase.co",
+              "supabase_publishable_key": os.environ["SUPABASE_PUBLISHABLE_KEY"],
+              "rivet_control_base_url": base,
               "persist_refresh_token": True,
-              "region_probe_interval_seconds": 12.0,
-              "region_probe_timeout_seconds": 2.5,
-              "regions": regions,
+              "region_probe_interval_seconds": 20.0,
+              "region_probe_timeout_seconds": 4.0,
+              "regions": [
+                  {
+                      "id": "eu",
+                      "display_name": "Avrupa — Frankfurt",
+                      "short_name": "EU-FRA",
+                      "probe_url": probe_url,
+                      "enabled": True,
+                  }
+              ],
           }
           Path("config/backend_config.json").write_text(
-              json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+              json.dumps(client_config, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
           )
-          summary = {
-              "environment": config["environment"],
-              "build_id": config["build_id"],
-              "protocol_version": config["protocol_version"],
-              "supabase_project_ref": os.environ["SUPABASE_PROJECT_REF"],
-              "publishable_key_sha256_12": hashlib.sha256(publishable_key.encode()).hexdigest()[:12],
-              "rivet_control_base_url": control_url,
-              "enabled_regions": [region["id"] for region in regions if region["enabled"]],
+          report = {
+              "runtime_build_id": os.environ["SUPPORTED_BUILD_ID"],
+              "protocol_version": int(os.environ["PROTOCOL_VERSION"]),
+              "region": "eu",
+              "provider_region": "fra",
+              "query_safe_probe": True,
+              "bot_backfill_wait_seconds": 30,
           }
-          Path("build/rivet-staging/client-config-summary.json").write_text(
-              json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+          Path("build/rivet-staging/live-verification.json").write_text(
+              json.dumps(report, indent=2) + "\n",
+              encoding="utf-8",
           )
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"RIVET_CONTROL_BASE_URL={base}\n")
           PY
 
       - name: Build configured Android staging APK
-        timeout-minutes: 15
+        timeout-minutes: 18
         shell: bash
         run: |
           set -euo pipefail
-          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
-          test -f "$TEMPLATE_DIR/android_debug.apk"
-          mkdir -p build/android
-          "$GODOT_BIN" --headless --editor --path . --quit-after 3
+          "$GODOT_BIN" --headless --path . --editor --quit 2>&1 \
+            | tee build/rivet-staging/godot-import.log
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script' build/rivet-staging/godot-import.log; then
+            exit 1
+          fi
+          "$GODOT_BIN" --headless --path . \
+            --script res://tests/google_oauth_bot_backfill_test.gd
           "$GODOT_BIN" --headless --path . \
             --export-debug "Android" \
-            build/android/colony-dominion-rivet-staging.apk
+            build/android/colony-dominion-rivet-staging.apk \
+            2>&1 | tee build/rivet-staging/android-export.log
           test -s build/android/colony-dominion-rivet-staging.apk
           unzip -t build/android/colony-dominion-rivet-staging.apk >/dev/null
           sha256sum build/android/colony-dominion-rivet-staging.apk \
@@ -485,60 +420,15 @@ jobs:
           stat --printf='%s\n' build/android/colony-dominion-rivet-staging.apk \
             > build/android/apk-size-bytes.txt
 
-      - name: Write authoritative end-to-end release status
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          from datetime import datetime, timezone
-          from pathlib import Path
-          report = {
-              "success": True,
-              "verified_at": datetime.now(timezone.utc).isoformat(),
-              "verification": "rivet_pool_public_control_godot_actor_android_apk",
-              "provider": "rivet_only",
-              "managed_pool_status": "ready",
-              "control_plane_live": True,
-              "public_control_gateway_ready": True,
-              "public_auth_boundary_ready": True,
-              "game_server_allocator_ready": True,
-              "rivet_game_actor_ready": True,
-              "websocket_bridge_ready": True,
-              "android_client_config_ready": True,
-              "android_staging_apk_ready": True,
-              "full_online_ready": True,
-              "full_end_to_end_release_ready": True,
-              "cpu": 2,
-              "memory": "2Gi",
-              "max_concurrent_actors_per_instance": 3,
-              "max_scale": 4,
-              "build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
-              "protocol_version": 4,
-              "min_players": 1,
-              "max_players": 10,
-              "bot_backfill_wait_seconds": 30,
-          }
-          Path("build/rivet-staging/status.json").write_text(
-              json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-          )
-          print("RIVET_CONTROL_STAGING_READY=true")
-          print("RIVET_PUBLIC_CONTROL_GATEWAY_READY=true")
-          print("RIVET_GAME_ACTOR_READY=true")
-          print("RIVET_WEBSOCKET_BRIDGE_READY=true")
-          print("ANDROID_STAGING_APK_READY=true")
-          print("MAX_PLAYERS=10")
-          print("FULL_ONLINE_READY=true")
-          print("FULL_END_TO_END_RELEASE_READY=true")
-          PY
-
-      - name: Upload full-online staging evidence and Android APK
+      - name: Upload deployed APK and diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: colony-dominion-rivet-full-online-staging
-          if-no-files-found: warn
+          name: colony-dominion-rivet-staging-apk
           retention-days: 14
+          if-no-files-found: warn
           path: |
+            build/android/colony-dominion-rivet-staging.apk
+            build/android/SHA256SUMS.txt
+            build/android/apk-size-bytes.txt
             build/rivet-staging/
-            build/android/

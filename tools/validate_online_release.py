@@ -34,6 +34,14 @@ def validate() -> dict[str, object]:
     config = json.loads(read("config/backend_config.json"))
     require(config.get("build_id") == EXPECTED_BUILD, "backend build id mismatch")
     require(config.get("protocol_version") == EXPECTED_PROTOCOL, "protocol version mismatch")
+    regions = [row for row in config.get("regions", []) if isinstance(row, dict)]
+    require(len(regions) == 1, "client must expose exactly one deployed region")
+    require(regions[0].get("id") == "eu", "deployed client region must be Europe")
+    require(regions[0].get("enabled") is True, "Europe region must be enabled")
+    require(
+        "/request/v1/health/ping?" in str(regions[0].get("probe_url", "")),
+        "Europe probe URL must insert its path before the Rivet query string",
+    )
 
     protocol = read("network/network_protocol.gd")
     require("const VERSION: int = 4" in protocol, "GDScript protocol version mismatch")
@@ -61,15 +69,34 @@ def validate() -> dict[str, object]:
             "_rpc_match_ended",
         ),
     )
+    require_markers(
+        "autoload/online_services.gd",
+        (
+            "QuerySafeUrl.append_path",
+            '"/v1/regions"',
+            '"/v1/health/ping"',
+        ),
+    )
+    require_markers(
+        "network/region_probe_service.gd",
+        ("WARMUP_SAMPLE_COUNT", "MEASURED_SAMPLE_COUNT", "_metrics.clear()"),
+    )
 
     migrations = sorted((ROOT / "backend/supabase/migrations").glob("*.sql"))
     names = [path.name for path in migrations]
-    require(len(names) == len(set(name.split("_", 1)[0] for name in names)), "duplicate migration version")
-    require(names[-3:] == [
-        "202607190004_ranked_schema.sql",
-        "202607190005_authoritative_ranked_results.sql",
-        "202607210006_google_oauth_handoffs.sql",
-    ], "production migration order mismatch")
+    require(
+        len(names) == len(set(name.split("_", 1)[0] for name in names)),
+        "duplicate migration version",
+    )
+    require(
+        names[-3:]
+        == [
+            "202607190004_ranked_schema.sql",
+            "202607190005_authoritative_ranked_results.sql",
+            "202607210006_google_oauth_handoffs.sql",
+        ],
+        "production migration order mismatch",
+    )
     ranked_sql = migrations[-2].read_text(encoding="utf-8").lower()
     oauth_sql = migrations[-1].read_text(encoding="utf-8").lower()
     for marker in ("oauth_handoffs", "enable row level security", "revoke all"):
@@ -106,7 +133,10 @@ def validate() -> dict[str, object]:
             "control_plane_unavailable",
         ),
     )
-    require("/v1/internal/" not in read("backend/rivet-control/src/control-api-actor.ts"), "internal routes exposed by public actor")
+    require(
+        "/v1/internal/" not in read("backend/rivet-control/src/control-api-actor.ts"),
+        "internal routes exposed by public actor",
+    )
     require_markers(
         "backend/rivet-control/src/public-control-gateway.ts",
         (
@@ -136,9 +166,20 @@ def validate() -> dict[str, object]:
     require_markers(
         "backend/rivet-control/src/rivet-native-allocator.ts",
         (
-            "gameServer.create", "getGatewayUrl", "websocketUrl", "MAX_PLAYERS = 10",
-            "humanPlayerCount", "botCount", "ranked",
+            "gameServer.create",
+            "getGatewayUrl",
+            "websocketUrl",
+            "MAX_PLAYERS = 10",
+            "humanPlayerCount",
+            "botCount",
+            "ranked",
+            "createInRegion",
+            "region.providerRegion",
         ),
+    )
+    require_markers(
+        "backend/rivet-control/src/regions.ts",
+        ("Avrupa — Frankfurt", 'providerRegion: "fra"', "appendPathBeforeQuery"),
     )
     require_markers(
         "backend/rivet-control/src/server-full-online.ts",
@@ -168,11 +209,20 @@ def validate() -> dict[str, object]:
         ("Crypto.new()", "OS.shell_open", "x-colony-oauth-secret", "sign_in_refresh_token"),
     )
     require_markers(
+        "ui/auth_panel.gd",
+        ("GOOGLE İLE DEVAM ET", "OnlineServices.sign_in_google", "E-posta veya şifre formu kullanılmaz"),
+    )
+    auth_panel = read("ui/auth_panel.gd")
+    for forbidden in (
+        "sign_in_email",
+        "sign_up_email",
+        "resend_signup_confirmation",
+        "YENİ HESAP OLUŞTUR",
+    ):
+        require(forbidden not in auth_panel, f"Google-only auth UI contains {forbidden}")
+    require_markers(
         "tools/deploy_supabase_staging.py",
-        (
-            "external_google_enabled", "GOOGLE_OAUTH_CLIENT_ID",
-            "smtp.resend.com", "RESEND_API_KEY", "AUTH_SMTP_ADMIN_EMAIL",
-        ),
+        ("external_google_enabled", "GOOGLE_OAUTH_CLIENT_ID"),
     )
 
     dockerfile = read("backend/rivet-control/Dockerfile")
@@ -185,15 +235,24 @@ def validate() -> dict[str, object]:
         require(marker in dockerfile, f"full-online Docker marker missing: {marker}")
 
     project = read("project.godot")
-    require('GameTransport="*res://network/rivet_game_transport.gd"' in project, "Rivet transport autoload missing")
-    require('OnlineServices="*res://autoload/rivet_online_services.gd"' in project, "Rivet online services autoload missing")
+    require(
+        'GameTransport="*res://network/rivet_game_transport.gd"' in project,
+        "Rivet transport autoload missing",
+    )
+    require(
+        'OnlineServices="*res://autoload/rivet_online_services.gd"' in project,
+        "Rivet online services autoload missing",
+    )
 
     export_text = read("export_presets.cfg")
     require('name="Android"' in export_text, "Android export preset missing")
     require('name="Dedicated Server"' in export_text, "dedicated export preset missing")
     require('architectures/arm64-v8a=true' in export_text, "Android arm64 architecture missing")
     require('permissions/internet=true' in export_text, "Android INTERNET permission missing")
-    require("config/*.json,legal/*.json,legal/*.md" in export_text, "Android legal/config export filter missing")
+    require(
+        "config/*.json,legal/*.json,legal/*.md" in export_text,
+        "Android legal/config export filter missing",
+    )
     require('version/name="0.5.5"' in export_text, "Android version mismatch")
 
     deploy_workflow = read(".github/workflows/deploy-rivet-control-staging.yml")
@@ -201,18 +260,19 @@ def validate() -> dict[str, object]:
         "SUPABASE_PUBLISHABLE_KEY",
         "RIVET_PUBLIC_CONTROL_GATEWAY_READY",
         "rivet_control_base_url",
-        "--export-debug \"Android\"",
+        '--export-debug "Android"',
         "colony-dominion-rivet-staging.apk",
-        "FULL_END_TO_END_RELEASE_READY=true",
+        "live-verification.json",
+        "query_safe_probe",
         "BOT_BACKFILL_WAIT_SECONDS",
+        'providerRegion":"fra"',
     ):
         require(marker in deploy_workflow, f"deployment workflow marker missing: {marker}")
 
-    forbidden_paths = (
+    for path in (
         ROOT / "deployment/oracle",
         ROOT / "backend/external-allocator",
-    )
-    for path in forbidden_paths:
+    ):
         require(not path.exists(), f"forbidden external-hosting path exists: {path.relative_to(ROOT)}")
 
     secret_patterns = (
@@ -245,6 +305,9 @@ def validate() -> dict[str, object]:
         "max_players": 10,
         "bot_backfill_wait_seconds": 30,
         "google_oauth_handoff": True,
+        "google_only_auth_ui": True,
+        "deployed_region": "eu",
+        "provider_region": "fra",
         "migrations": names,
         "text_files_scanned": scanned,
         "external_hosting": False,

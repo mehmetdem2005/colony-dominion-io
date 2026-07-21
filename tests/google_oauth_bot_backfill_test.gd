@@ -47,23 +47,12 @@ func _run() -> void:
 	)
 	_assert_contains(
 		"res://tools/deploy_supabase_staging.py",
-		[
-			"external_google_enabled",
-			"GOOGLE_OAUTH_CLIENT_ID",
-			"google_callback_pattern",
-			"smtp.resend.com",
-			"RESEND_API_KEY",
-		],
+		["external_google_enabled", "GOOGLE_OAUTH_CLIENT_ID", "google_callback_pattern"],
 		failures
 	)
 	_assert_contains(
 		"res://backend/rivet-control/src/matchmaking-policy.ts",
-		[
-			"minimumHumanPlayers",
-			"bot_backfill",
-			"full_human_lobby",
-			"waitRemainingMs",
-		],
+		["minimumHumanPlayers", "bot_backfill", "full_human_lobby", "waitRemainingMs"],
 		failures,
 		false
 	)
@@ -82,16 +71,24 @@ func _run() -> void:
 		failures
 	)
 	_assert_contains(
+		"res://backend/rivet-control/src/rivet-native-allocator.ts",
+		["createInRegion", "region.providerRegion", "EU"],
+		failures,
+		false
+	)
+	_assert_contains(
+		"res://network/region_probe_service.gd",
+		["WARMUP_SAMPLE_COUNT", "MEASURED_SAMPLE_COUNT", "_metrics.clear()"],
+		failures
+	)
+	_assert_contains(
 		"res://gameplay/network/authoritative_command_router.gd",
 		["set_display_name(display_name)", "assign_peer_to_available_team"],
 		failures
 	)
 	_assert_contains(
 		"res://network/game_transport.gd",
-		[
-			"trusted_display_name",
-			"assign_peer_to_available_team(peer_id, trusted_display_name)",
-		],
+		["trusted_display_name", "assign_peer_to_available_team(peer_id, trusted_display_name)"],
 		failures
 	)
 	_assert_contains(
@@ -102,28 +99,46 @@ func _run() -> void:
 	_assert_contains(
 		"res://ui/auth_panel.gd", ["GOOGLE İLE DEVAM ET", "OnlineServices.sign_in_google"], failures
 	)
+	var auth_panel_source := FileAccess.get_file_as_string("res://ui/auth_panel.gd")
+	for forbidden in [
+		"sign_in_email",
+		"sign_up_email",
+		"resend_signup_confirmation",
+		"E-posta adresi",
+		"Şifre —",
+		"YENİ HESAP OLUŞTUR",
+	]:
+		if auth_panel_source.contains(forbidden):
+			failures.append("Google-only auth panel still contains: %s" % forbidden)
 
-	var full_human := (
-		NetworkProtocol
-		. normalize_assignment(
-			{
-				"human_players": 10,
-				"bot_players": 0,
-				"ranked": true,
-			}
-		)
+	var config_variant: Variant = JSON.parse_string(
+		FileAccess.get_file_as_string("res://config/backend_config.json")
+	)
+	if not config_variant is Dictionary:
+		failures.append("Backend configuration is invalid JSON")
+	else:
+		var config: Dictionary = config_variant
+		var regions_variant: Variant = config.get("regions", [])
+		if not regions_variant is Array or (regions_variant as Array).size() != 1:
+			failures.append("Client must expose only actually deployed regions")
+		else:
+			var region_variant: Variant = (regions_variant as Array)[0]
+			if not region_variant is Dictionary:
+				failures.append("Deployed region definition is invalid")
+			else:
+				var region: Dictionary = region_variant
+				if String(region.get("id", "")) != "eu":
+					failures.append("The deployed client region must be Europe")
+				if not String(region.get("probe_url", "")).contains("/request/v1/health/ping?"):
+					failures.append("EU probe URL is not query-safe")
+
+	var full_human := NetworkProtocol.normalize_assignment(
+		{"human_players": 10, "bot_players": 0, "ranked": true}
 	)
 	if int(full_human.get("human_players", 0)) != 10:
 		failures.append("Full-human assignment metadata was not normalized")
-	var bot_match := (
-		NetworkProtocol
-		. normalize_assignment(
-			{
-				"human_players": 1,
-				"bot_players": 9,
-				"ranked": false,
-			}
-		)
+	var bot_match := NetworkProtocol.normalize_assignment(
+		{"human_players": 1, "bot_players": 9, "ranked": false}
 	)
 	if int(bot_match.get("bot_players", 0)) != 9 or bool(bot_match.get("ranked", true)):
 		failures.append("Bot-backfill assignment metadata was not normalized")

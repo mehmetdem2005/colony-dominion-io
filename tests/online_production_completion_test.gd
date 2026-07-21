@@ -1,6 +1,8 @@
 extends SceneTree
 
 # Release gate for elimination recovery and safe-area UI behavior on Android.
+# Project-level mobile settings are validated by tools/validate_online_release.py because
+# project.godot is not exposed as a res:// runtime resource in dedicated-server tests.
 
 const REQUIRED_FILES: Array[String] = [
 	"res://network/reconnect_session_store.gd",
@@ -39,13 +41,12 @@ func _run() -> void:
 		failures.append("Network protocol must be version 4")
 	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
 		failures.append("Online capacity must match the ten colony slots")
-	_validate_mobile_input_and_orientation(failures)
 	_validate_ui_lifecycle(failures)
 	_validate_consent_and_auth_confirmation(failures)
 	_validate_google_oauth_and_bot_backfill(failures)
 	var config: String = FileAccess.get_file_as_string("res://config/backend_config.json")
 	if not config.contains(BUILD_ID) or not config.contains('"protocol_version": 4'):
-		failures.append("Client backend configuration is not pinned to Phase 05.4")
+		failures.append("Client backend configuration is not pinned to Phase 05.5")
 	var base_transport: String = FileAccess.get_file_as_string("res://network/game_transport.gd")
 	for marker in [
 		"resume_persisted_session",
@@ -63,7 +64,9 @@ func _run() -> void:
 	var allocator: String = FileAccess.get_file_as_string(
 		"res://backend/rivet-control/src/rivet-native-allocator.ts"
 	)
-	for marker in ["gameServer.create", "getGatewayUrl", 'transport: "websocket"']:
+	for marker in [
+		"gameServer.create", "getGatewayUrl", 'transport: "websocket"', "createInRegion"
+	]:
 		if not allocator.contains(marker):
 			failures.append("Rivet-native allocator is missing: %s" % marker)
 	if (
@@ -84,32 +87,6 @@ func _run() -> void:
 	for failure in failures:
 		push_error(failure)
 	quit(1)
-
-
-func _validate_mobile_input_and_orientation(failures: PackedStringArray) -> void:
-	var touch_emulation: bool = bool(
-		ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", false)
-	)
-	if not touch_emulation:
-		failures.append("Android touch-to-button mouse emulation must remain enabled")
-	var orientation: int = int(
-		ProjectSettings.get_setting("display/window/handheld/orientation", -1)
-	)
-	if orientation != DisplayServer.SCREEN_SENSOR:
-		failures.append("Android orientation must remain in sensor mode")
-	var viewport_width: int = int(
-		ProjectSettings.get_setting("display/window/size/viewport_width", 0)
-	)
-	var viewport_height: int = int(
-		ProjectSettings.get_setting("display/window/size/viewport_height", 0)
-	)
-	if viewport_width <= 0 or viewport_width != viewport_height:
-		failures.append("Portrait and landscape support requires a square base viewport")
-	var stretch_aspect: String = String(
-		ProjectSettings.get_setting("display/window/stretch/aspect", "")
-	)
-	if stretch_aspect != "expand":
-		failures.append("Portrait and landscape support requires stretch aspect expand")
 
 
 func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
@@ -143,6 +120,13 @@ func _validate_google_oauth_and_bot_backfill(failures: PackedStringArray) -> voi
 	for marker in ["Crypto.new()", "OS.shell_open", "x-colony-oauth-secret"]:
 		if not oauth_bridge.contains(marker):
 			failures.append("Google OAuth handoff is missing: %s" % marker)
+	var auth_panel := FileAccess.get_file_as_string("res://ui/auth_panel.gd")
+	for marker in ["GOOGLE İLE DEVAM ET", "OnlineServices.sign_in_google"]:
+		if not auth_panel.contains(marker):
+			failures.append("Google-only auth UI is missing: %s" % marker)
+	for forbidden in ["sign_in_email", "sign_up_email", "resend_signup_confirmation"]:
+		if auth_panel.contains(forbidden):
+			failures.append("Google-only auth UI contains forbidden flow: %s" % forbidden)
 	var policy := FileAccess.get_file_as_string(
 		"res://backend/rivet-control/src/matchmaking-policy.ts"
 	)
@@ -164,10 +148,6 @@ func _validate_consent_and_auth_confirmation(failures: PackedStringArray) -> voi
 			failures.append("Professional consent flow is missing: %s" % marker)
 	if legal_panel.contains("CheckBox.new()"):
 		failures.append("Consent flow must not use tiny default checkboxes")
-	var auth_client := FileAccess.get_file_as_string("res://network/supabase_auth_client.gd")
-	for marker in ["redirect_to=", "resend_signup_confirmation", "_auth_endpoint"]:
-		if not auth_client.contains(marker):
-			failures.append("Supabase confirmation flow is missing: %s" % marker)
 	var control_server := FileAccess.get_file_as_string(
 		"res://backend/rivet-control/src/server-full-online.ts"
 	)

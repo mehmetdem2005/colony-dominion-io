@@ -19,11 +19,16 @@ type GameServerHandle = {
   getGatewayUrl: () => Promise<string>;
 };
 
+type GameServerCreateOptions = {
+  input: GameServerActorInput;
+  createInRegion?: string;
+};
+
 type RuntimeActorClient = {
   gameServer: {
     create: (
       key: string[],
-      options: { input: GameServerActorInput },
+      options: GameServerCreateOptions,
     ) => Promise<GameServerHandle>;
   };
 };
@@ -37,7 +42,11 @@ export async function allocateRivetGameServer(
   players: QueueEntry[],
   targetPlayers: number = MAX_PLAYERS,
 ): Promise<AllocationResult> {
-  if (!Number.isInteger(targetPlayers) || targetPlayers < 1 || targetPlayers > MAX_PLAYERS) {
+  if (
+    !Number.isInteger(targetPlayers) ||
+    targetPlayers < 1 ||
+    targetPlayers > MAX_PLAYERS
+  ) {
     throw new Error(`Target player count must be between 1 and ${MAX_PLAYERS}`);
   }
   if (players.length === 0 || players.length > targetPlayers) {
@@ -50,44 +59,66 @@ export async function allocateRivetGameServer(
   }
   for (const player of players) {
     if (player.buildId !== buildId || player.protocolVersion !== protocolVersion) {
-      throw new Error("Allocation candidates do not share the same build and protocol version");
+      throw new Error(
+        "Allocation candidates do not share the same build and protocol version",
+      );
     }
   }
 
   const matchId = randomUUID();
   const serverId = randomUUID();
   const serverAuthToken = randomBytes(32).toString("base64url");
-  const matchSeed = Math.max(1, randomBytes(4).readUInt32BE(0) & 0x7fffffff);
+  const matchSeed = Math.max(
+    1,
+    randomBytes(4).readUInt32BE(0) & 0x7fffffff,
+  );
   const joinTickets = Object.fromEntries(
-    players.map((entry) => [entry.queueTicketId, randomBytes(32).toString("base64url")]),
+    players.map((entry) => [
+      entry.queueTicketId,
+      randomBytes(32).toString("base64url"),
+    ]),
   );
 
-  const handle = await client.gameServer.create([matchId], {
-    input: {
-      matchId,
-      serverId,
-      regionId: region.id,
-      buildId,
-      protocolVersion,
-      expectedPlayers: players.length,
-      maxPlayers: targetPlayers,
-      humanPlayerCount: players.length,
-      botCount: Math.max(0, targetPlayers - players.length),
-      ranked: players.length === targetPlayers,
-      matchSeed,
-      serverAuthToken,
-    },
-  });
+  const input: GameServerActorInput = {
+    matchId,
+    serverId,
+    regionId: region.id,
+    buildId,
+    protocolVersion,
+    expectedPlayers: players.length,
+    maxPlayers: targetPlayers,
+    humanPlayerCount: players.length,
+    botCount: Math.max(0, targetPlayers - players.length),
+    ranked: players.length === targetPlayers,
+    matchSeed,
+    serverAuthToken,
+  };
+  const options: GameServerCreateOptions = { input };
+  if (region.providerRegion) {
+    options.createInRegion = region.providerRegion;
+  }
+  const handle = await client.gameServer.create([matchId], options);
   const status = await handle.getStatus();
   if (!status.ready || status.status !== "ready") {
-    throw new Error(`Rivet game actor did not become ready: ${status.lastError ?? status.status}`);
+    throw new Error(
+      `Rivet game actor did not become ready: ${status.lastError ?? status.status}`,
+    );
   }
 
   const gatewayUrl = await handle.getGatewayUrl();
   const websocketUrl = toWebSocketGatewayUrl(gatewayUrl);
   const parsed = new URL(websocketUrl);
-  const port = parsed.port ? Number(parsed.port) : parsed.protocol === "wss:" ? 443 : 80;
-  if (!parsed.hostname || !Number.isInteger(port) || port <= 0 || port > 65_535) {
+  const port = parsed.port
+    ? Number(parsed.port)
+    : parsed.protocol === "wss:"
+      ? 443
+      : 80;
+  if (
+    !parsed.hostname ||
+    !Number.isInteger(port) ||
+    port <= 0 ||
+    port > 65_535
+  ) {
     throw new Error("Rivet gateway returned an invalid WebSocket endpoint");
   }
 
