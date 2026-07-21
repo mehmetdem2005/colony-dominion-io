@@ -12,7 +12,9 @@ delete from public.oauth_handoffs;
 alter table public.oauth_handoffs
   drop constraint if exists oauth_handoffs_flow_type_check,
   drop constraint if exists oauth_handoffs_callback_nonce_hash_check,
-  drop constraint if exists oauth_handoffs_auth_code_check;
+  drop constraint if exists oauth_handoffs_auth_code_check,
+  drop constraint if exists oauth_handoffs_pkce_no_refresh_token_check,
+  drop constraint if exists oauth_handoffs_pkce_state_check;
 
 alter table public.oauth_handoffs
   add constraint oauth_handoffs_flow_type_check
@@ -26,6 +28,27 @@ alter table public.oauth_handoffs
     check (
       auth_code is null
       or char_length(auth_code) between 8 and 2048
+    ),
+  add constraint oauth_handoffs_pkce_no_refresh_token_check
+    check (refresh_token is null),
+  add constraint oauth_handoffs_pkce_state_check
+    check (
+      (
+        completed_at is null
+        and consumed_at is null
+        and auth_code is null
+        and error_message is null
+      )
+      or (
+        completed_at is not null
+        and consumed_at is null
+        and ((auth_code is not null) <> (error_message is not null))
+      )
+      or (
+        completed_at is not null
+        and consumed_at is not null
+        and auth_code is null
+      )
     );
 
 create index if not exists oauth_handoffs_completed_at_idx
