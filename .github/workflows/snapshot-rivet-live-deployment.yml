@@ -1,4 +1,4 @@
-name: Diagnose OAuth Callback Live Deployment
+name: Snapshot Rivet Live Deployment
 
 on:
   pull_request:
@@ -6,32 +6,33 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
   pull-requests: read
 
 jobs:
-  diagnose:
+  snapshot:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'rivet-live-deployment-monitor'
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: 9f972a3416142368189fb9c19152e361e3b4aea1
+      TARGET_SHA: 5e0330528486aa25e7fc0ba0f1daf5eb4f9804ae
     steps:
       - uses: actions/checkout@v6
         with:
           ref: rivet-live-deployment-monitor
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Locate matching Supabase deployment
+      - name: Locate and wait for merged full-online deployment
         shell: bash
         run: |
           set -euo pipefail
           REPO="$GITHUB_REPOSITORY"
-          WORKFLOW="deploy-supabase-staging.yml"
+          WORKFLOW="deploy-rivet-control-staging.yml"
           mkdir -p deployment/status
+
           RUN_ID=""
           for _ in $(seq 1 120); do
             RUN_ID="$(
@@ -39,7 +40,7 @@ jobs:
                 --repo "$REPO" \
                 --workflow "$WORKFLOW" \
                 --branch main \
-                --limit 60 \
+                --limit 20 \
                 --json databaseId,headSha \
                 --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
                 | head -n 1
@@ -47,54 +48,52 @@ jobs:
             [ -n "$RUN_ID" ] && break
             sleep 5
           done
-          if [ -z "$RUN_ID" ]; then
-            printf '{"target_sha":"%s","error":"matching_run_not_found"}\n' "$TARGET_SHA" \
-              > deployment/status/supabase-oauth-live-run.json
-            exit 0
-          fi
-          echo "SUPABASE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          test -n "$RUN_ID"
+          echo "RIVET_LIVE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+
+          set +e
+          gh run watch "$RUN_ID" --repo "$REPO" --exit-status
+          WATCH_STATUS=$?
+          set -e
+
           gh run view "$RUN_ID" \
             --repo "$REPO" \
             --json databaseId,status,conclusion,event,headSha,url,attempt,workflowName,createdAt,updatedAt \
-            > deployment/status/supabase-oauth-live-run.json
+            > deployment/status/rivet-full-online-live-run.json
 
-      - name: Collect failed deployment logs and artifacts
+          gh run view "$RUN_ID" --repo "$REPO" --log-failed \
+            > deployment/status/rivet-full-online-live-failure.log 2>&1 || true
+
+          if [ "$WATCH_STATUS" -eq 0 ]; then
+            rm -f deployment/status/rivet-full-online-live-failure.log
+          fi
+
+      - name: Download deployment evidence
         if: always()
         shell: bash
         run: |
           set +e
-          mkdir -p deployment/status/supabase-live-evidence
-          if [ -n "${SUPABASE_RUN_ID:-}" ]; then
-            gh run view "$SUPABASE_RUN_ID" \
+          mkdir -p deployment/status/rivet-live-evidence
+          if [ -n "${RIVET_LIVE_RUN_ID:-}" ]; then
+            gh run download "$RIVET_LIVE_RUN_ID" \
               --repo "$GITHUB_REPOSITORY" \
-              --log-failed \
-              > deployment/status/supabase-oauth-live-failure.log 2>&1
-            gh run download "$SUPABASE_RUN_ID" \
-              --repo "$GITHUB_REPOSITORY" \
-              --name colony-supabase-staging \
-              --dir deployment/status/supabase-live-evidence \
-              > deployment/status/supabase-artifact-download.log 2>&1
+              --name rivet-full-online-staging \
+              --dir deployment/status/rivet-live-evidence
           fi
           true
 
-      - name: Probe public callback without failing diagnostics
+      - name: Commit live deployment snapshot
         if: always()
         shell: bash
         run: |
-          set +e
-          CALLBACK_URL="https://mlwsxeqorlfqmxqxnfoo.supabase.co/functions/v1/oauth-google-handoff/callback/00000000-0000-4000-8000-000000000001"
-          curl --silent --show-error \
-            --dump-header deployment/status/public-oauth-callback.headers \
-            --output deployment/status/public-oauth-callback.body \
-            "$CALLBACK_URL" \
-            > deployment/status/public-oauth-callback-curl.log 2>&1
-          printf '%s\n' "$?" > deployment/status/public-oauth-callback-curl-status.txt
-          true
-
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: colony-oauth-callback-live-diagnostics
-          retention-days: 2
-          if-no-files-found: error
-          path: deployment/status/
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A deployment/status/rivet-full-online-live-run.json
+          git add -A deployment/status/rivet-full-online-live-failure.log
+          git add -A deployment/status/rivet-live-evidence
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Snapshot Rivet full-online live deployment"
+          git push origin HEAD:rivet-live-deployment-monitor
