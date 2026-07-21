@@ -16,9 +16,12 @@ func _run() -> void:
 		failures
 	)
 	_assert_equal(
-		URL_BUILDER.append_path(
-			"https://api.rivet.dev/gateway/controlApi/request?rvt-namespace=staging&rvt-token=pk_test",
-			"/v1/regions"
+		(
+			URL_BUILDER
+			. append_path(
+				"https://api.rivet.dev/gateway/controlApi/request?rvt-namespace=staging&rvt-token=pk_test",
+				"/v1/regions"
+			)
 		),
 		"https://api.rivet.dev/gateway/controlApi/request/v1/regions?rvt-namespace=staging&rvt-token=pk_test",
 		"query-bearing gateway URL",
@@ -45,6 +48,8 @@ func _run() -> void:
 	quit(1)
 
 
-func _assert_equal(actual: String, expected: String, label: String, failures: PackedStringArray) -> void:
+func _assert_equal(
+	actual: String, expected: String, label: String, failures: PackedStringArray
+) -> void:
 	if actual != expected:
 		failures.append("%s mismatch: expected=%s actual=%s" % [label, expected, actual])
