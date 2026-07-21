@@ -2,6 +2,8 @@ extends SceneTree
 
 const URL_BUILDER := preload("res://network/query_safe_url.gd")
 
+# Covers Rivet gateway URLs whose routing credentials live in the query string.
+
 
 func _initialize() -> void:
 	call_deferred("_run")
