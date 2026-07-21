@@ -158,6 +158,8 @@ func _remove_proxy(entity_id: int) -> void:
 
 
 func _refresh_local_lifecycle() -> void:
+	if _lifecycle_state == &"finished":
+		return
 	if is_instance_valid(_local_commander):
 		_set_lifecycle(&"active")
 		_set_camera_anchor(_local_commander)
@@ -235,6 +237,7 @@ func _handle_keyboard_commands() -> void:
 
 
 func _on_match_ended(winner_name: String) -> void:
+	_lifecycle_state = &"finished"
 	_input_enabled = false
 	_movement_input = Vector2.ZERO
 	var player_won: bool = winner_name.strip_edges() == GameSession.player_name.strip_edges()
