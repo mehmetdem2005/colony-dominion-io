@@ -29,6 +29,16 @@ func is_configured() -> bool:
 	)
 
 
+# The RivetKit Engine gateway base URL may carry a routing query string
+# (rvt-namespace, rvt-token, ...). Insert the REST path before that query so the
+# composed request URL stays valid.
+func _endpoint_url(path_suffix: String) -> String:
+	var query_index: int = _base_url.find("?")
+	if query_index < 0:
+		return _base_url + path_suffix
+	return _base_url.substr(0, query_index) + path_suffix + _base_url.substr(query_index)
+
+
 func join_queue(
 	access_token: String,
 	player_id: String,
@@ -42,7 +52,7 @@ func join_queue(
 		_http
 		. request_json(
 			HTTPClient.METHOD_POST,
-			"%s/v1/matchmaking/join" % _base_url,
+			_endpoint_url("/v1/matchmaking/join"),
 			_auth_headers(access_token),
 			{
 				"player_id": player_id,
@@ -70,7 +80,7 @@ func get_queue_status(access_token: String) -> Dictionary:
 		return {"ok": false, "error": "Aktif eşleştirme bileti yok"}
 	var response: Dictionary = await _http.request_json(
 		HTTPClient.METHOD_GET,
-		"%s/v1/matchmaking/status/%s" % [_base_url, _queue_ticket_id.uri_encode()],
+		_endpoint_url("/v1/matchmaking/status/%s" % _queue_ticket_id.uri_encode()),
 		_auth_headers(access_token)
 	)
 	if not bool(response.get("ok", false)):
@@ -87,7 +97,7 @@ func cancel_queue(access_token: String) -> void:
 		return
 	await _http.request_json(
 		HTTPClient.METHOD_DELETE,
-		"%s/v1/matchmaking/%s" % [_base_url, _queue_ticket_id.uri_encode()],
+		_endpoint_url("/v1/matchmaking/%s" % _queue_ticket_id.uri_encode()),
 		_auth_headers(access_token)
 	)
 	_queue_ticket_id = ""

@@ -4,7 +4,7 @@
   "protocol_version": 4,
   "supabase_url": "https://mlwsxeqorlfgmxqxnfoo.supabase.co",
   "supabase_publishable_key": "sb_publishable_UndFiGg2qmupQAv9p9CpsA_NOAWrB1-",
-  "rivet_control_base_url": "",
+  "rivet_control_base_url": "https://api.rivet.dev/gateway/controlApi/request?rvt-namespace=colonyio-3bo7-staging-4x4s&rvt-method=getOrCreate&rvt-runner=default&rvt-key=public-control-v1&rvt-crash-policy=sleep&rvt-token=pk_ren8Vs3ZDyAnNFEFQE8h2RtNepr8b07B5bk9fcE8UTUfAPvCyTf5DyayjuuphXmQ",
   "persist_refresh_token": true,
   "region_probe_interval_seconds": 12.0,
   "region_probe_timeout_seconds": 2.5,
