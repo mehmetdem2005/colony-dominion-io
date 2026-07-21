@@ -11,11 +11,17 @@ export async function ensurePublicControlGateway(): Promise<string> {
   const internalBaseUrl = process.env.INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`;
   const client = createClient<typeof runtimeRegistry>(`${internalBaseUrl.replace(/\/$/, "")}/api/rivet`);
   const actorHandle = await client.controlApi.getOrCreate([PUBLIC_CONTROL_ACTOR_KEY]);
-  const actorGatewayUrl = (await actorHandle.getGatewayUrl()).replace(/\/$/, "");
-  const publicBaseUrl = `${actorGatewayUrl}/request`;
+  const gatewayUrl = new URL(await actorHandle.getGatewayUrl());
 
-  if (process.env.NODE_ENV === "production" && !publicBaseUrl.startsWith("https://")) {
-    throw new Error(`Public control gateway must use HTTPS in production: ${publicBaseUrl}`);
+  if (gatewayUrl.search) {
+    throw new Error("Public control gateway returned query-based authentication, which is not client-path safe");
+  }
+  gatewayUrl.hash = "";
+  gatewayUrl.pathname = `${gatewayUrl.pathname.replace(/\/$/, "")}/request`;
+  const publicBaseUrl = gatewayUrl.toString().replace(/\/$/, "");
+
+  if (process.env.NODE_ENV === "production" && gatewayUrl.protocol !== "https:") {
+    throw new Error(`Public control gateway must use HTTPS in production: ${gatewayUrl.protocol}`);
   }
 
   let lastError = "gateway probe did not run";
