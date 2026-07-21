@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/snapshot-source-auth-matchmaking.yml"
-      - ".github/patch/google-bot-backfill.patch.xz.b64"
+      - ".github/patch/google-bot-backfill.part*"
 
 permissions:
   contents: write
@@ -21,13 +21,22 @@ jobs:
           ref: work/google-bot-backfill
           fetch-depth: 0
 
-      - name: Apply and validate production patch
+      - name: Reconstruct, apply and validate production patch
         shell: bash
         run: |
           set -euo pipefail
-          base64 --decode .github/patch/google-bot-backfill.patch.xz.b64 \
+          cat .github/patch/google-bot-backfill.part00 \
+              .github/patch/google-bot-backfill.part01 \
+              .github/patch/google-bot-backfill.part02 \
+              .github/patch/google-bot-backfill.part03 \
+            > "$RUNNER_TEMP/google-bot-backfill.b64"
+          echo '85d2fc11d0f3e6093b5167c3249e6615f8f223ca2f51edef0fca3b444b412e37  '"$RUNNER_TEMP/google-bot-backfill.b64" \
+            | sha256sum --check
+          base64 --decode "$RUNNER_TEMP/google-bot-backfill.b64" \
             | xz --decompress --stdout \
             > "$RUNNER_TEMP/google-bot-backfill.patch"
+          echo 'f77c24fb85b2a2cd76e1c4d8b2ce77f12844af9855399d4f9f1d607a8fd2ddda  '"$RUNNER_TEMP/google-bot-backfill.patch" \
+            | sha256sum --check
           git apply --index --whitespace=error "$RUNNER_TEMP/google-bot-backfill.patch"
           git diff --cached --check
           grep -q 'PHASE-05.5-GOOGLE-BOT-BACKFILL' config/backend_config.json
