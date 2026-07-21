@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/snapshot-source-auth-matchmaking.yml"
-      - ".github/patch/google-bot-backfill.part*"
+      - ".github/patch/google-bot-workflows.patch.xz.b64"
 
 permissions:
   contents: write
 
 jobs:
-  apply:
+  apply-workflows:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -21,34 +21,46 @@ jobs:
           ref: work/google-bot-backfill
           fetch-depth: 0
 
-      - name: Reconstruct, apply and validate production patch
+      - name: Apply and validate release workflow updates
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/patch/google-bot-backfill.part00 \
-              .github/patch/google-bot-backfill.part01 \
-              .github/patch/google-bot-backfill.part02 \
-              .github/patch/google-bot-backfill.part03 \
-            > "$RUNNER_TEMP/google-bot-backfill.b64"
-          echo '85d2fc11d0f3e6093b5167c3249e6615f8f223ca2f51edef0fca3b444b412e37  '"$RUNNER_TEMP/google-bot-backfill.b64" \
+          echo 'e2ff80f174ca30e4cb0f88a086a751a1d1f0199cdfe573150a25ab3ce7b37493  .github/patch/google-bot-workflows.patch.xz.b64' \
             | sha256sum --check
-          base64 --decode "$RUNNER_TEMP/google-bot-backfill.b64" \
+          base64 --decode .github/patch/google-bot-workflows.patch.xz.b64 \
             | xz --decompress --stdout \
-            > "$RUNNER_TEMP/google-bot-backfill.patch"
-          echo 'f77c24fb85b2a2cd76e1c4d8b2ce77f12844af9855399d4f9f1d607a8fd2ddda  '"$RUNNER_TEMP/google-bot-backfill.patch" \
+            > "$RUNNER_TEMP/google-bot-workflows.patch"
+          echo '7523bbcb9ca954dd027ed4e6c26bc04e7eb88791e0bba7701ab8208a418fd3a6  '"$RUNNER_TEMP/google-bot-workflows.patch" \
             | sha256sum --check
-          git apply --index --whitespace=error "$RUNNER_TEMP/google-bot-backfill.patch"
+          git apply --index --whitespace=error "$RUNNER_TEMP/google-bot-workflows.patch"
           git diff --cached --check
-          grep -q 'PHASE-05.5-GOOGLE-BOT-BACKFILL' config/backend_config.json
-          grep -q 'oauth-google-handoff' network/supabase_oauth_handoff.gd
-          grep -q 'BOT_BACKFILL_WAIT_SECONDS' backend/rivet-control/src/server-full-online.ts
-          grep -q 'assign_peer_to_available_team(peer_id, trusted_display_name)' network/game_transport.gd
+          python -m pip install --disable-pip-version-check pyyaml
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
 
-      - name: Commit production source
+          for path in (
+              Path('.github/workflows/build-online-test-apk.yml'),
+              Path('.github/workflows/deploy-rivet-control-staging-v2.yml'),
+              Path('.github/workflows/deploy-rivet-control-staging.yml'),
+              Path('.github/workflows/deploy-rivet-full-online-direct.yml'),
+              Path('.github/workflows/deploy-supabase-staging.yml'),
+              Path('.github/workflows/online-release.yml'),
+              Path('.github/workflows/validate-rivet-control.yml'),
+          ):
+              with path.open(encoding='utf-8') as handle:
+                  if not isinstance(yaml.safe_load(handle), dict):
+                      raise SystemExit(f'Invalid workflow: {path}')
+          PY
+          grep -q 'google_oauth_bot_backfill_test.gd' .github/workflows/build-online-test-apk.yml
+          grep -q 'BOT_BACKFILL_WAIT_SECONDS' .github/workflows/deploy-rivet-control-staging.yml
+          grep -q 'GOOGLE_OAUTH_CLIENT_ID' .github/workflows/deploy-supabase-staging.yml
+
+      - name: Commit release workflows
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Implement Google auth and server bot backfill"
+          git commit -m "Update Google auth and bot backfill release workflows"
           git push origin HEAD:work/google-bot-backfill
