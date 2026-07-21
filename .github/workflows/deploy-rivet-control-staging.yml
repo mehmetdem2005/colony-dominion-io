@@ -230,7 +230,7 @@ jobs:
               --cpu 2 \
               --memory 2Gi \
               --instance-request-concurrency 80 \
-              --min-scale 0 \
+              --min-scale 1 \
               --max-scale 4 \
               --max-concurrent-actors 3 \
               --env "NODE_ENV=production" \

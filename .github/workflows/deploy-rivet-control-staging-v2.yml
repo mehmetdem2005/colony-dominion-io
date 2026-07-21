@@ -136,7 +136,7 @@ jobs:
               --cpu 1 \
               --memory 512Mi \
               --instance-request-concurrency 80 \
-              --min-scale 0 \
+              --min-scale 1 \
               --max-scale 1 \
               --max-concurrent-actors 1000 \
               --env "NODE_ENV=production" \
