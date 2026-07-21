@@ -39,7 +39,7 @@ func _run() -> void:
 			"constantTimeEqual",
 			'consumed_at: "is.null"',
 			"Cache-Control",
-			requiredEnvironment("SUPABASE_URL"),
+			'requiredEnvironment("SUPABASE_URL")',
 			"/functions/v1/oauth-google-handoff",
 			"functionBaseUrl()",
 			"new Headers",
@@ -68,7 +68,7 @@ func _run() -> void:
 		"location.hash",
 		'params.get("refresh_token")',
 		"refresh_token: refreshToken",
-		'/complete/',
+		"/complete/",
 		'action === "complete"',
 	]:
 		if oauth_function_source.contains(forbidden):
