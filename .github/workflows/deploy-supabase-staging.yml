@@ -93,6 +93,84 @@ jobs:
             | tee build/diagnostics/google-oauth-handoff-health.json \
             | grep -q 'colony-google-oauth-handoff'
 
+      - name: Verify OAuth callback renders as secure UTF-8 HTML
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          CALLBACK_ID="00000000-0000-4000-8000-000000000001"
+          CALLBACK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/callback/${CALLBACK_ID}"
+          HEADER_FILE="$RUNNER_TEMP/google-oauth-callback.headers"
+          BODY_FILE="$RUNNER_TEMP/google-oauth-callback.html"
+          curl --fail --silent --show-error \
+            --retry 12 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            --dump-header "$HEADER_FILE" \
+            --output "$BODY_FILE" \
+            "$CALLBACK_URL"
+          python - "$HEADER_FILE" "$BODY_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          header_text = Path(sys.argv[1]).read_text(encoding="iso-8859-1").replace("\r\n", "\n")
+          blocks = [block for block in header_text.split("\n\n") if block.startswith("HTTP/")]
+          if not blocks:
+              raise SystemExit("OAuth callback response headers are missing")
+          headers = {}
+          for line in blocks[-1].splitlines()[1:]:
+              if ":" not in line:
+                  continue
+              key, value = line.split(":", 1)
+              headers[key.strip().lower()] = value.strip()
+          content_type = headers.get("content-type", "").lower().replace(" ", "")
+          if content_type != "text/html;charset=utf-8":
+              raise SystemExit(f"OAuth callback is not HTML UTF-8: {content_type!r}")
+          if headers.get("content-disposition", "").lower() != "inline":
+              raise SystemExit("OAuth callback is not forced to render inline")
+          if headers.get("x-content-type-options", "").lower() != "nosniff":
+              raise SystemExit("OAuth callback is missing nosniff")
+          if "no-store" not in headers.get("cache-control", "").lower():
+              raise SystemExit("OAuth callback may be cached")
+          csp = headers.get("content-security-policy", "")
+          if "frame-ancestors 'none'" not in csp or "script-src 'nonce-" not in csp:
+              raise SystemExit("OAuth callback CSP is incomplete")
+
+          body_bytes = Path(sys.argv[2]).read_bytes()
+          source = body_bytes.decode("utf-8", errors="strict")
+          if not source.lstrip().lower().startswith("<!doctype html>"):
+              raise SystemExit("OAuth callback body is not an HTML document")
+          for marker in (
+              "Google girişi tamamlanıyor",
+              "Güvenli oturum oyuna aktarılıyor",
+              "<script nonce=",
+          ):
+              if marker not in source:
+                  raise SystemExit(f"OAuth callback body is missing marker: {marker}")
+          for forbidden in (
+              "SUPABASE_SERVICE_ROLE_KEY",
+              "sb_secret_",
+              "service_role",
+              "Authorization: Bearer",
+          ):
+              if forbidden in source:
+                  raise SystemExit(f"OAuth callback leaks forbidden material: {forbidden}")
+          report = {
+              "status": "verified",
+              "content_type": headers["content-type"],
+              "inline": True,
+              "utf8": True,
+              "nosniff": True,
+              "no_store": True,
+              "csp_nonce": True,
+              "secret_markers_absent": True,
+          }
+          Path("build/diagnostics/google-oauth-callback-verification.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          rm -f "$HEADER_FILE" "$BODY_FILE"
+
       - name: Verify public auth confirmation Edge Function
         timeout-minutes: 3
         run: |
