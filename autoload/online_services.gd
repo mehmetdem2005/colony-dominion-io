@@ -182,12 +182,15 @@ func sync_preferences() -> Dictionary:
 	if not auth.has_session():
 		return {"ok": false, "error": "Tercih senkronizasyonu için oturum gerekli"}
 	var analytics_consent: bool = legal_store.is_currently_accepted("analytics_consent")
-	return await data.update_preferences(
-		{
-			"preferred_region": NetworkSession.preferred_region_id,
-			"language": "tr",
-			"analytics_consent": analytics_consent,
-		}
+	return await (
+		data
+		. update_preferences(
+			{
+				"preferred_region": NetworkSession.preferred_region_id,
+				"language": "tr",
+				"analytics_consent": analytics_consent,
+			}
+		)
 	)
 
 
@@ -206,7 +209,8 @@ func begin_matchmaking(display_name: String) -> Dictionary:
 	if not bool(legal_result.get("ok", false)):
 		return {
 			"ok": false,
-			"error": (
+			"error":
+			(
 				"Sözleşme kaydı doğrulanamadı: %s"
 				% String(legal_result.get("error", "bilinmeyen hata"))
 			),
@@ -366,25 +370,25 @@ func _normalize_regions(value: Variant) -> Array[Dictionary]:
 			continue
 		var probe_url: String = String(region.get("probe_url", "")).strip_edges()
 		if probe_url.is_empty():
-			probe_url = QuerySafeUrl.append_path(
-				config.rivet_control_base_url, "/v1/health/ping"
-			)
+			probe_url = QuerySafeUrl.append_path(config.rivet_control_base_url, "/v1/health/ping")
 		if (
 			not probe_url.begins_with("https://")
 			and not (OS.is_debug_build() and probe_url.begins_with("http://"))
 		):
 			probe_url = ""
 		seen[region_id] = true
-		result.append(
-			{
-				"id": region_id,
-				"display_name": String(region.get("display_name", region_id)).strip_edges(),
-				"short_name": String(
-					region.get("short_name", region_id.to_upper())
-				).strip_edges(),
-				"probe_url": probe_url,
-				"enabled": true,
-			}
+		(
+			result
+			. append(
+				{
+					"id": region_id,
+					"display_name": String(region.get("display_name", region_id)).strip_edges(),
+					"short_name":
+					String(region.get("short_name", region_id.to_upper())).strip_edges(),
+					"probe_url": probe_url,
+					"enabled": true,
+				}
+			)
 		)
 	return result
 
