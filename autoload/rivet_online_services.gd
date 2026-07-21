@@ -49,14 +49,18 @@ func _normalize_regions(value: Variant) -> Array[Dictionary]:
 		):
 			probe_url = fallback_probe_url if enabled else ""
 		seen[region_id] = true
-		result.append(
-			{
-				"id": region_id,
-				"display_name": String(region.get("display_name", region_id)).strip_edges(),
-				"short_name": String(region.get("short_name", region_id.to_upper())).strip_edges(),
-				"probe_url": probe_url,
-				"enabled": enabled,
-			}
+		(
+			result
+			. append(
+				{
+					"id": region_id,
+					"display_name": String(region.get("display_name", region_id)).strip_edges(),
+					"short_name":
+					String(region.get("short_name", region_id.to_upper())).strip_edges(),
+					"probe_url": probe_url,
+					"enabled": enabled,
+				}
+			)
 		)
 	return result
 
