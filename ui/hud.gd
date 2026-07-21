@@ -52,6 +52,8 @@ var merge_button: TouchActionButton
 var upgrade_button: TouchActionButton
 var audio_settings_button: Button
 var audio_settings_panel: PanelContainer
+var settings_button: Button
+var settings_panel: SettingsPanel
 var modal_input_blocker: Control
 var production_cards: Array[ProductionTouchCard] = []
 var _toast_left: float = 0.0
@@ -124,6 +126,7 @@ func _build_ui() -> void:
 	_build_timer()
 	_build_modal_input_blocker()
 	_build_audio_settings()
+	_build_full_settings()
 	_build_production_panel()
 	_build_mobile_controls()
 	_build_toast()
@@ -668,6 +671,39 @@ func _on_audio_volume_changed(value: float, setting_id: StringName) -> void:
 func _on_audio_toggle_changed(enabled: bool, setting_id: StringName) -> void:
 	AudioSystem.set_toggle(setting_id, enabled)
 	AudioSystem.play_ui(&"ui_press", {"intensity": 0.72})
+
+
+func _build_full_settings() -> void:
+	settings_button = Button.new()
+	settings_button.name = "SettingsButton"
+	settings_button.position = Vector2(484.0, 14.0)
+	settings_button.size = Vector2(92.0, 44.0)
+	settings_button.text = "AYAR"
+	settings_button.add_theme_font_size_override("font_size", 16)
+	settings_button.add_theme_stylebox_override(
+		"normal", _panel_style(Color(0.03, 0.035, 0.025, 0.94), Color(0.82, 0.66, 0.20, 0.82), 13)
+	)
+	settings_button.pressed.connect(_on_settings_button_pressed)
+	root_control.add_child(settings_button)
+
+	settings_panel = SettingsPanel.new()
+	settings_panel.name = "FullSettingsPanel"
+	settings_panel.z_index = 400
+	settings_panel.closed.connect(_on_settings_panel_closed)
+	root_control.add_child(settings_panel)
+
+
+func _on_settings_button_pressed() -> void:
+	AudioSystem.play_ui(&"ui_press")
+	_close_audio_settings()
+	modal_input_blocker.visible = true
+	_set_gameplay_interaction_enabled(false)
+	settings_panel.open_panel()
+
+
+func _on_settings_panel_closed() -> void:
+	modal_input_blocker.visible = game_over_panel.visible
+	_set_gameplay_interaction_enabled(not game_over_panel.visible)
 
 
 func _on_inventory_changed(team_id: int, inventory: Dictionary) -> void:
