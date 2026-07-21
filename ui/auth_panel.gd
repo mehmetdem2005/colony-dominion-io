@@ -249,9 +249,8 @@ func _show_error(message: String) -> void:
 
 
 func _confirmation_redirect_url() -> String:
-	return QuerySafeUrl.append_path(
-		OnlineServices.config.rivet_control_base_url, "/v1/auth/confirmed"
-	)
+	var base_url: String = OnlineServices.config.supabase_url.trim_suffix("/")
+	return "%s/functions/v1/auth-confirmed" % base_url
 
 
 func _focus_email() -> void:
