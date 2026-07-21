@@ -377,7 +377,7 @@ jq -e '
   .environment == "staging" and
   .control_plane_live == true and
   .supabase_schema_ready == true and
-  .min_players == 2 and
+  .min_players == 1 and
   .max_players == 10 and
   .game_server_allocator_ready == false and
   .full_online_ready == false

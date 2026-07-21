@@ -127,6 +127,15 @@ func configure(
 		match_controller.events.gather_state_changed.emit(team_id, false, 0, &"")
 
 
+func set_display_name(value: String) -> void:
+	var next_name := value.strip_edges().left(24)
+	if next_name.length() < 2:
+		next_name = "Player"
+	display_name = next_name
+	if is_instance_valid(commander):
+		commander.set_commander_display_name(display_name)
+
+
 func _physics_process(delta: float) -> void:
 	if eliminated:
 		return

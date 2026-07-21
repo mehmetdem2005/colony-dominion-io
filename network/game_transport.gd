@@ -44,6 +44,9 @@ var _command_sequence: int = 0
 var _last_ack_sequence: int = -1
 var _server_port: int = NetworkProtocol.DEFAULT_GAME_PORT
 var _max_players: int = NetworkProtocol.DEFAULT_MAX_PLAYERS
+var _human_player_count: int = 1
+var _bot_count: int = NetworkProtocol.DEFAULT_MAX_PLAYERS - 1
+var _ranked_match: bool = false
 var _server_match_id: String = ""
 var _server_id: String = ""
 var _server_build_id: String = ""
@@ -127,6 +130,23 @@ func start_dedicated_server() -> Dictionary:
 	var expected_players: int = DedicatedMatchStartGate.read_int_environment(
 		"EXPECTED_PLAYERS", _max_players, 1, _max_players
 	)
+	_human_player_count = DedicatedMatchStartGate.read_int_environment(
+		"HUMAN_PLAYER_COUNT", expected_players, expected_players, _max_players
+	)
+	_bot_count = DedicatedMatchStartGate.read_int_environment(
+		"BOT_COUNT", _max_players - _human_player_count, 0, _max_players
+	)
+	_ranked_match = OS.get_environment("RANKED_MATCH") == "1"
+	if _human_player_count + _bot_count != _max_players:
+		var population_error := "Dedicated server human and bot counts must equal MAX_PLAYERS"
+		server_start_failed.emit(population_error)
+		push_error(population_error)
+		return {"ok": false, "error": population_error}
+	if _ranked_match and _bot_count > 0:
+		var ranked_error := "Bot-backfilled matches cannot start as ranked"
+		server_start_failed.emit(ranked_error)
+		push_error(ranked_error)
+		return {"ok": false, "error": ranked_error}
 	if _match_start_gate != null:
 		_match_start_gate.set_expected_players(expected_players)
 	_server_match_id = OS.get_environment("MATCH_ID").strip_edges()
@@ -134,7 +154,7 @@ func start_dedicated_server() -> Dictionary:
 	_server_build_id = OS.get_environment("BUILD_ID").strip_edges()
 	_server_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
 	if _server_build_id.is_empty():
-		_server_build_id = "PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"
+		_server_build_id = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 	if not OS.is_debug_build() and (_server_match_id.is_empty() or _server_id.is_empty()):
 		var identity_error := "Dedicated server MATCH_ID/SERVER_ID environment is missing"
 		server_start_failed.emit(identity_error)
@@ -386,6 +406,9 @@ func get_transport_stats() -> Dictionary:
 		"connected_players": _peer_records.size(),
 		"expected_players":
 		_match_start_gate.get_expected_players() if _match_start_gate != null else 1,
+		"human_player_count": _human_player_count,
+		"bot_count": _bot_count,
+		"ranked_match": _ranked_match,
 		"match_started": _match_start_gate.is_started() if _match_start_gate != null else false,
 		"server_tick": _last_server_tick,
 		"command_sequence": _command_sequence,
@@ -614,13 +637,18 @@ func _consider_server_match_start() -> void:
 
 func _on_server_match_started() -> void:
 	_server_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
+	var connected_players := _peer_records.size()
+	var expected_players := (
+		_match_start_gate.get_expected_players() if _match_start_gate != null else 1
+	)
+	if connected_players < expected_players:
+		_human_player_count = connected_players
+		_bot_count = maxi(_max_players - connected_players, 0)
+		_ranked_match = false
 	print(
 		(
 			"[GameTransport] Authoritative match started with %d/%d authenticated players"
-			% [
-				_peer_records.size(),
-				_match_start_gate.get_expected_players() if _match_start_gate != null else 1
-			]
+			% [connected_players, expected_players]
 		)
 	)
 
@@ -736,7 +764,7 @@ func _build_match_result_payload(winner_name: String) -> Dictionary:
 		"started_at_ms": _server_started_unix_msec,
 		"ended_at_ms": roundi(Time.get_unix_time_from_system() * 1000.0),
 		"termination_reason": "completed",
-		"ranked": OS.get_environment("RANKED_MATCH") != "0",
+		"ranked": _ranked_match,
 		"participants": participant_rows,
 	}
 
@@ -866,7 +894,7 @@ func _authenticate_peer(
 	)
 	if trusted_display_name.is_empty():
 		trusted_display_name = "Player"
-	var team_id: int = _match.assign_peer_to_available_team(peer_id)
+	var team_id: int = _match.assign_peer_to_available_team(peer_id, trusted_display_name)
 	if team_id < 0:
 		_reject_peer(peer_id, "Boş takım slotu bulunamadı")
 		return
@@ -910,7 +938,10 @@ func _try_reconnect(
 	)
 	if trusted_display_name.is_empty():
 		trusted_display_name = "Player"
-	if not is_instance_valid(_match) or not _match.assign_peer_to_team(peer_id, team_id):
+	if (
+		not is_instance_valid(_match)
+		or not _match.assign_peer_to_team(peer_id, team_id, trusted_display_name)
+	):
 		return {"ok": false}
 	_reservations_by_player.erase(player_id)
 	_peer_records[peer_id] = {

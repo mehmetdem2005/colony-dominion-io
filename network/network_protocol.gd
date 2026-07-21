@@ -47,6 +47,9 @@ static func normalize_assignment(value: Dictionary) -> Dictionary:
 		"region_short_name": String(value.get("region_short_name", "")).strip_edges(),
 		"expires_at": int(value.get("expires_at", 0)),
 		"protocol_version": int(value.get("protocol_version", 0)),
+		"human_players": clampi(int(value.get("human_players", 1)), 1, DEFAULT_MAX_PLAYERS),
+		"bot_players": clampi(int(value.get("bot_players", 0)), 0, DEFAULT_MAX_PLAYERS),
+		"ranked": bool(value.get("ranked", false)),
 	}
 
 
@@ -70,6 +73,12 @@ static func validate_assignment(value: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "Bağlantı bileti geçersiz"}
 	if int(assignment.get("protocol_version", 0)) != VERSION:
 		return {"ok": false, "error": "Ağ protokol sürümü uyumsuz"}
+	var human_players := int(assignment.get("human_players", 0))
+	var bot_players := int(assignment.get("bot_players", 0))
+	if human_players < 1 or human_players + bot_players != DEFAULT_MAX_PLAYERS:
+		return {"ok": false, "error": "Maç oyuncu dağılımı geçersiz"}
+	if bool(assignment.get("ranked", false)) and bot_players > 0:
+		return {"ok": false, "error": "Bot içeren maç dereceli olamaz"}
 	if int(assignment.get("expires_at", 0)) <= int(Time.get_unix_time_from_system() * 1000.0):
 		return {"ok": false, "error": "Sunucu atamasının süresi doldu"}
 	return {"ok": true, "assignment": assignment}

@@ -443,7 +443,7 @@ jq -e '
   .environment == "staging" and
   .control_plane_live == true and
   .supabase_schema_ready == true and
-  .min_players == 2 and
+  .min_players == 1 and
   .max_players == 10 and
   .game_server_allocator_ready == false and
   .full_online_ready == false
@@ -491,7 +491,7 @@ jq -e '
   .checks.supabase_server_write == true and
   .checks.regions == true and
   .checks.allocator == false and
-  .limits.min_players == 2 and
+  .limits.min_players == 1 and
   .limits.max_players == 10
 ' "$EVIDENCE_DIR/live-health-config.json" >/dev/null
 if [ "$?" -ne 0 ]; then

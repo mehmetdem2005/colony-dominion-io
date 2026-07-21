@@ -165,6 +165,12 @@ def configure_auth_confirmation(
     ]
     if confirmation_url not in allow_list:
         allow_list.append(confirmation_url)
+    google_callback_pattern = (
+        f"https://{project_ref}.supabase.co/functions/v1/"
+        "oauth-google-handoff/callback/**"
+    )
+    if google_callback_pattern not in allow_list:
+        allow_list.append(google_callback_pattern)
 
     # Redirect safety is critical and must not be coupled to optional email branding.
     # Supabase free-tier projects using the default mail provider reject template writes.
@@ -193,6 +199,8 @@ def configure_auth_confirmation(
         raise module.DeployError("Supabase Auth site URL verification failed")
     if confirmation_url not in verified_allow_list:
         raise module.DeployError("Supabase Auth redirect allow-list verification failed")
+    if google_callback_pattern not in verified_allow_list:
+        raise module.DeployError("Google OAuth callback pattern is absent from the allow-list")
     if any(
         "localhost" in item.casefold() or "127.0.0.1" in item
         for item in verified_allow_list
@@ -256,10 +264,129 @@ def configure_auth_confirmation(
     return {
         "site_url": verified_site_url,
         "redirect_allowlisted": True,
+        "google_callback_allowlisted": True,
         "localhost_removed": True,
         "confirmation_template": template_deployed,
         "confirmation_subject": subject_deployed,
         "template_status": template_status,
+    }
+
+
+def configure_resend_smtp(module, token: str, project_ref: str) -> dict[str, Any]:
+    api_key = os.getenv("RESEND_API_KEY", "").strip()
+    admin_email = os.getenv("AUTH_SMTP_ADMIN_EMAIL", "").strip()
+    sender_name = os.getenv("AUTH_SMTP_SENDER_NAME", "Colony Dominion.io").strip()
+    if not api_key and not admin_email:
+        return {
+            "status": "credentials_missing",
+            "configured": False,
+            "provider": "resend",
+        }
+    if not api_key or not admin_email:
+        raise module.DeployError(
+            "RESEND_API_KEY and AUTH_SMTP_ADMIN_EMAIL must both be configured"
+        )
+    if "@" not in admin_email or len(admin_email) > 254:
+        raise module.DeployError("AUTH_SMTP_ADMIN_EMAIL is not a valid sender address")
+    if len(sender_name) < 2 or len(sender_name) > 64:
+        raise module.DeployError("AUTH_SMTP_SENDER_NAME must contain 2 to 64 characters")
+    module.http_json(
+        "PATCH",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        body={
+            "external_email_enabled": True,
+            "mailer_autoconfirm": False,
+            "smtp_admin_email": admin_email,
+            "smtp_host": "smtp.resend.com",
+            "smtp_port": "465",
+            "smtp_user": "resend",
+            "smtp_pass": api_key,
+            "smtp_sender_name": sender_name,
+        },
+        timeout=60.0,
+    )
+    verified = module.http_json(
+        "GET",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        timeout=45.0,
+    )
+    if not isinstance(verified, dict):
+        raise module.DeployError("Could not verify Resend SMTP configuration")
+    checks = {
+        "smtp_admin_email": admin_email,
+        "smtp_host": "smtp.resend.com",
+        "smtp_port": "465",
+        "smtp_user": "resend",
+        "smtp_sender_name": sender_name,
+    }
+    for key, expected in checks.items():
+        if str(verified.get(key, "")).strip() != expected:
+            raise module.DeployError(f"Resend SMTP verification failed: {key}")
+    return {
+        "status": "configured",
+        "configured": True,
+        "provider": "resend",
+        "sender_email": admin_email,
+        "sender_name": sender_name,
+        "host": "smtp.resend.com",
+        "port": 465,
+    }
+
+
+def configure_google_provider(module, token: str, project_ref: str) -> dict[str, Any]:
+    client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+    google_console_redirect_url = (
+        f"https://{project_ref}.supabase.co/auth/v1/callback"
+    )
+    handoff_callback_pattern = (
+        f"https://{project_ref}.supabase.co/functions/v1/"
+        "oauth-google-handoff/callback/**"
+    )
+    if not client_id and not client_secret:
+        return {
+            "status": "credentials_missing",
+            "enabled": False,
+            "client_id_configured": False,
+            "google_console_redirect_url": google_console_redirect_url,
+            "handoff_callback_pattern": handoff_callback_pattern,
+        }
+    if not client_id or not client_secret:
+        raise module.DeployError(
+            "Google OAuth client ID and secret must either both be set or both be absent"
+        )
+    module.http_json(
+        "PATCH",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        body={
+            "external_google_enabled": True,
+            "external_google_client_id": client_id,
+            "external_google_secret": client_secret,
+        },
+        timeout=60.0,
+    )
+    verified = module.http_json(
+        "GET",
+        f"{module.SUPABASE_API}/projects/{project_ref}/config/auth",
+        token=token,
+        timeout=45.0,
+    )
+    if not isinstance(verified, dict):
+        raise module.DeployError("Could not verify Google OAuth provider configuration")
+    enabled = bool(verified.get("external_google_enabled"))
+    verified_client_id = str(verified.get("external_google_client_id", "")).strip()
+    if not enabled or verified_client_id != client_id:
+        raise module.DeployError("Google OAuth provider verification failed")
+    return {
+        "status": "enabled",
+        "enabled": True,
+        "client_id_configured": True,
+        "client_id_suffix": client_id[-12:],
+        "google_console_redirect_url": google_console_redirect_url,
+        "handoff_callback_pattern": handoff_callback_pattern,
     }
 
 
@@ -310,7 +437,9 @@ def main() -> int:
 
     applied = module.run_supabase_migrations(root, token, project.ref)
     verification = module.verify_supabase_schema(token, project.ref)
+    smtp_verification = configure_resend_smtp(module, token, project.ref)
     auth_verification = configure_auth_confirmation(module, root, token, project.ref)
+    google_provider = configure_google_provider(module, token, project.ref)
     module.update_client_config(
         root,
         supabase_url=project.url,
@@ -332,7 +461,9 @@ def main() -> int:
             "migration_count": len(migrations),
             "management_preflight": access,
             "verification": verification,
+            "smtp": smtp_verification,
             "auth_confirmation": auth_verification,
+            "google_oauth": google_provider,
         },
         "rivet": {"status": "blocked_provider_internal_error"},
     }

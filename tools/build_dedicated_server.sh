@@ -42,7 +42,8 @@ run_timed "Static online release validation" 180 \
   python3 "$ROOT/tools/validate_online_release.py"
 
 mkdir -p "$ROOT/build/ci-logs"
-IMPORT_LOG="$ROOT/build/ci-logs/godot-editor-import.log"
+LOG_DIR="$ROOT/build/ci-logs"
+IMPORT_LOG="$LOG_DIR/godot-editor-import.log"
 
 echo
 echo "===== START: Godot editor import/parse (timeout=240s) ====="
@@ -79,14 +80,39 @@ TESTS=(
 )
 
 for test_path in "${TESTS[@]}"; do
-  run_timed "Godot test: $test_path" 120 \
-    "$GODOT_BIN" --headless --path "$ROOT" --script "res://$test_path"
+  test_name="$(basename "$test_path" .gd)"
+  test_log="$LOG_DIR/${test_name}.log"
+  echo
+  echo "===== START: Godot test: $test_path (timeout=120s) ====="
+  set +e
+  timeout --foreground 120s \
+    "$GODOT_BIN" --headless --path "$ROOT" --script "res://$test_path" \
+    2>&1 | tee "$test_log"
+  test_code=${PIPESTATUS[0]}
+  set -e
+  if [[ $test_code -ne 0 ]]; then
+    echo "===== FAIL: Godot test: $test_path (exit=$test_code) =====" >&2
+    exit "$test_code"
+  fi
+  echo "===== PASS: Godot test: $test_path ====="
 done
 
 mkdir -p "$ROOT/build/server"
-run_timed "Dedicated Server export" 600 \
+EXPORT_LOG="$LOG_DIR/dedicated-server-export.log"
+echo
+echo "===== START: Dedicated Server export (timeout=600s) ====="
+set +e
+timeout --foreground 600s \
   "$GODOT_BIN" --headless --path "$ROOT" \
-  --export-release "Dedicated Server" "$ROOT/build/server/colony-dominion-server.x86_64"
+  --export-release "Dedicated Server" "$ROOT/build/server/colony-dominion-server.x86_64" \
+  2>&1 | tee "$EXPORT_LOG"
+export_code=${PIPESTATUS[0]}
+set -e
+if [[ $export_code -ne 0 ]]; then
+  echo "===== FAIL: Dedicated Server export (exit=$export_code) =====" >&2
+  exit "$export_code"
+fi
+echo "===== PASS: Dedicated Server export ====="
 
 test -x "$ROOT/build/server/colony-dominion-server.x86_64"
 test -s "$ROOT/build/server/colony-dominion-server.pck"

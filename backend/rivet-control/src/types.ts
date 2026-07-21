@@ -22,6 +22,9 @@ export type ServerAssignment = {
   regionShortName: string;
   expiresAt: number;
   protocolVersion: number;
+  humanPlayers: number;
+  botPlayers: number;
+  ranked: boolean;
 };
 
 export type SessionTicketRecord = {
@@ -60,7 +63,14 @@ export type ServerCredentialRecord = {
 };
 
 export type QueueStatus =
-  | { status: "queued"; queue_ticket_id: string; position: number }
+  | {
+      status: "queued";
+      queue_ticket_id: string;
+      position: number;
+      joined_at_ms: number;
+      oldest_joined_at_ms: number;
+      human_players_waiting: number;
+    }
   | { status: "assigned"; queue_ticket_id: string; assignment: ServerAssignment }
   | {
       status: "cancelled" | "expired" | "failed";

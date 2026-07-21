@@ -26,7 +26,7 @@ func start_dedicated_server() -> Dictionary:
 	_server_build_id = OS.get_environment("BUILD_ID").strip_edges()
 	_server_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
 	if _server_build_id.is_empty():
-		_server_build_id = "PHASE-05.4-RIVET-FULL-ONLINE"
+		_server_build_id = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 	if not OS.is_debug_build() and (_server_match_id.is_empty() or _server_id.is_empty()):
 		var identity_error := "Dedicated server MATCH_ID/SERVER_ID environment is missing"
 		server_start_failed.emit(identity_error)

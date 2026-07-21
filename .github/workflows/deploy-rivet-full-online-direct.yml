@@ -41,11 +41,12 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
       REGIONS_JSON: ${{ vars.REGIONS_JSON }}
-      SUPPORTED_BUILD_ID: PHASE-05.4-RIVET-FULL-ONLINE
+      SUPPORTED_BUILD_ID: PHASE-05.5-GOOGLE-BOT-BACKFILL
       PROTOCOL_VERSION: "4"
-      MIN_PLAYERS: "2"
+      MIN_PLAYERS: "1"
       MAX_PLAYERS: "10"
       QUEUE_TTL_SECONDS: "120"
+      BOT_BACKFILL_WAIT_SECONDS: "30"
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
       IMAGE_REPOSITORY: colony-rivet-full-online
@@ -78,7 +79,7 @@ jobs:
           test -n "$SUPABASE_SECRET_KEY"
           test -n "$SUPABASE_PROJECT_REF"
           test "$PROTOCOL_VERSION" = "4"
-          test "$MIN_PLAYERS" = "2"
+          test "$MIN_PLAYERS" = "1"
           test "$MAX_PLAYERS" = "10"
           echo "::add-mask::$RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
@@ -256,7 +257,7 @@ jobs:
             --write-out '%{http_code}' \
             --header 'Content-Type: application/json' \
             --request POST \
-            --data '{"player_id":"00000000-0000-4000-8000-000000000001","display_name":"Canary","region_preference":"auto","build_id":"PHASE-05.4-RIVET-FULL-ONLINE","protocol_version":4}' \
+            --data '{"player_id":"00000000-0000-4000-8000-000000000001","display_name":"Canary","region_preference":"auto","build_id":"PHASE-05.5-GOOGLE-BOT-BACKFILL","protocol_version":4}' \
             "$RIVET_CONTROL_BASE_URL/v1/matchmaking/join")"
           test "$UNAUTHORIZED_CODE" = "401"
 
@@ -303,7 +304,7 @@ jobs:
               })
           config = {
               "environment": "production",
-              "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
+              "build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
               "protocol_version": 4,
               "supabase_url": os.environ["SUPABASE_URL"].rstrip("/"),
               "supabase_publishable_key": publishable_key,
@@ -368,10 +369,11 @@ jobs:
               "android_staging_apk_ready": True,
               "full_online_ready": True,
               "full_end_to_end_release_ready": True,
-              "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
+              "build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
               "protocol_version": 4,
-              "min_players": 2,
+              "min_players": 1,
               "max_players": 10,
+              "bot_backfill_wait_seconds": 30,
           }
           Path("build/rivet-direct/status.json").write_text(
               json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

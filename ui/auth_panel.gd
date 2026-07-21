@@ -9,11 +9,13 @@ var _password: LineEdit
 var _display_name: LineEdit
 var _status_panel: PanelContainer
 var _status: Label
+var _google_sign_in: Button
 var _sign_in: Button
 var _sign_up: Button
 var _resend: Button
 var _close_button: Button
 var _busy: bool = false
+var _google_busy: bool = false
 var _last_signup_email: String = ""
 
 
@@ -33,6 +35,11 @@ func open_panel(default_name: String = "") -> void:
 
 
 func close_panel() -> void:
+	if _google_busy:
+		OnlineServices.cancel_google_sign_in()
+		visible = false
+		closed.emit()
+		return
 	if _busy:
 		return
 	visible = false
@@ -45,9 +52,18 @@ func _build() -> void:
 	size = Vector2(660.0, 620.0)
 	add_theme_stylebox_override("panel", ColonyUiKit.panel_style())
 
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	add_child(scroll)
+
 	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600.0
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 13)
-	add_child(box)
+	scroll.add_child(box)
 
 	var eyebrow := Label.new()
 	eyebrow.text = "COLONY DOMINION ID"
@@ -67,6 +83,19 @@ func _build() -> void:
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ColonyUiKit.apply_label(subtitle, 15, 450, ColonyUiKit.TEXT_SECONDARY)
 	box.add_child(subtitle)
+
+	_google_sign_in = Button.new()
+	_google_sign_in.text = "G  •  GOOGLE İLE DEVAM ET"
+	_google_sign_in.custom_minimum_size = Vector2(500.0, 58.0)
+	_google_sign_in.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ColonyUiKit.apply_button(_google_sign_in, &"secondary", 58.0)
+	_google_sign_in.pressed.connect(_on_google_sign_in)
+	box.add_child(_google_sign_in)
+
+	var divider := HSeparator.new()
+	divider.custom_minimum_size = Vector2(500.0, 18.0)
+	divider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(divider)
 
 	_email = _make_input("E-posta adresi", false)
 	_email.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
@@ -122,8 +151,8 @@ func _build() -> void:
 
 	var note := Label.new()
 	note.text = (
-		"Şifren cihazda saklanmaz. E-posta doğrulaması tamamlandıktan sonra "
-		+ "bu ekrandan giriş yap."
+		"Google girişi tarayıcıda tamamlanır ve tek kullanımlık güvenli aktarım ile oyuna döner. "
+		+ "E-posta şifren cihazda saklanmaz."
 	)
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -140,6 +169,25 @@ func _make_input(placeholder: String, secret: bool) -> LineEdit:
 	input.clear_button_enabled = not secret
 	ColonyUiKit.apply_input(input)
 	return input
+
+
+func _on_google_sign_in() -> void:
+	_google_busy = true
+	_set_busy(true, "Google güvenli giriş sayfası açılıyor...")
+	_close_button.text = "GOOGLE GİRİŞİNİ İPTAL ET"
+	var result: Dictionary = await OnlineServices.sign_in_google()
+	_google_busy = false
+	_set_busy(false, "")
+	_close_button.text = "KAPAT"
+	if not visible:
+		return
+	if bool(result.get("ok", false)):
+		_password.clear()
+		_set_status("Google hesabı bağlandı. Çevrim içi hizmetler hazırlanıyor.", &"success")
+		visible = false
+		authenticated.emit()
+		return
+	_show_error(String(result.get("error", "Google ile giriş başarısız")))
 
 
 func _on_sign_in() -> void:
@@ -220,10 +268,11 @@ func _validate_inputs(require_name: bool) -> bool:
 
 func _set_busy(value: bool, message: String) -> void:
 	_busy = value
+	_google_sign_in.disabled = value
 	_sign_in.disabled = value
 	_sign_up.disabled = value
 	_resend.disabled = value
-	_close_button.disabled = value
+	_close_button.disabled = value and not _google_busy
 	_email.editable = not value
 	_password.editable = not value
 	_display_name.editable = not value

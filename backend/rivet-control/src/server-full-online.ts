@@ -5,6 +5,7 @@ import { createClient } from "rivetkit/client";
 import { z } from "zod";
 import { requireSupabaseAuth, type AuthVariables } from "./auth.js";
 import { authConfirmationResponse } from "./auth-confirmation-page.js";
+import { evaluateMatchmakingWindow } from "./matchmaking-policy.js";
 import { findRegion, loadRegions } from "./regions.js";
 import { allocateRivetGameServer } from "./rivet-native-allocator.js";
 import { runtimeRegistry } from "./runtime-registry.js";
@@ -19,9 +20,12 @@ const baseUrl = process.env.INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`;
 const actorClient = createClient<typeof runtimeRegistry>(`${baseUrl}/api/rivet`);
 const app = new Hono<{ Variables: AuthVariables }>();
 const regions = loadRegions();
-const minPlayers = readBoundedIntegerEnvironment("MIN_PLAYERS", 2, 1, 10);
+const minPlayers = readBoundedIntegerEnvironment("MIN_PLAYERS", 1, 1, 10);
 const maxPlayers = readBoundedIntegerEnvironment("MAX_PLAYERS", 10, minPlayers, 10);
 const queueTtlMs = Math.max(30, Number(process.env.QUEUE_TTL_SECONDS ?? 120)) * 1000;
+const botBackfillWaitMs = readBoundedIntegerEnvironment(
+  "BOT_BACKFILL_WAIT_SECONDS", 30, 5, 120,
+) * 1000;
 const requiredBuildId = process.env.SUPPORTED_BUILD_ID ?? "";
 const requiredProtocolVersion = Number(process.env.PROTOCOL_VERSION ?? 0);
 const supabaseUrl = (process.env.SUPABASE_URL ?? "").replace(/\/$/, "");
@@ -89,6 +93,8 @@ app.get("/v1/health/config", (c) => {
       min_players: minPlayers,
       max_players: maxPlayers,
       queue_ttl_seconds: queueTtlMs / 1000,
+      bot_backfill_wait_seconds: botBackfillWaitMs / 1000,
+      bot_backfill_authority: "dedicated_server",
       transport: "rivet_websocket",
     },
   });
@@ -278,11 +284,20 @@ async function attemptAllocation(
   actorInstance: Awaited<ReturnType<typeof actorClient.matchmaker.getOrCreate>>,
   regionId: string,
 ): Promise<void> {
-  const queueSize = await actorInstance.queueSize(regionId);
-  if (queueSize < minPlayers) return;
+  const now = Date.now();
+  const stats = await actorInstance.queueStats(regionId);
+  const decision = evaluateMatchmakingWindow({
+    queueSize: stats.size,
+    oldestJoinedAt: stats.oldestJoinedAt,
+    now,
+    minimumHumanPlayers: minPlayers,
+    targetPlayers: maxPlayers,
+    botBackfillWaitMs,
+  });
+  if (!decision.allocate) return;
   const candidates = await actorInstance.takeCandidates(
     regionId,
-    Math.min(queueSize, maxPlayers),
+    Math.min(stats.size, maxPlayers),
   );
   if (candidates.length < minPlayers) {
     await actorInstance.restoreCandidates(regionId, candidates);
@@ -293,6 +308,7 @@ async function attemptAllocation(
       actorClient,
       findRegion(regions, regionId),
       candidates,
+      maxPlayers,
     );
     await actorInstance.registerServerCredential({
       matchId: allocation.assignment.matchId,
@@ -334,6 +350,16 @@ function extractRegionId(queueTicketId: string): string {
 }
 
 function toPublicStatus(status: QueueStatus): Record<string, unknown> {
+  if (status.status === "queued") {
+    const backfillAt = status.oldest_joined_at_ms + botBackfillWaitMs;
+    return {
+      ...status,
+      bot_backfill_at_ms: backfillAt,
+      bot_backfill_seconds_remaining: Math.max(0, Math.ceil((backfillAt - Date.now()) / 1000)),
+      target_players: maxPlayers,
+      will_backfill_with_bots: true,
+    };
+  }
   if (status.status !== "assigned") return status;
   return {
     status: status.status,
@@ -356,6 +382,9 @@ function toPublicAssignment(assignment: ServerAssignment): Record<string, unknow
     region_short_name: assignment.regionShortName,
     expires_at: assignment.expiresAt,
     protocol_version: assignment.protocolVersion,
+    human_players: assignment.humanPlayers,
+    bot_players: assignment.botPlayers,
+    ranked: assignment.ranked,
   };
 }
 

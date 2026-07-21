@@ -104,17 +104,27 @@ func resend_signup_confirmation(email: String, redirect_url: String = "") -> Dic
 	return _fail(_extract_error(response))
 
 
-func refresh_session() -> Dictionary:
-	var refresh_token: String = String(_session.get("refresh_token", ""))
-	if refresh_token.is_empty():
-		return _fail("Yenileme oturumu bulunamadı")
+func sign_in_refresh_token(refresh_token: String) -> Dictionary:
+	if not is_configured():
+		return _fail("Supabase istemci ayarları eksik")
+	var cleaned_token := refresh_token.strip_edges()
+	if cleaned_token.length() < 16 or cleaned_token.length() > 4096:
+		return _fail("Google oturum anahtarı geçersiz")
 	var response: Dictionary = await _http.request_json(
 		HTTPClient.METHOD_POST,
 		"%s/auth/v1/token?grant_type=refresh_token" % _base_url,
 		_base_headers(),
-		{"refresh_token": refresh_token}
+		{"refresh_token": cleaned_token}
 	)
+	cleaned_token = ""
 	return _consume_auth_response(response)
+
+
+func refresh_session() -> Dictionary:
+	var refresh_token: String = String(_session.get("refresh_token", ""))
+	if refresh_token.is_empty():
+		return _fail("Yenileme oturumu bulunamadı")
+	return await sign_in_refresh_token(refresh_token)
 
 
 func fetch_user() -> Dictionary:

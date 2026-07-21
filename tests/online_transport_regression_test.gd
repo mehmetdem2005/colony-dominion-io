@@ -35,6 +35,9 @@ func _run() -> void:
 		"region_short_name": "EU",
 		"expires_at": int(Time.get_unix_time_from_system() * 1000.0) + 60_000,
 		"protocol_version": NetworkProtocol.VERSION,
+		"human_players": NetworkProtocol.DEFAULT_MAX_PLAYERS,
+		"bot_players": 0,
+		"ranked": true,
 	}
 	var validation: Dictionary = NetworkProtocol.validate_assignment(future_assignment)
 	if not bool(validation.get("ok", false)):
@@ -55,6 +58,20 @@ func _run() -> void:
 	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
 		failures.append("Assignment without server identity was accepted")
 	future_assignment["server_id"] = "server-test"
+	future_assignment["human_players"] = 3
+	future_assignment["bot_players"] = 7
+	future_assignment["ranked"] = true
+	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
+		failures.append("Ranked assignment containing bots was accepted")
+	future_assignment["ranked"] = false
+	if not bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
+		failures.append("Valid unranked bot-backfilled assignment was rejected")
+	future_assignment["human_players"] = 4
+	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
+		failures.append("Assignment with more than ten total participants was accepted")
+	future_assignment["human_players"] = NetworkProtocol.DEFAULT_MAX_PLAYERS
+	future_assignment["bot_players"] = 0
+	future_assignment["ranked"] = true
 	if NetworkProtocol.ENET_CHANNEL_COUNT < 4:
 		failures.append("Transport must expose four logical channels")
 	if NetworkProtocol.MAX_SNAPSHOT_ENTITIES > 160:

@@ -9,7 +9,7 @@ CONTROL_PORT="${CONTROL_PORT:-17001}"
 REPORT_DIR="${REPORT_DIR:-$ROOT/build/soak/$(date -u +%Y%m%dT%H%M%SZ)}"
 MATCH_ID="${MATCH_ID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}"
 SERVER_ID="${SERVER_ID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}"
-BUILD_ID="PHASE-05.3-ONLINE-PRODUCTION-COMPLETION"
+BUILD_ID="PHASE-05.5-GOOGLE-BOT-BACKFILL"
 mkdir -p "$REPORT_DIR"
 command -v "$GODOT_BIN" >/dev/null 2>&1 || { echo "Godot binary not found" >&2; exit 2; }
 
@@ -28,7 +28,7 @@ if [ -n "${NETEM_INTERFACE:-}" ] && command -v tc >/dev/null 2>&1 && [ "$(id -u)
 fi
 
 MATCH_ID="$MATCH_ID" SERVER_ID="$SERVER_ID" REGION_ID="local-soak" \
-BUILD_ID="$BUILD_ID" PROTOCOL_VERSION=3 GAME_PORT="$GAME_PORT" CONTROL_PORT="$CONTROL_PORT" \
+BUILD_ID="$BUILD_ID" PROTOCOL_VERSION=4 GAME_PORT="$GAME_PORT" CONTROL_PORT="$CONTROL_PORT" \
 MAX_PLAYERS=10 EXPECTED_PLAYERS="$PLAYERS" DEV_ACCEPT_JOIN_TICKETS=1 RANKED_MATCH=0 \
 ALLOW_INCOMPLETE_SERVER_ENV=1 \
 "$GODOT_BIN" --headless --path "$ROOT" -- --server >"$REPORT_DIR/server.log" 2>&1 &
