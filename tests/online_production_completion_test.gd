@@ -1,5 +1,7 @@
 extends SceneTree
 
+# Release gate for elimination recovery and safe-area UI behavior on Android.
+
 const REQUIRED_FILES: Array[String] = [
 	"res://network/reconnect_session_store.gd",
 	"res://network/secure_local_vault.gd",
