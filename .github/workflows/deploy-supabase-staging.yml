@@ -18,7 +18,7 @@ concurrency:
 jobs:
   deploy-supabase:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment: staging
     permissions:
       contents: read
@@ -62,6 +62,15 @@ jobs:
             --preflight-only \
             2>&1 | tee build/diagnostics/supabase-preflight.log
 
+      - name: Apply and verify Supabase schema before Edge deployment
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          python tools/deploy_supabase_staging.py \
+            --project-name "${COLONY_PROJECT_NAME:-colony.io}" \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            2>&1 | tee build/diagnostics/supabase-deploy.log
+
       - name: Deploy public auth confirmation Edge Function
         timeout-minutes: 8
         working-directory: backend
@@ -71,7 +80,7 @@ jobs:
             --project-ref "$SUPABASE_PROJECT_REF" \
             --no-verify-jwt
 
-      - name: Deploy Google OAuth handoff Edge Function
+      - name: Deploy Google OAuth PKCE handoff Edge Function
         timeout-minutes: 8
         working-directory: backend
         run: |
@@ -80,7 +89,7 @@ jobs:
             --project-ref "$SUPABASE_PROJECT_REF" \
             --no-verify-jwt
 
-      - name: Verify Google OAuth handoff Edge Function
+      - name: Verify Google OAuth PKCE handoff Edge Function
         timeout-minutes: 3
         run: |
           set -euo pipefail
@@ -89,32 +98,55 @@ jobs:
             --retry 12 \
             --retry-delay 5 \
             --retry-all-errors \
-            "$FUNCTION_URL" \
-            | tee build/diagnostics/google-oauth-handoff-health.json \
-            | grep -q 'colony-google-oauth-handoff'
+            --output build/diagnostics/google-oauth-handoff-health.json \
+            "$FUNCTION_URL"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("build/diagnostics/google-oauth-handoff-health.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if payload.get("ok") is not True:
+              raise SystemExit("OAuth handoff health did not return ok")
+          if payload.get("service") != "colony-google-oauth-handoff":
+              raise SystemExit("OAuth handoff service marker is wrong")
+          if payload.get("flow_type") != "pkce":
+              raise SystemExit("OAuth handoff is not using PKCE")
+          if payload.get("tokens_in_browser") is not False:
+              raise SystemExit("OAuth handoff may expose tokens to the browser")
+          PY
 
       - name: Verify OAuth callback renders as secure UTF-8 HTML
         timeout-minutes: 3
         run: |
           set -euo pipefail
           CALLBACK_ID="00000000-0000-4000-8000-000000000001"
-          CALLBACK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/callback/${CALLBACK_ID}"
+          CALLBACK_NONCE="0000000000000000000000000000000000000000000000000000000000000000"
+          CALLBACK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/callback/${CALLBACK_ID}/${CALLBACK_NONCE}"
           HEADER_FILE="$RUNNER_TEMP/google-oauth-callback.headers"
           BODY_FILE="$RUNNER_TEMP/google-oauth-callback.html"
-          curl --fail --silent --show-error \
+          STATUS_CODE="$(curl --silent --show-error \
             --retry 12 \
             --retry-delay 5 \
             --retry-all-errors \
             --dump-header "$HEADER_FILE" \
             --output "$BODY_FILE" \
-            "$CALLBACK_URL"
-          python - "$HEADER_FILE" "$BODY_FILE" <<'PY'
+            --write-out '%{http_code}' \
+            "$CALLBACK_URL")"
+          python - "$HEADER_FILE" "$BODY_FILE" "$STATUS_CODE" <<'PY'
           import json
           import sys
           from pathlib import Path
 
-          header_text = Path(sys.argv[1]).read_text(encoding="iso-8859-1").replace("\r\n", "\n")
-          blocks = [block for block in header_text.split("\n\n") if block.startswith("HTTP/")]
+          header_text = Path(sys.argv[1]).read_text(
+              encoding="iso-8859-1"
+          ).replace("\r\n", "\n")
+          blocks = [
+              block for block in header_text.split("\n\n") if block.startswith("HTTP/")
+          ]
           if not blocks:
               raise SystemExit("OAuth callback response headers are missing")
           headers = {}
@@ -123,6 +155,9 @@ jobs:
                   continue
               key, value = line.split(":", 1)
               headers[key.strip().lower()] = value.strip()
+          status_code = int(sys.argv[3])
+          if status_code not in {400, 403, 404, 410}:
+              raise SystemExit(f"Unexpected invalid-callback status: {status_code}")
           content_type = headers.get("content-type", "").lower().replace(" ", "")
           if content_type != "text/html;charset=utf-8":
               raise SystemExit(f"OAuth callback is not HTML UTF-8: {content_type!r}")
@@ -135,14 +170,15 @@ jobs:
           csp = headers.get("content-security-policy", "")
           if "frame-ancestors 'none'" not in csp or "script-src 'nonce-" not in csp:
               raise SystemExit("OAuth callback CSP is incomplete")
+          if "connect-src 'none'" not in csp:
+              raise SystemExit("OAuth callback must not make browser-side token requests")
 
-          body_bytes = Path(sys.argv[2]).read_bytes()
-          source = body_bytes.decode("utf-8", errors="strict")
+          source = Path(sys.argv[2]).read_bytes().decode("utf-8", errors="strict")
           if not source.lstrip().lower().startswith("<!doctype html>"):
               raise SystemExit("OAuth callback body is not an HTML document")
           for marker in (
-              "Google girişi tamamlanıyor",
-              "Güvenli oturum oyuna aktarılıyor",
+              "Google girişi tamamlanamadı",
+              "Bu sayfa hiçbir oturum anahtarı içermez.",
               "<script nonce=",
           ):
               if marker not in source:
@@ -152,11 +188,17 @@ jobs:
               "sb_secret_",
               "service_role",
               "Authorization: Bearer",
+              "refresh_token=",
+              "access_token=",
+              "auth_code",
+              "code_verifier",
           ):
               if forbidden in source:
                   raise SystemExit(f"OAuth callback leaks forbidden material: {forbidden}")
           report = {
               "status": "verified",
+              "flow_type": "pkce",
+              "tokens_in_browser": False,
               "content_type": headers["content-type"],
               "inline": True,
               "utf8": True,
@@ -183,15 +225,6 @@ jobs:
             "$FUNCTION_URL" \
             | tee build/diagnostics/auth-confirmation-page.html \
             | grep -q "E-posta adresin doğrulandı"
-
-      - name: Apply and verify Supabase schema
-        timeout-minutes: 10
-        run: |
-          set -o pipefail
-          python tools/deploy_supabase_staging.py \
-            --project-name "${COLONY_PROJECT_NAME:-colony.io}" \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            2>&1 | tee build/diagnostics/supabase-deploy.log
 
       - name: Verify deployment report
         run: |
@@ -222,7 +255,7 @@ jobs:
           ):
               if not verification.get(key):
                   raise SystemExit(f"Supabase function verification failed: {key}")
-          if len(supabase.get("migrations_applied", [])) < 5:
+          if len(supabase.get("migrations_applied", [])) < 7:
               raise SystemExit("not all expected Supabase migrations were applied")
           auth_confirmation = supabase.get("auth_confirmation", {})
           site_url = str(auth_confirmation.get("site_url", ""))
@@ -288,4 +321,5 @@ jobs:
             backend/supabase/functions/auth-confirmed/index.ts
             backend/supabase/functions/oauth-google-handoff/index.ts
             backend/supabase/migrations/202607210006_google_oauth_handoffs.sql
+            backend/supabase/migrations/202607220007_google_oauth_pkce_handoffs.sql
             build/diagnostics/
