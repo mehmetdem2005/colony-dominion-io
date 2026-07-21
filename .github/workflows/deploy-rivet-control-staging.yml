@@ -34,6 +34,7 @@ jobs:
       contents: read
     env:
       RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
@@ -71,14 +72,83 @@ jobs:
           test -n "$RIVET_CLOUD_TOKEN" || { echo "RIVET_CLOUD_TOKEN is missing" >&2; exit 2; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY is missing" >&2; exit 2; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "SUPABASE_PROJECT_REF is missing" >&2; exit 2; }
-          test -n "$SUPABASE_PUBLISHABLE_KEY" || { echo "SUPABASE_PUBLISHABLE_KEY is missing" >&2; exit 2; }
           test "$MIN_PLAYERS" = "2"
           test "$MAX_PLAYERS" = "10"
           test "$PROTOCOL_VERSION" = "4"
           echo "::add-mask::$RIVET_CLOUD_TOKEN"
           echo "::add-mask::$SUPABASE_SECRET_KEY"
-          echo "::add-mask::$SUPABASE_PUBLISHABLE_KEY"
+          [ -z "${SUPABASE_ACCESS_TOKEN:-}" ] || echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
           mkdir -p build/rivet-staging build/android
+
+          if [ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
+            test -n "${SUPABASE_ACCESS_TOKEN:-}" || {
+              echo "SUPABASE_ACCESS_TOKEN is required to resolve the publishable key" >&2
+              exit 2
+            }
+            API_KEYS_FILE="$RUNNER_TEMP/supabase-api-keys.json"
+            curl --fail --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --retry 6 --retry-delay 3 --retry-max-time 120 --retry-all-errors \
+              --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              --header "Accept: application/json" \
+              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/api-keys?reveal=true" \
+              > "$API_KEYS_FILE"
+            SUPABASE_PUBLISHABLE_KEY="$(python - "$API_KEYS_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          items = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if not isinstance(items, list):
+              raise SystemExit("Supabase API key response is not a list")
+
+          def candidate_score(item: object) -> int:
+              if not isinstance(item, dict):
+                  return -1
+              key = str(item.get("api_key", "")).strip()
+              key_type = str(item.get("type", "")).strip().lower()
+              name = str(item.get("name", "")).strip().lower()
+              prefix = str(item.get("prefix", "")).strip().lower()
+              if not key:
+                  return -1
+              if key.startswith("sb_secret_") or key_type == "secret":
+                  return -1
+              if "service_role" in name or "service role" in name or "secret" in name:
+                  return -1
+              if key_type == "publishable":
+                  return 100
+              if key.startswith("sb_publishable_") or prefix.startswith("sb_publishable_"):
+                  return 95
+              if name == "anon" or "anonymous" in name:
+                  return 90
+              if key_type == "legacy" and key.count(".") == 2:
+                  return 80
+              return -1
+
+          candidates = sorted(
+              ((candidate_score(item), item) for item in items),
+              key=lambda pair: pair[0],
+              reverse=True,
+          )
+          if not candidates or candidates[0][0] < 0:
+              raise SystemExit("No publishable or legacy anon API key was found")
+          selected = str(candidates[0][1].get("api_key", "")).strip()
+          if selected.startswith("sb_secret_"):
+              raise SystemExit("Refusing to select a Supabase secret API key")
+          sys.stdout.write(selected)
+          PY
+            )"
+            rm -f "$API_KEYS_FILE"
+            test -n "$SUPABASE_PUBLISHABLE_KEY" || {
+              echo "Supabase publishable key could not be resolved" >&2
+              exit 2
+            }
+            echo "SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
+          fi
+          case "$SUPABASE_PUBLISHABLE_KEY" in
+            sb_secret_*) echo "Refusing to embed a Supabase secret key" >&2; exit 2 ;;
+          esac
+          echo "::add-mask::$SUPABASE_PUBLISHABLE_KEY"
 
           curl --fail --silent --show-error \
             --connect-timeout 10 --max-time 30 \
@@ -199,7 +269,7 @@ jobs:
           from pathlib import Path
 
           raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):
+          for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
@@ -234,7 +304,7 @@ jobs:
           from pathlib import Path
           source = Path("build/rivet-staging/runtime-raw.log")
           raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
-          for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):
+          for name in ("RIVET_CLOUD_TOKEN", "SUPABASE_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY"):
               value = os.environ.get(name, "")
               if value:
                   raw = raw.replace(value, "***")
@@ -363,6 +433,8 @@ jobs:
               raise SystemExit("cannot generate client config without an enabled region")
 
           publishable_key = os.environ["SUPABASE_PUBLISHABLE_KEY"].strip()
+          if publishable_key.startswith("sb_secret_"):
+              raise SystemExit("refusing to embed a Supabase secret key")
           config = {
               "environment": "production",
               "build_id": "PHASE-05.4-RIVET-FULL-ONLINE",
