@@ -27,9 +27,19 @@ func _run() -> void:
 			'consumed_at: "is.null"',
 			"refresh_token: null",
 			"cache-control",
+			'requiredEnvironment("SUPABASE_URL")',
+			"/functions/v1/oauth-google-handoff",
+			"functionBaseUrl()",
 		],
 		failures
 	)
+	var oauth_function_source := FileAccess.get_file_as_string(
+		"res://backend/supabase/functions/oauth-google-handoff/index.ts"
+	)
+	if oauth_function_source.contains("functionBaseUrl(request)"):
+		failures.append("OAuth callback URL must not be derived from the internal request URL")
+	if oauth_function_source.contains("return `${url.origin}"):
+		failures.append("OAuth callback URL must not use the Edge proxy origin")
 	_assert_contains(
 		"res://backend/supabase/migrations/202607210006_google_oauth_handoffs.sql",
 		["enable row level security", "revoke all", "expires_at", "secret_hash"],
