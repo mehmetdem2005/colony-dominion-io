@@ -13,11 +13,10 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 45
     environment: staging
     env:
-      TARGET_SHA: 64ce23196bfc9314f3308b15073c3f473dacc02b
-      RIVET_RUN_ID: "29844292879"
+      TARGET_SHA: a81c56e23678bbc842d04fe83ddfcc47e9499b88
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       GH_TOKEN: ${{ github.token }}
@@ -33,13 +32,13 @@ jobs:
           set -euo pipefail
           mkdir -p build/live-auth-verification
           SUPABASE_RUN_ID=""
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 180); do
             SUPABASE_RUN_ID="$(
               gh run list \
                 --repo "$GITHUB_REPOSITORY" \
                 --workflow deploy-supabase-staging.yml \
                 --branch main \
-                --limit 30 \
+                --limit 50 \
                 --json databaseId,headSha \
                 --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
                 | head -n 1
@@ -52,18 +51,17 @@ jobs:
             exit 2
           }
           echo "SUPABASE_RUN_ID=$SUPABASE_RUN_ID" >> "$GITHUB_ENV"
-          python - "$RIVET_RUN_ID" "$SUPABASE_RUN_ID" <<'PY'
+          python - "$SUPABASE_RUN_ID" <<'PY'
           import json
           import os
           import sys
           from pathlib import Path
 
-          Path("build/live-auth-verification/deployment-runs.json").write_text(
+          Path("build/live-auth-verification/deployment-run.json").write_text(
               json.dumps(
                   {
                       "target_sha": os.environ["TARGET_SHA"],
-                      "rivet_run_id": int(sys.argv[1]),
-                      "supabase_run_id": int(sys.argv[2]),
+                      "supabase_run_id": int(sys.argv[1]),
                   },
                   indent=2,
               ) + "\n",
@@ -71,16 +69,7 @@ jobs:
           )
           PY
 
-      - name: Wait for Rivet confirmation route deployment
-        run: |
-          set -euo pipefail
-          gh run watch "$RIVET_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
-          gh run view "$RIVET_RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
-            > build/live-auth-verification/rivet-deployment.json
-
-      - name: Wait for Supabase redirect deployment
+      - name: Wait for Supabase Edge Function and redirect deployment
         run: |
           set -euo pipefail
           gh run watch "$SUPABASE_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
@@ -89,30 +78,21 @@ jobs:
             --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
             > build/live-auth-verification/supabase-deployment.json
 
-      - name: Verify live confirmation route and Supabase Auth configuration
+      - name: Verify live confirmation page and Auth configuration
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
           import os
           import time
-          import urllib.parse
           import urllib.request
           from pathlib import Path
 
-          config = json.loads(Path("config/backend_config.json").read_text(encoding="utf-8"))
-          base = urllib.parse.urlsplit(str(config["rivet_control_base_url"]))
-          route = urllib.parse.urlunsplit(
-              (
-                  base.scheme,
-                  base.netloc,
-                  base.path.rstrip("/") + "/v1/auth/confirmed",
-                  base.query,
-                  "",
-              )
-          )
-          if not route.startswith("https://") or "localhost" in route.lower():
-              raise SystemExit("computed confirmation route is not production-safe")
+          token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
+          project_ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
+          if not token or not project_ref:
+              raise SystemExit("Supabase staging verification credentials are missing")
+          route = f"https://{project_ref}.supabase.co/functions/v1/auth-confirmed"
 
           route_body = ""
           route_status = 0
@@ -133,12 +113,8 @@ jobs:
                   last_error = str(exc)
               time.sleep(5)
           else:
-              raise SystemExit(f"live confirmation route did not become ready: {last_error}")
+              raise SystemExit(f"live confirmation page did not become ready: {last_error}")
 
-          token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
-          project_ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
-          if not token or not project_ref:
-              raise SystemExit("Supabase staging verification credentials are missing")
           request = urllib.request.Request(
               f"https://api.supabase.com/v1/projects/{project_ref}/config/auth",
               headers={
@@ -156,15 +132,15 @@ jobs:
           subject = str(auth_config.get("mailer_subjects_confirmation", ""))
           failures = []
           if site_url != route:
-              failures.append("site_url does not match the live confirmation route")
+              failures.append("site_url does not match the Edge Function")
           if route not in allow_list:
-              failures.append("confirmation route is absent from uri_allow_list")
+              failures.append("Edge Function is absent from uri_allow_list")
           if (
               "localhost" in site_url.lower()
               or "localhost" in allow_list.lower()
               or "127.0.0.1" in allow_list
           ):
-              failures.append("loopback URL remains in Supabase Auth redirect configuration")
+              failures.append("loopback URL remains in Supabase Auth configuration")
           if failures:
               raise SystemExit("; ".join(failures))
 
@@ -178,6 +154,7 @@ jobs:
               "target_sha": os.environ["TARGET_SHA"],
               "confirmation_route": route,
               "route_status": route_status,
+              "page_verified": True,
               "site_url_matches": True,
               "allow_list_matches": True,
               "localhost_removed": True,
