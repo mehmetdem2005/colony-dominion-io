@@ -342,10 +342,7 @@ func _apply_responsive_layout() -> void:
 		ui_scale = clampf(safe_rect.size.x / BASE_PORTRAIT_WIDTH, 0.72, 1.0)
 	else:
 		ui_scale = clampf(
-			minf(
-				safe_rect.size.x / BASE_LANDSCAPE.x,
-				safe_rect.size.y / BASE_LANDSCAPE.y
-			),
+			minf(safe_rect.size.x / BASE_LANDSCAPE.x, safe_rect.size.y / BASE_LANDSCAPE.y),
 			0.70,
 			1.0
 		)
@@ -354,23 +351,24 @@ func _apply_responsive_layout() -> void:
 	var top_width: float = (safe_rect.size.x - margin * 2.0) / ui_scale
 	if not portrait:
 		top_width = minf(top_width, 670.0)
-	_place(_top_panel, safe_rect.position + Vector2(margin, margin), Vector2(top_width, top_height), ui_scale)
+	_place(
+		_top_panel,
+		safe_rect.position + Vector2(margin, margin),
+		Vector2(top_width, top_height),
+		ui_scale
+	)
 
 	if portrait:
 		var status_y: float = _top_panel.position.y + top_height * ui_scale + 6.0 * ui_scale
 		var exit_size := Vector2(150.0, 48.0)
 		_place(
 			_exit_button,
-			Vector2(
-				safe_rect.end.x - margin - exit_size.x * ui_scale,
-				status_y
-			),
+			Vector2(safe_rect.end.x - margin - exit_size.x * ui_scale, status_y),
 			exit_size,
 			ui_scale
 		)
 		var status_width: float = maxf(
-			180.0,
-			(safe_rect.size.x - margin * 3.0 - exit_size.x * ui_scale) / ui_scale
+			180.0, (safe_rect.size.x - margin * 3.0 - exit_size.x * ui_scale) / ui_scale
 		)
 		_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_place(
@@ -395,8 +393,7 @@ func _apply_responsive_layout() -> void:
 		_place(
 			_status_label,
 			Vector2(
-				safe_rect.end.x - margin - 410.0 * ui_scale,
-				safe_rect.position.y + 18.0 * ui_scale
+				safe_rect.end.x - margin - 410.0 * ui_scale, safe_rect.position.y + 18.0 * ui_scale
 			),
 			Vector2(410.0, 40.0),
 			ui_scale
@@ -427,8 +424,7 @@ func _layout_portrait_controls(safe_rect: Rect2, ui_scale: float, margin: float)
 		ui_scale
 	)
 	var attack_position := Vector2(
-		safe_rect.end.x - margin - attack_size.x * ui_scale,
-		bottom - attack_size.y * ui_scale
+		safe_rect.end.x - margin - attack_size.x * ui_scale, bottom - attack_size.y * ui_scale
 	)
 	_place(_action_buttons[0], attack_position, attack_size, ui_scale)
 	_place(
@@ -447,8 +443,7 @@ func _layout_portrait_controls(safe_rect: Rect2, ui_scale: float, margin: float)
 	_place(
 		_production_panel,
 		Vector2(
-			safe_rect.get_center().x - production_size.x * ui_scale * 0.5,
-			bottom - 302.0 * ui_scale
+			safe_rect.get_center().x - production_size.x * ui_scale * 0.5, bottom - 302.0 * ui_scale
 		),
 		production_size,
 		ui_scale
@@ -477,8 +472,7 @@ func _layout_landscape_controls(safe_rect: Rect2, ui_scale: float, margin: float
 		ui_scale
 	)
 	var attack_position := Vector2(
-		safe_rect.end.x - margin - attack_size.x * ui_scale,
-		bottom - attack_size.y * ui_scale
+		safe_rect.end.x - margin - attack_size.x * ui_scale, bottom - attack_size.y * ui_scale
 	)
 	_place(_action_buttons[0], attack_position, attack_size, ui_scale)
 	_place(
@@ -542,9 +536,7 @@ func _is_portrait() -> bool:
 	return safe_rect.size.y > safe_rect.size.x * 1.08
 
 
-func _panel_style(
-	background: Color, border: Color = Color(0.95, 0.72, 0.16, 0.82)
-) -> StyleBoxFlat:
+func _panel_style(background: Color, border: Color = Color(0.95, 0.72, 0.16, 0.82)) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = background
 	style.border_color = border
