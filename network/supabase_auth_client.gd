@@ -5,6 +5,7 @@ signal session_changed(session: Dictionary)
 signal auth_error(message: String)
 
 const SESSION_PATH: String = "user://supabase_session.vault"
+const PKCE_VERIFIER_PATTERN: String = "^[A-Za-z0-9._~-]{43,128}$"
 
 var _base_url: String = ""
 var _publishable_key: String = ""
@@ -102,6 +103,31 @@ func resend_signup_confirmation(email: String, redirect_url: String = "") -> Dic
 	if bool(response.get("ok", false)):
 		return {"ok": true, "body": response.get("body", {})}
 	return _fail(_extract_error(response))
+
+
+func sign_in_pkce_code(auth_code: String, code_verifier: String) -> Dictionary:
+	if not is_configured():
+		return _fail("Supabase istemci ayarları eksik")
+	var cleaned_code := auth_code.strip_edges()
+	var cleaned_verifier := code_verifier.strip_edges()
+	var verifier_regex := RegEx.create_from_string(PKCE_VERIFIER_PATTERN)
+	if (
+		cleaned_code.length() < 8
+		or cleaned_code.length() > 2048
+		or verifier_regex.search(cleaned_verifier) == null
+	):
+		cleaned_code = ""
+		cleaned_verifier = ""
+		return _fail("Google PKCE kodu geçersiz")
+	var response: Dictionary = await _http.request_json(
+		HTTPClient.METHOD_POST,
+		"%s/auth/v1/token?grant_type=pkce" % _base_url,
+		_base_headers(),
+		{"auth_code": cleaned_code, "code_verifier": cleaned_verifier}
+	)
+	cleaned_code = ""
+	cleaned_verifier = ""
+	return _consume_auth_response(response)
 
 
 func sign_in_refresh_token(refresh_token: String) -> Dictionary:
