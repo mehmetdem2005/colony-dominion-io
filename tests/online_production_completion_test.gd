@@ -1,6 +1,8 @@
 extends SceneTree
 
 # Release gate for elimination recovery and safe-area UI behavior on Android.
+# Project-level mobile settings are validated by tools/validate_online_release.py because
+# project.godot is not exposed as a res:// runtime resource in dedicated-server tests.
 
 const REQUIRED_FILES: Array[String] = [
 	"res://network/reconnect_session_store.gd",
@@ -39,7 +41,6 @@ func _run() -> void:
 		failures.append("Network protocol must be version 4")
 	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
 		failures.append("Online capacity must match the ten colony slots")
-	_validate_mobile_input_and_orientation(failures)
 	_validate_ui_lifecycle(failures)
 	_validate_consent_and_auth_confirmation(failures)
 	_validate_google_oauth_and_bot_backfill(failures)
@@ -86,19 +87,6 @@ func _run() -> void:
 	for failure in failures:
 		push_error(failure)
 	quit(1)
-
-
-func _validate_mobile_input_and_orientation(failures: PackedStringArray) -> void:
-	var project: String = FileAccess.get_file_as_string("res://project.godot")
-	for marker in [
-		"pointing/emulate_mouse_from_touch=true",
-		"window/handheld/orientation=6",
-		"window/size/viewport_width=800",
-		"window/size/viewport_height=800",
-		'window/stretch/aspect="expand"',
-	]:
-		if not project.contains(marker):
-			failures.append("Mobile project configuration is missing: %s" % marker)
 
 
 func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
