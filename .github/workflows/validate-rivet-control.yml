@@ -81,13 +81,9 @@ jobs:
       - name: Configure Android SDK and debug signing
         run: |
           set -euo pipefail
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
-            "platform-tools" \
-            "build-tools;35.0.1" \
-            "platforms;android-35"
+          test -d "$ANDROID_SDK_ROOT"
+          test -x "$ANDROID_SDK_ROOT/platform-tools/adb"
+          test -d "$ANDROID_SDK_ROOT/build-tools"
           rm -f "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
           keytool -keyalg RSA -genkeypair \
             -alias androiddebugkey \
