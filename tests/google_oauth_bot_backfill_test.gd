@@ -26,10 +26,18 @@ func _run() -> void:
 			"constantTimeEqual",
 			'consumed_at: "is.null"',
 			"refresh_token: null",
-			"cache-control",
+			"Cache-Control",
 			'requiredEnvironment("SUPABASE_URL")',
 			"/functions/v1/oauth-google-handoff",
 			"functionBaseUrl()",
+			"new Headers",
+			"UTF8_ENCODER.encode",
+			"Content-Disposition",
+			"Cross-Origin-Resource-Policy",
+			"randomNonce",
+			"SAFE_OAUTH_ERRORS",
+			"history.replaceState",
+			'credentials: "omit"',
 		],
 		failures
 	)
@@ -40,6 +48,18 @@ func _run() -> void:
 		failures.append("OAuth callback URL must not be derived from the internal request URL")
 	if oauth_function_source.contains("return `${url.origin}"):
 		failures.append("OAuth callback URL must not use the Edge proxy origin")
+	if oauth_function_source.contains("nonce-colony-oauth"):
+		failures.append("OAuth callback CSP must use a per-response nonce")
+	_assert_contains(
+		"res://.github/workflows/deploy-supabase-staging.yml",
+		[
+			"Verify OAuth callback renders as secure UTF-8 HTML",
+			"text/html;charset=utf-8",
+			"google-oauth-callback-verification.json",
+			"secret_markers_absent",
+		],
+		failures
+	)
 	_assert_contains(
 		"res://backend/supabase/migrations/202607210006_google_oauth_handoffs.sql",
 		["enable row level security", "revoke all", "expires_at", "secret_hash"],
