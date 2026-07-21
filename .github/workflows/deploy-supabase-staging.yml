@@ -96,9 +96,23 @@ jobs:
           site_url = str(auth_confirmation.get("site_url", ""))
           if not site_url.startswith("https://") or "localhost" in site_url.lower():
               raise SystemExit("Supabase Auth confirmation URL is not production-safe")
-          for key in ("redirect_allowlisted", "confirmation_template", "localhost_removed"):
+          for key in ("redirect_allowlisted", "localhost_removed"):
               if not auth_confirmation.get(key):
                   raise SystemExit(f"Supabase Auth confirmation verification failed: {key}")
+          template_status = str(auth_confirmation.get("template_status", ""))
+          if template_status not in {
+              "deployed",
+              "blocked_free_tier_default_provider",
+          }:
+              raise SystemExit(
+                  f"Unexpected confirmation template status: {template_status}"
+              )
+          if template_status == "deployed":
+              for key in ("confirmation_template", "confirmation_subject"):
+                  if not auth_confirmation.get(key):
+                      raise SystemExit(
+                          f"Supabase Auth branding verification failed: {key}"
+                      )
           print("SUPABASE_STAGING_SCHEMA_OK")
           PY
 
