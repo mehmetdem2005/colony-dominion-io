@@ -14,7 +14,6 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    environment: staging
     env:
       TARGET_SHA: 84f62aa0f6c05149e1c26475bbf4a8f88e779b76
       GH_TOKEN: ${{ github.token }}
