@@ -1,4 +1,4 @@
-name: Snapshot Rivet Live Deployment
+name: Verify OAuth Callback Live Deployment
 
 on:
   pull_request:
@@ -6,41 +6,40 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
   pull-requests: read
 
 jobs:
-  snapshot:
+  verify:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'rivet-live-deployment-monitor'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 35
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: 5e0330528486aa25e7fc0ba0f1daf5eb4f9804ae
+      TARGET_SHA: 9f972a3416142368189fb9c19152e361e3b4aea1
     steps:
       - uses: actions/checkout@v6
         with:
           ref: rivet-live-deployment-monitor
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Locate and wait for merged full-online deployment
+      - name: Locate and wait for matching Supabase deployment
         shell: bash
         run: |
           set -euo pipefail
           REPO="$GITHUB_REPOSITORY"
-          WORKFLOW="deploy-rivet-control-staging.yml"
+          WORKFLOW="deploy-supabase-staging.yml"
           mkdir -p deployment/status
-
           RUN_ID=""
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 300); do
             RUN_ID="$(
               gh run list \
                 --repo "$REPO" \
                 --workflow "$WORKFLOW" \
                 --branch main \
-                --limit 20 \
+                --limit 40 \
                 --json databaseId,headSha \
                 --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
                 | head -n 1
@@ -49,51 +48,117 @@ jobs:
             sleep 5
           done
           test -n "$RUN_ID"
-          echo "RIVET_LIVE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          echo "SUPABASE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
 
           set +e
           gh run watch "$RUN_ID" --repo "$REPO" --exit-status
           WATCH_STATUS=$?
           set -e
-
           gh run view "$RUN_ID" \
             --repo "$REPO" \
             --json databaseId,status,conclusion,event,headSha,url,attempt,workflowName,createdAt,updatedAt \
-            > deployment/status/rivet-full-online-live-run.json
-
-          gh run view "$RUN_ID" --repo "$REPO" --log-failed \
-            > deployment/status/rivet-full-online-live-failure.log 2>&1 || true
-
-          if [ "$WATCH_STATUS" -eq 0 ]; then
-            rm -f deployment/status/rivet-full-online-live-failure.log
+            > deployment/status/supabase-oauth-live-run.json
+          if [ "$WATCH_STATUS" -ne 0 ]; then
+            gh run view "$RUN_ID" --repo "$REPO" --log-failed \
+              > deployment/status/supabase-oauth-live-failure.log 2>&1 || true
+            exit "$WATCH_STATUS"
           fi
 
-      - name: Download deployment evidence
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          mkdir -p deployment/status/rivet-live-evidence
-          if [ -n "${RIVET_LIVE_RUN_ID:-}" ]; then
-            gh run download "$RIVET_LIVE_RUN_ID" \
-              --repo "$GITHUB_REPOSITORY" \
-              --name rivet-full-online-staging \
-              --dir deployment/status/rivet-live-evidence
-          fi
-          true
-
-      - name: Commit live deployment snapshot
-        if: always()
+      - name: Download deployment verification artifact
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A deployment/status/rivet-full-online-live-run.json
-          git add -A deployment/status/rivet-full-online-live-failure.log
-          git add -A deployment/status/rivet-live-evidence
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Snapshot Rivet full-online live deployment"
-          git push origin HEAD:rivet-live-deployment-monitor
+          mkdir -p deployment/status/supabase-live-evidence
+          gh run download "$SUPABASE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name colony-supabase-staging \
+            --dir deployment/status/supabase-live-evidence
+          REPORT="$(find deployment/status/supabase-live-evidence -type f -name 'google-oauth-callback-verification.json' -print -quit)"
+          test -n "$REPORT" && test -s "$REPORT"
+          python - "$REPORT" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          required = {
+              "status": "verified",
+              "inline": True,
+              "utf8": True,
+              "nosniff": True,
+              "no_store": True,
+              "csp_nonce": True,
+              "secret_markers_absent": True,
+          }
+          for key, value in required.items():
+              if report.get(key) != value:
+                  raise SystemExit(f"Deployment callback verification mismatch: {key}")
+          content_type = str(report.get("content_type", "")).lower().replace(" ", "")
+          if content_type != "text/html;charset=utf-8":
+              raise SystemExit(f"Unexpected deployed content type: {content_type}")
+          PY
+
+      - name: Independently verify public callback rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_REF="mlwsxeqorlfqmxqxnfoo"
+          CALLBACK_ID="00000000-0000-4000-8000-000000000001"
+          CALLBACK_URL="https://${PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/callback/${CALLBACK_ID}"
+          HEADER_FILE="$RUNNER_TEMP/oauth-live.headers"
+          BODY_FILE="$RUNNER_TEMP/oauth-live.html"
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            --dump-header "$HEADER_FILE" \
+            --output "$BODY_FILE" \
+            "$CALLBACK_URL"
+          python - "$HEADER_FILE" "$BODY_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw_headers = Path(sys.argv[1]).read_text(encoding="iso-8859-1").replace("\r\n", "\n")
+          blocks = [block for block in raw_headers.split("\n\n") if block.startswith("HTTP/")]
+          if not blocks:
+              raise SystemExit("Public callback headers are missing")
+          headers = {}
+          for line in blocks[-1].splitlines()[1:]:
+              if ":" in line:
+                  key, value = line.split(":", 1)
+                  headers[key.strip().lower()] = value.strip()
+          content_type = headers.get("content-type", "").lower().replace(" ", "")
+          if content_type != "text/html;charset=utf-8":
+              raise SystemExit(f"Public callback content type is wrong: {content_type!r}")
+          if headers.get("content-disposition", "").lower() != "inline":
+              raise SystemExit("Public callback is not inline")
+          if headers.get("x-content-type-options", "").lower() != "nosniff":
+              raise SystemExit("Public callback is missing nosniff")
+          source = Path(sys.argv[2]).read_bytes().decode("utf-8", errors="strict")
+          if not source.lstrip().lower().startswith("<!doctype html>"):
+              raise SystemExit("Public callback body is not HTML")
+          for marker in ("Google girişi tamamlanıyor", "Güvenli oturum oyuna aktarılıyor", "<script nonce="):
+              if marker not in source:
+                  raise SystemExit(f"Public callback marker missing: {marker}")
+          for forbidden in ("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_", "service_role", "Authorization: Bearer"):
+              if forbidden in source:
+                  raise SystemExit(f"Public callback leaks forbidden material: {forbidden}")
+          Path("deployment/status/public-oauth-callback-verification.json").write_text(
+              json.dumps({
+                  "status": "verified",
+                  "content_type": headers.get("content-type", ""),
+                  "utf8": True,
+                  "inline": True,
+                  "secret_markers_absent": True,
+              }, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          rm -f "$HEADER_FILE" "$BODY_FILE"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: colony-oauth-callback-live-verification
+          retention-days: 2
+          if-no-files-found: warn
+          path: deployment/status/
