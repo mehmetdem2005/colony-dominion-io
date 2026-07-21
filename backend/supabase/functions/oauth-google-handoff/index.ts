@@ -23,6 +23,13 @@ const SAFE_CALLBACK_ERRORS = new Map<string, string>([
   ["server_error", "google_oauth_failed"],
   ["invalid_request", "google_oauth_failed"],
 ]);
+const RESULT_OUTCOMES = new Set([
+  "success",
+  "cancelled",
+  "expired",
+  "invalid",
+  "failed",
+]);
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: JSON_HEADERS });
@@ -73,8 +80,8 @@ function callbackPage(ok: boolean, reason: string, status = 200): Response {
   const mark = ok ? "✓" : "!";
   const detailClass = ok ? "detail" : "detail error";
   const autoClose = ok
-    ? `<script nonce="${nonce}">history.replaceState(null, document.title, location.pathname);setTimeout(() => window.close(), 900);</script>`
-    : `<script nonce="${nonce}">history.replaceState(null, document.title, location.pathname);</script>`;
+    ? `<script nonce="${nonce}">setTimeout(() => window.close(), 900);</script>`
+    : `<script nonce="${nonce}">document.documentElement.dataset.oauthResult = "complete";</script>`;
   const source = `<!doctype html>
 <html lang="tr">
 <head>
@@ -102,6 +109,19 @@ function supabaseUrl(): string {
 
 function functionBaseUrl(): string {
   return `${supabaseUrl()}${FUNCTION_PATH}`;
+}
+
+function redirectResult(outcome: string): Response {
+  const safeOutcome = RESULT_OUTCOMES.has(outcome) ? outcome : "failed";
+  const headers = new Headers({
+    Location: `${functionBaseUrl()}/result/${safeOutcome}`,
+    "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+  });
+  return new Response(null, { status: 303, headers });
 }
 
 function serviceHeaders(): HeadersInit {
@@ -245,11 +265,11 @@ async function callback(
     !REQUEST_ID_PATTERN.test(requestId) ||
     !CALLBACK_NONCE_PATTERN.test(callbackNonce)
   ) {
-    return callbackPage(false, "invalid", 400);
+    return redirectResult("invalid");
   }
   const row = await loadHandoff(requestId);
   if (!row || String(row.flow_type ?? "") !== "pkce") {
-    return callbackPage(false, "invalid", 404);
+    return redirectResult("invalid");
   }
   const expectedNonceHash = String(row.callback_nonce_hash ?? "");
   const suppliedNonceHash = await sha256Hex(callbackNonce);
@@ -257,14 +277,14 @@ async function callback(
     !HASH_PATTERN.test(expectedNonceHash) ||
     !constantTimeEqual(expectedNonceHash, suppliedNonceHash)
   ) {
-    return callbackPage(false, "invalid", 403);
+    return redirectResult("invalid");
   }
   if (Date.parse(String(row.expires_at ?? "")) <= Date.now()) {
     await deleteHandoff(requestId);
-    return callbackPage(false, "expired", 410);
+    return redirectResult("expired");
   }
   if (row.completed_at || row.consumed_at) {
-    return callbackPage(false, "expired", 410);
+    return redirectResult("expired");
   }
 
   const url = new URL(request.url);
@@ -274,7 +294,7 @@ async function callback(
     ? (SAFE_CALLBACK_ERRORS.get(rawError) ?? "google_oauth_failed")
     : "";
   if (!AUTH_CODE_PATTERN.test(authCode) && !errorMessage) {
-    return callbackPage(false, "invalid", 400);
+    return redirectResult("invalid");
   }
 
   const query = new URLSearchParams({
@@ -297,12 +317,11 @@ async function callback(
   );
   const rows = update.ok ? await update.json().catch(() => []) : [];
   if (!update.ok || !Array.isArray(rows) || rows.length !== 1) {
-    return callbackPage(false, "expired", 410);
+    return redirectResult("expired");
   }
-  return callbackPage(
-    !errorMessage,
+  if (!errorMessage) return redirectResult("success");
+  return redirectResult(
     errorMessage === "google_oauth_cancelled" ? "cancelled" : "failed",
-    errorMessage ? 400 : 200,
   );
 }
 
@@ -398,6 +417,12 @@ Deno.serve(async (request) => {
         flow_type: "pkce",
         tokens_in_browser: false,
       });
+    }
+    if (request.method === "GET" && action === "result") {
+      const outcome = RESULT_OUTCOMES.has(requestId) ? requestId : "invalid";
+      const ok = outcome === "success";
+      const status = ok ? 200 : outcome === "expired" ? 410 : 400;
+      return callbackPage(ok, outcome, status);
     }
     if (request.method === "POST" && action === "begin") {
       return await begin(request);
