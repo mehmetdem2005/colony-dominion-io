@@ -73,7 +73,7 @@ function callbackPage(ok: boolean, reason: string, status = 200): Response {
   const mark = ok ? "✓" : "!";
   const detailClass = ok ? "detail" : "detail error";
   const autoClose = ok
-    ? `<script nonce="${nonce}">setTimeout(() => window.close(), 900);</script>`
+    ? `<script nonce="${nonce}">history.replaceState(null, document.title, location.pathname);setTimeout(() => window.close(), 900);</script>`
     : `<script nonce="${nonce}">history.replaceState(null, document.title, location.pathname);</script>`;
   const source = `<!doctype html>
 <html lang="tr">
