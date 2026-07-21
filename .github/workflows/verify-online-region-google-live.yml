@@ -1,0 +1,156 @@
+name: Verify Online Region Google Live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-online-region-google-live.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: staging
+    env:
+      TARGET_SHA: 84f62aa0f6c05149e1c26475bbf4a8f88e779b76
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Locate authoritative main deployment runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/live-release
+          locate_run() {
+            local workflow="$1"
+            local run_id=""
+            for _ in $(seq 1 120); do
+              run_id="$(
+                gh run list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --workflow "$workflow" \
+                  --branch main \
+                  --limit 60 \
+                  --json databaseId,headSha \
+                  --jq ".[] | select(.headSha == \"$TARGET_SHA\") | .databaseId" \
+                  | head -n 1
+              )"
+              [ -n "$run_id" ] && break
+              sleep 5
+            done
+            test -n "$run_id" || {
+              echo "Deployment run not found: $workflow" >&2
+              exit 2
+            }
+            printf '%s' "$run_id"
+          }
+          RIVET_RUN_ID="$(locate_run deploy-rivet-control-staging.yml)"
+          SUPABASE_RUN_ID="$(locate_run deploy-supabase-staging.yml)"
+          echo "RIVET_RUN_ID=$RIVET_RUN_ID" >> "$GITHUB_ENV"
+          echo "SUPABASE_RUN_ID=$SUPABASE_RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for matching Rivet runtime and APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run watch "$RIVET_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$RIVET_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
+            > build/live-release/rivet-run.json
+          gh run download "$RIVET_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name colony-dominion-rivet-staging-apk \
+            --dir build/live-release/rivet
+
+      - name: Wait for Google provider deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run watch "$SUPABASE_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$SUPABASE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,headSha,url,workflowName,createdAt,updatedAt \
+            > build/live-release/supabase-run.json
+          gh run download "$SUPABASE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name colony-supabase-staging \
+            --dir build/live-release/supabase
+
+      - name: Verify release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("build/live-release")
+          apks = list((root / "rivet").rglob("*.apk"))
+          if len(apks) != 1:
+              raise SystemExit(f"Expected one deployed APK, found {len(apks)}")
+          apk = apks[0]
+          if apk.stat().st_size < 10_000_000:
+              raise SystemExit("Deployed APK is unexpectedly small")
+
+          live_reports = list((root / "rivet").rglob("live-verification.json"))
+          if len(live_reports) != 1:
+              raise SystemExit("Rivet live verification report is missing")
+          live = json.loads(live_reports[0].read_text(encoding="utf-8"))
+          expected_live = {
+              "runtime_build_id": "PHASE-05.5-GOOGLE-BOT-BACKFILL",
+              "protocol_version": 4,
+              "region": "eu",
+              "provider_region": "fra",
+              "query_safe_probe": True,
+              "bot_backfill_wait_seconds": 30,
+          }
+          for key, expected in expected_live.items():
+              if live.get(key) != expected:
+                  raise SystemExit(f"Rivet live mismatch {key}: {live.get(key)!r}")
+
+          deployments = list((root / "supabase").rglob("last_deployment.json"))
+          if len(deployments) != 1:
+              raise SystemExit("Supabase deployment report is missing")
+          deployment = json.loads(deployments[0].read_text(encoding="utf-8"))
+          google = deployment.get("supabase", {}).get("google_oauth", {})
+          google_status = str(google.get("status", ""))
+          google_enabled = bool(google.get("enabled", False))
+
+          sha_files = list((root / "rivet").rglob("SHA256SUMS.txt"))
+          if len(sha_files) != 1:
+              raise SystemExit("APK SHA-256 manifest is missing")
+
+          report = {
+              "ok": True,
+              "target_sha": os.environ["TARGET_SHA"],
+              "rivet_run_id": int(os.environ["RIVET_RUN_ID"]),
+              "supabase_run_id": int(os.environ["SUPABASE_RUN_ID"]),
+              "runtime": live,
+              "google_oauth_status": google_status,
+              "google_oauth_enabled": google_enabled,
+              "apk_name": apk.name,
+              "apk_size_bytes": apk.stat().st_size,
+          }
+          (root / "combined-report.json").write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report, ensure_ascii=False))
+          PY
+          unzip -t "$(find build/live-release/rivet -type f -name '*.apk' -print -quit)" >/dev/null
+          (cd "$(dirname "$(find build/live-release/rivet -type f -name 'SHA256SUMS.txt' -print -quit)")" && sha256sum --check SHA256SUMS.txt)
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: colony-online-region-google-live
+          retention-days: 2
+          if-no-files-found: warn
+          path: build/live-release/
