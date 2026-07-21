@@ -105,8 +105,9 @@ func _validate_mobile_input_and_orientation(failures: PackedStringArray) -> void
 
 func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
 	var menu_scene := FileAccess.get_file_as_string("res://scenes/main_menu.tscn")
-	if not menu_scene.contains("MainMenuLayoutGuard") and not menu_scene.contains(
-		"main_menu_layout_guard.gd"
+	if (
+		not menu_scene.contains("MainMenuLayoutGuard")
+		and not menu_scene.contains("main_menu_layout_guard.gd")
 	):
 		failures.append("Main menu must retain the safe-area layout guard")
 	var hud_scene := FileAccess.get_file_as_string("res://scenes/ui/hud.tscn")
