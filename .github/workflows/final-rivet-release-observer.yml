@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 70
     env:
       GH_TOKEN: ${{ github.token }}
-      TARGET_SHA: b7753cf363e79a1e53e5ba1056cb6099c1dbcaa1
+      TARGET_SHA: 92a6ba55658208d27a2dc86a9a11d6588f47d5e7
       OBSERVER_BRANCH: rivet-final-release-observer-v2
     steps:
       - uses: actions/checkout@v6
