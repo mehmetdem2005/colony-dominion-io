@@ -1,6 +1,8 @@
 class_name StreamedWorldProp
 extends StaticBody2D
 
+const CONTENT_CATALOG_SCRIPT := preload("res://gameplay/world/world_content_catalog.gd")
+
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
@@ -11,6 +13,7 @@ var stream_resident: bool = false
 var _solid_when_resident: bool = false
 var _proximity_suppressed: bool = false
 var _collision_radius: float = 1.0
+var _content_group: StringName = &""
 
 
 func _ready() -> void:
@@ -30,11 +33,17 @@ func activate(
 	modulate_value: Color,
 	key: StringName
 ) -> void:
+	_leave_content_group()
 	pool_key = key
 	active = true
-	_solid_when_resident = solid
+	# `solid` reserves deterministic chunk-placement space. Runtime collision is
+	# a separate catalog policy so decoration-only props never block units.
+	_solid_when_resident = CONTENT_CATALOG_SCRIPT.is_collision_enabled(key, solid)
 	_proximity_suppressed = false
 	_collision_radius = maxf(radius, 1.0)
+	_content_group = _resolve_content_group(key)
+	if not _content_group.is_empty() and is_inside_tree():
+		add_to_group(_content_group)
 	global_position = world_position
 	rotation = rotation_value
 	z_index = (
@@ -90,7 +99,21 @@ func _refresh_residency_state() -> void:
 		collision_shape.disabled = not collision_enabled
 
 
+func _resolve_content_group(key: StringName) -> StringName:
+	for config in CONTENT_CATALOG_SCRIPT.PROP_VARIANTS:
+		if StringName(config.get("key", &"")) == key:
+			return StringName(config.get("group", &""))
+	return &""
+
+
+func _leave_content_group() -> void:
+	if not _content_group.is_empty() and is_inside_tree() and is_in_group(_content_group):
+		remove_from_group(_content_group)
+	_content_group = &""
+
+
 func deactivate() -> void:
+	_leave_content_group()
 	active = false
 	_solid_when_resident = false
 	_proximity_suppressed = false

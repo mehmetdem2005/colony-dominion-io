@@ -1,6 +1,8 @@
 class_name WorldContentCatalog
 extends RefCounted
 
+const GROUP_WILD_WEEDS: StringName = &"yabani_otlar"
+
 const PROP_VARIANTS: Array[Dictionary] = [
 	{
 		"key": &"tall_grass",
@@ -90,7 +92,119 @@ const PROP_VARIANTS: Array[Dictionary] = [
 		"solid": false,
 		"ground": true,
 	},
+	{
+		"key": &"wild_weed_grass_sparse",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_grass_sparse.tres",
+		"size": 190.0,
+		"radius": 78.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_grass_dense",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_grass_dense.tres",
+		"size": 200.0,
+		"radius": 88.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_thistle",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_thistle.tres",
+		"size": 155.0,
+		"radius": 68.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_broadleaf_small",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_broadleaf_small.tres",
+		"size": 135.0,
+		"radius": 60.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_broadleaf_large",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_broadleaf_large.tres",
+		"size": 165.0,
+		"radius": 72.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_shrub",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_shrub.tres",
+		"size": 170.0,
+		"radius": 76.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_lavender",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_lavender.tres",
+		"size": 155.0,
+		"radius": 64.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_yellow_flower",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_yellow_flower.tres",
+		"size": 150.0,
+		"radius": 64.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_white_daisy",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_white_daisy.tres",
+		"size": 150.0,
+		"radius": 64.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_mixed_flowers",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_mixed_flowers.tres",
+		"size": 165.0,
+		"radius": 72.0,
+		"solid": true,
+		"collision": false,
+		"ground": false,
+		"decor_only": true,
+	},
 ]
+
+const WILD_WEED_PROP_INDICES: Array[int] = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 const RESOURCE_VARIANTS: Array[Dictionary] = [
 	{
@@ -132,10 +246,16 @@ const RESOURCE_VARIANTS: Array[Dictionary] = [
 ]
 
 const BIOME_PROP_INDICES: Dictionary = {
-	&"meadow": [0, 0, 1, 1, 2, 2, 3, 6, 7, 8, 10],
-	&"forest": [0, 1, 2, 3, 3, 4, 5, 7, 8, 9, 9, 10],
-	&"rocky": [1, 2, 4, 4, 5, 5, 6, 6, 9, 10],
-	&"dry": [1, 2, 4, 5, 6, 6, 8, 10],
+	&"meadow": [
+		0, 0, 1, 1, 2, 2, 3, 6, 7, 8, 10,
+		11, 11, 12, 12, 13, 14, 15, 16, 17, 18, 19, 20, 20,
+	],
+	&"forest": [
+		0, 1, 2, 3, 3, 4, 5, 7, 8, 9, 9, 10,
+		11, 12, 14, 15, 16, 17, 19, 20,
+	],
+	&"rocky": [1, 2, 4, 4, 5, 5, 6, 6, 9, 10, 11, 13, 14, 17],
+	&"dry": [1, 2, 4, 5, 6, 6, 8, 10, 11, 13, 14, 18],
 }
 
 const BIOME_RESOURCE_INDICES: Dictionary = {
@@ -144,3 +264,12 @@ const BIOME_RESOURCE_INDICES: Dictionary = {
 	&"rocky": [0, 2, 2, 5, 5, 5],
 	&"dry": [0, 0, 2, 5, 5],
 }
+
+
+static func is_collision_enabled(key: StringName, placement_reserved: bool) -> bool:
+	if not placement_reserved:
+		return false
+	for config in PROP_VARIANTS:
+		if StringName(config.get("key", &"")) == key:
+			return bool(config.get("collision", true))
+	return true
