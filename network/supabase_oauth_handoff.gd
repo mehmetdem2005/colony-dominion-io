@@ -2,7 +2,7 @@ class_name SupabaseOAuthHandoff
 extends Node
 
 const HANDOFF_PATH: String = "/functions/v1/oauth-google-handoff"
-const POLL_TIMEOUT_SECONDS: float = 180.0
+const POLL_TIMEOUT_SECONDS: float = 300.0
 const DEFAULT_POLL_INTERVAL_SECONDS: float = 1.0
 const PKCE_VERIFIER_BYTE_COUNT: int = 32
 
@@ -13,6 +13,14 @@ var _cancelled: bool = false
 var _active_request_id: String = ""
 var _active_secret: String = ""
 var _active_code_verifier: String = ""
+var _wake_poll: bool = false
+
+
+func _notification(what: int) -> void:
+	# When the player returns to the app from the sign-in browser, poll at once
+	# instead of waiting for the next interval.
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_wake_poll = true
 
 
 func _ready() -> void:
@@ -118,7 +126,7 @@ func _begin_remote_handoff(code_challenge: String) -> Dictionary:
 func _poll_pkce_result(auth_client: SupabaseAuthClient, poll_interval: float) -> Dictionary:
 	var deadline_msec := Time.get_ticks_msec() + roundi(POLL_TIMEOUT_SECONDS * 1000.0)
 	while not _cancelled and Time.get_ticks_msec() < deadline_msec:
-		await get_tree().create_timer(poll_interval, true, false, true).timeout
+		await _wait_before_poll(poll_interval)
 		if _cancelled:
 			break
 		var poll_response: Dictionary = await _http.request_json(
@@ -138,6 +146,14 @@ func _poll_pkce_result(auth_client: SupabaseAuthClient, poll_interval: float) ->
 		"ok": false,
 		"error": "Google girişi iptal edildi" if cancelled else "Google giriş süresi doldu",
 	}
+
+
+func _wait_before_poll(seconds: float) -> void:
+	_wake_poll = false
+	var elapsed := 0.0
+	while elapsed < seconds and not _wake_poll and not _cancelled:
+		await get_tree().create_timer(0.2, true, false, true).timeout
+		elapsed += 0.2
 
 
 func _consume_poll_response(

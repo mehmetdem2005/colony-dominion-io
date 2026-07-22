@@ -279,8 +279,8 @@ func _on_modal_blocker_gui_input(_event: InputEvent) -> void:
 func _build_audio_settings() -> void:
 	audio_settings_button = Button.new()
 	audio_settings_button.name = "AudioSettingsButton"
-	audio_settings_button.position = Vector2(400.0, 14.0)
-	audio_settings_button.size = Vector2(76.0, 44.0)
+	audio_settings_button.position = Vector2(398.0, 14.0)
+	audio_settings_button.size = Vector2(90.0, 44.0)
 	audio_settings_button.text = "SES"
 	audio_settings_button.add_theme_font_size_override("font_size", 16)
 	audio_settings_button.add_theme_stylebox_override(
@@ -676,8 +676,8 @@ func _on_audio_toggle_changed(enabled: bool, setting_id: StringName) -> void:
 func _build_full_settings() -> void:
 	settings_button = Button.new()
 	settings_button.name = "SettingsButton"
-	settings_button.position = Vector2(484.0, 14.0)
-	settings_button.size = Vector2(92.0, 44.0)
+	settings_button.position = Vector2(500.0, 14.0)
+	settings_button.size = Vector2(96.0, 44.0)
 	settings_button.text = "AYAR"
 	settings_button.add_theme_font_size_override("font_size", 16)
 	settings_button.add_theme_stylebox_override(
