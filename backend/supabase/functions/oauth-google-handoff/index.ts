@@ -1,3 +1,6 @@
+// Redeploy marker: keep the live Edge Function in sync with this PKCE source.
+// The previously deployed build predates the PKCE handoff, so /begin returned
+// an authorize URL without code_challenge/flow_type and the client rejected it.
 const JSON_HEADERS = new Headers({
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
