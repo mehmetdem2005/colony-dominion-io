@@ -27,11 +27,16 @@ func _run() -> void:
 		"res://network/supabase_oauth_handoff.gd",
 		[
 			"OS.shell_open",
+			'OS.get_name() == "Android"',
+			"yalnızca oyun içi hesap seçici",
 			"x-colony-oauth-secret",
-			"sign_in_refresh_token",
+			"sign_in_pkce_code",
 			"POLL_TIMEOUT_SECONDS",
 		],
 		failures
+	)
+	_assert_source_forbidden(
+		"res://network/supabase_oauth_handoff.gd", ["openInAppBrowser", "Custom Tab"], failures
 	)
 	_assert_source_contains(
 		"res://ui/auth_panel.gd",
@@ -66,7 +71,7 @@ func _run() -> void:
 			"Deno.serve",
 			"functionBaseUrl()",
 			"/functions/v1/oauth-google-handoff",
-			"cache-control",
+			"Cache-Control",
 		],
 		failures
 	)
@@ -100,3 +105,12 @@ func _assert_source_contains(
 	for marker in markers:
 		if not source.contains(marker):
 			failures.append("%s is missing marker: %s" % [path, marker])
+
+
+func _assert_source_forbidden(
+	path: String, markers: Array[String], failures: PackedStringArray
+) -> void:
+	var source := FileAccess.get_file_as_string(path)
+	for marker in markers:
+		if source.contains(marker):
+			failures.append("%s contains forbidden marker: %s" % [path, marker])

@@ -10,6 +10,7 @@ var _http: HttpJsonClient
 func _ready() -> void:
 	_http = HttpJsonClient.new()
 	_http.name = "DataHTTP"
+	_http.timeout_seconds = 15.0
 	add_child(_http)
 
 

@@ -4,7 +4,8 @@
   "protocol_version": 4,
   "supabase_url": "https://mlwsxeqorlfgmxqxnfoo.supabase.co",
   "supabase_publishable_key": "sb_publishable_UndFiGg2qmupQAv9p9CpsA_NOAWrB1-",
-  "rivet_control_base_url": "https://api.rivet.dev/gateway/controlApi/request?rvt-namespace=colonyio-3bo7-staging-4x4s&rvt-method=getOrCreate&rvt-runner=default&rvt-key=public-control-v1&rvt-crash-policy=sleep&rvt-token=pk_ren8Vs3ZDyAnNFEFQE8h2RtNepr8b07B5bk9fcE8UTUfAPvCyTf5DyayjuuphXmQ",
+  "google_web_client_id": "1042972714033-b208vfbhkubpirbl62e2t0lnk9caqnm5.apps.googleusercontent.com",
+  "rivet_control_base_url": "https://api.rivet.dev/gateway/controlApi/request?rvt-namespace=colonyio-3bo7-staging-4x4s&rvt-method=getOrCreate&rvt-runner=default&rvt-key=public-control-eu-fra-v2&rvt-crash-policy=sleep&rvt-token=pk_ren8Vs3ZDyAnNFEFQE8h2RtNepr8b07B5bk9fcE8UTUfAPvCyTf5DyayjuuphXmQ",
   "persist_refresh_token": true,
   "region_probe_interval_seconds": 20.0,
   "region_probe_timeout_seconds": 4.0,
@@ -13,7 +14,7 @@
       "id": "eu",
       "display_name": "Avrupa — Frankfurt",
       "short_name": "EU-FRA",
-      "probe_url": "https://api.rivet.dev/gateway/controlApi/request/v1/health/ping?rvt-namespace=colonyio-3bo7-staging-4x4s&rvt-method=getOrCreate&rvt-runner=default&rvt-key=public-control-v1&rvt-crash-policy=sleep&rvt-token=pk_ren8Vs3ZDyAnNFEFQE8h2RtNepr8b07B5bk9fcE8UTUfAPvCyTf5DyayjuuphXmQ",
+      "probe_url": "https://api.rivet.dev/gateway/regionProbe/request/v1/ping?rvt-namespace=colonyio-3bo7-staging-4x4s&rvt-method=getOrCreate&rvt-runner=default&rvt-key=region-probe-eu-fra-v1&rvt-crash-policy=sleep&rvt-token=pk_ren8Vs3ZDyAnNFEFQE8h2RtNepr8b07B5bk9fcE8UTUfAPvCyTf5DyayjuuphXmQ",
       "enabled": true
     }
   ]

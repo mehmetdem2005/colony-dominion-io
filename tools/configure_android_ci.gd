@@ -9,6 +9,12 @@ func _initialize() -> void:
 	var debug_keystore: String = (
 		OS.get_environment("GODOT_ANDROID_KEYSTORE_DEBUG_PATH").strip_edges()
 	)
+	var debug_keystore_user: String = (
+		OS.get_environment("GODOT_ANDROID_KEYSTORE_DEBUG_USER").strip_edges()
+	)
+	var debug_keystore_password: String = (
+		OS.get_environment("GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD").strip_edges()
+	)
 	if android_sdk.is_empty() or not DirAccess.dir_exists_absolute(android_sdk):
 		push_error("ANDROID_SDK_ROOT is missing or invalid: %s" % android_sdk)
 		quit(2)
@@ -21,11 +27,14 @@ func _initialize() -> void:
 		push_error("Debug keystore is missing: %s" % debug_keystore)
 		quit(4)
 		return
+	if debug_keystore_user.is_empty() or debug_keystore_password.is_empty():
+		push_error("Android keystore credentials are missing")
+		quit(5)
+		return
 	settings.set_setting("export/android/android_sdk_path", android_sdk)
 	settings.set_setting("export/android/java_sdk_path", java_home)
 	settings.set_setting("export/android/debug_keystore", debug_keystore)
-	settings.set_setting("export/android/debug_keystore_user", "androiddebugkey")
-	settings.set_setting("export/android/debug_keystore_pass", "android")
-	settings.save()
+	settings.set_setting("export/android/debug_keystore_user", debug_keystore_user)
+	settings.set_setting("export/android/debug_keystore_pass", debug_keystore_password)
 	print("ANDROID_CI_EDITOR_SETTINGS_OK")
 	quit(0)

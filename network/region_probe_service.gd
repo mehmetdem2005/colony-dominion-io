@@ -87,7 +87,15 @@ func _probe_region(region: Dictionary, generation: int) -> void:
 		)
 		if sample_index < WARMUP_SAMPLE_COUNT:
 			continue
-		if bool(response.get("ok", false)):
+		var body_variant: Variant = response.get("body", {})
+		var verified_target: bool = false
+		if body_variant is Dictionary:
+			var body: Dictionary = body_variant
+			verified_target = (
+				String(body.get("scope", "")) == "region-probe"
+				and String(body.get("region", "")) == region_id
+			)
+		if bool(response.get("ok", false)) and verified_target:
 			samples.append(maxi(int(response.get("elapsed_ms", 0)), 1))
 		else:
 			failures += 1

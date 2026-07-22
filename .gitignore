@@ -1,9 +1,14 @@
 .godot/
+.gradle/
 build/
 backend/**/node_modules/
+backend/**/dist/
 backend/**/.env
 backend/**/*.tgz
 config/backend_config.local.json
 *.apk
 *.aab
 *.pck
+android/plugins/*.aar
+android/build/
+android/.build_version

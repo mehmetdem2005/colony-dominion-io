@@ -13,6 +13,7 @@ var _queue_ticket_id: String = ""
 func _ready() -> void:
 	_http = HttpJsonClient.new()
 	_http.name = "RivetControlHTTP"
+	_http.timeout_seconds = 20.0
 	add_child(_http)
 
 

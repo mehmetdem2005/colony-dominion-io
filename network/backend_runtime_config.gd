@@ -9,6 +9,7 @@ var build_id: String = "UNKNOWN"
 var protocol_version: int = 1
 var supabase_url: String = ""
 var supabase_publishable_key: String = ""
+var google_web_client_id: String = ""
 var rivet_control_base_url: String = ""
 var persist_refresh_token: bool = false
 var region_probe_interval_seconds: float = 12.0
@@ -49,6 +50,8 @@ func get_missing_client_settings() -> PackedStringArray:
 		missing.append("SUPABASE_URL")
 	if supabase_publishable_key.strip_edges().is_empty():
 		missing.append("SUPABASE_PUBLISHABLE_KEY")
+	if OS.get_name() == "Android" and google_web_client_id.strip_edges().is_empty():
+		missing.append("GOOGLE_WEB_CLIENT_ID")
 	if not _is_http_url(rivet_control_base_url):
 		missing.append("RIVET_CONTROL_BASE_URL")
 	return missing
@@ -67,6 +70,7 @@ func _apply(data: Dictionary) -> void:
 	protocol_version = maxi(int(data.get("protocol_version", protocol_version)), 1)
 	supabase_url = _normalize_base_url(String(data.get("supabase_url", "")))
 	supabase_publishable_key = String(data.get("supabase_publishable_key", "")).strip_edges()
+	google_web_client_id = String(data.get("google_web_client_id", "")).strip_edges()
 	rivet_control_base_url = _normalize_base_url(String(data.get("rivet_control_base_url", "")))
 	persist_refresh_token = bool(data.get("persist_refresh_token", false))
 	region_probe_interval_seconds = clampf(

@@ -1,10 +1,13 @@
 import "./server-full-online.js";
 import { ensurePublicControlGateway } from "./public-control-gateway.js";
+import { ensureRegionProbeGateways } from "./region-probe-gateway.js";
+import { loadRegions } from "./regions.js";
 import { runStartupCanary } from "./startup-canary.js";
 
 setTimeout(() => {
   (async () => {
     await ensurePublicControlGateway();
+    await ensureRegionProbeGateways(loadRegions());
     await runStartupCanary();
   })().catch((error: unknown) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);

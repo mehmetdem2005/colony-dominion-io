@@ -9,8 +9,11 @@ on:
     paths:
       - "autoload/**"
       - "network/**"
+      - "android_plugins/**"
+      - "android/plugins/**"
       - "tests/**"
       - "tools/configure_android_ci.gd"
+      - "tools/prepare_android_native_build.sh"
       - "config/backend_config.json"
       - "project.godot"
       - "export_presets.cfg"
@@ -47,6 +50,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
       - name: Install Godot and Android templates
         run: |
           set -euo pipefail
@@ -54,7 +61,7 @@ jobs:
           tools/install_godot_ci.sh
           "$GODOT_BIN" --version
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
-          test -f "$TEMPLATE_DIR/android_debug.apk"
+          test -f "$TEMPLATE_DIR/android_source.zip"
 
       - name: Configure Android SDK and debug signing
         run: |
@@ -77,6 +84,11 @@ jobs:
           "$GODOT_BIN" --headless --editor --path . \
             --script res://tools/configure_android_ci.gd
 
+      - name: Build native Android identity module
+        run: |
+          set -euo pipefail
+          tools/prepare_android_native_build.sh
+
       - name: Import and compile Godot project
         run: |
           set -euo pipefail
@@ -96,6 +108,7 @@ jobs:
             tests/online_transport_regression_test.gd
             tests/online_production_completion_test.gd
             tests/google_oauth_bot_backfill_test.gd
+            tests/native_google_region_matchmaking_regression_test.gd
           )
           for test_path in "${tests[@]}"; do
             "$GODOT_BIN" --headless --path . --script "res://$test_path"
