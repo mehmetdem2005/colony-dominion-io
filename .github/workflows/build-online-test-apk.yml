@@ -31,7 +31,7 @@ jobs:
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
-      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/colony-debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/colony-debug.keystore
       GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
       GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
 
