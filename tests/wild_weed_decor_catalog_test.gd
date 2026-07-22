@@ -4,6 +4,8 @@ const CATALOG := preload("res://gameplay/world/world_content_catalog.gd")
 const PROP_SCENE := preload("res://scenes/world_stream_prop.tscn")
 const EXPECTED_WEED_COUNT: int = 10
 const ATLAS_PATH: String = "res://assets/props/wild_weeds/wild_weeds_atlas.png"
+const ATLAS_SIZE := Vector2i(800, 320)
+const REGION_SIZE := Vector2i(160, 160)
 
 
 func _initialize() -> void:
@@ -31,15 +33,20 @@ func _run() -> void:
 
 
 func _validate_atlas(failures: PackedStringArray) -> void:
-	if not FileAccess.file_exists(ATLAS_PATH):
+	if not ResourceLoader.exists(ATLAS_PATH, "Texture2D"):
 		failures.append("Wild weed atlas is missing")
 		return
-	var image := Image.load_from_file(ATLAS_PATH)
-	if image.is_empty():
-		failures.append("Wild weed atlas cannot be decoded")
+	var atlas_texture := load(ATLAS_PATH) as Texture2D
+	if atlas_texture == null:
+		failures.append("Wild weed atlas cannot be loaded")
 		return
-	if image.get_width() != 1280 or image.get_height() != 512:
-		failures.append("Wild weed atlas must be 1280x512")
+	if Vector2i(atlas_texture.get_width(), atlas_texture.get_height()) != ATLAS_SIZE:
+		failures.append("Wild weed atlas must be %dx%d" % [ATLAS_SIZE.x, ATLAS_SIZE.y])
+		return
+	var image := atlas_texture.get_image()
+	if image == null or image.is_empty():
+		failures.append("Wild weed atlas image cannot be decoded")
+		return
 	for corner in [
 		Vector2i(0, 0),
 		Vector2i(image.get_width() - 1, 0),
@@ -96,8 +103,10 @@ func _validate_region_resource(path: String, failures: PackedStringArray) -> voi
 	if texture == null:
 		failures.append("Wild weed region cannot be loaded: %s" % path)
 		return
-	if texture.get_width() != 256 or texture.get_height() != 256:
-		failures.append("Wild weed atlas region must be 256x256: %s" % path)
+	if Vector2i(texture.get_width(), texture.get_height()) != REGION_SIZE:
+		failures.append(
+			"Wild weed atlas region must be %dx%d: %s" % [REGION_SIZE.x, REGION_SIZE.y, path]
+		)
 
 
 func _validate_biome_coverage(failures: PackedStringArray) -> void:
