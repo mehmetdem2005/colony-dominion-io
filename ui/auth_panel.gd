@@ -94,7 +94,7 @@ func _build() -> void:
 	box.add_child(_close_button)
 
 	var note := Label.new()
-	note.text = "Giriş sistem tarayıcısında tamamlanır; Google şifren oyuna veya Supabase'e verilmez."
+	note.text = "Giriş güvenli bir Google penceresinde tamamlanır; Google şifren oyuna veya Supabase'e verilmez."
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(540.0, 38.0)

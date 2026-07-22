@@ -1,0 +1,23 @@
+plugins {
+    id 'com.android.library' version '8.7.2'
+}
+
+android {
+    namespace 'io.colonydominion.customtabs'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 24
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Provided at runtime by the Godot Android app; compile against it only.
+    compileOnly 'org.godotengine:godot:4.6.3.stable'
+    implementation 'androidx.browser:browser:1.8.0'
+}
