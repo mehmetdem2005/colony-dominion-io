@@ -57,12 +57,24 @@ func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
 
 	var authorize_url := String(begin_result.get("authorize_url", ""))
 	var poll_interval := float(begin_result.get("poll_interval", DEFAULT_POLL_INTERVAL_SECONDS))
-	var open_error: Error = OS.shell_open(authorize_url)
-	if open_error != OK:
+	if not _open_authorize_url(authorize_url):
 		await _cancel_remote()
 		_clear_active()
 		return {"ok": false, "error": "Google giriş sayfası açılamadı"}
 	return await _poll_pkce_result(auth_client, poll_interval)
+
+
+func _open_authorize_url(url: String) -> bool:
+	# Prefer an in-app Chrome Custom Tab (Android): the sign-in page overlays the
+	# game in the same task and returns automatically, instead of switching to the
+	# external browser app. Falls back to OS.shell_open on desktop or when the
+	# native plugin is unavailable, so the flow always has a way to open.
+	if Engine.has_singleton("ColonyCustomTabs"):
+		var custom_tabs: Object = Engine.get_singleton("ColonyCustomTabs")
+		if is_instance_valid(custom_tabs) and custom_tabs.has_method("openCustomTab"):
+			if bool(custom_tabs.call("openCustomTab", url)):
+				return true
+	return OS.shell_open(url) == OK
 
 
 func cancel() -> void:
