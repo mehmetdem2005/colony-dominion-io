@@ -175,27 +175,26 @@ jobs:
           if status_code not in {400, 403, 404, 410}:
               raise SystemExit(f"Unexpected invalid-callback status: {status_code}")
           content_type = headers.get("content-type", "").lower().replace(" ", "")
-          if content_type != "text/html;charset=utf-8":
-              raise SystemExit(f"OAuth callback is not HTML UTF-8: {content_type!r}")
+          if content_type != "text/plain;charset=utf-8":
+              raise SystemExit(f"OAuth callback is not plain-text UTF-8: {content_type!r}")
           if headers.get("content-disposition", "").lower() != "inline":
               raise SystemExit("OAuth callback is not forced to render inline")
           if headers.get("x-content-type-options", "").lower() != "nosniff":
               raise SystemExit("OAuth callback is missing nosniff")
           if "no-store" not in headers.get("cache-control", "").lower():
               raise SystemExit("OAuth callback may be cached")
-          csp = headers.get("content-security-policy", "")
-          if "frame-ancestors 'none'" not in csp or "script-src 'nonce-" not in csp:
-              raise SystemExit("OAuth callback CSP is incomplete")
-          if "connect-src 'none'" not in csp:
-              raise SystemExit("OAuth callback must not make browser-side token requests")
+          csp = headers.get("content-security-policy", "").lower()
+          if "default-src 'none'" not in csp:
+              raise SystemExit("OAuth callback CSP is not locked down")
+          if "sandbox" not in csp:
+              raise SystemExit("OAuth callback is not sandboxed by the platform")
 
           source = Path(sys.argv[2]).read_bytes().decode("utf-8", errors="strict")
-          if not source.lstrip().lower().startswith("<!doctype html>"):
-              raise SystemExit("OAuth callback body is not an HTML document")
+          if not source.lstrip().startswith("Colony Dominion.io"):
+              raise SystemExit("OAuth callback body is not the plain-text notice")
           for marker in (
               "Google girişi tamamlanamadı",
               "Bu sayfa hiçbir oturum anahtarı içermez.",
-              "<script nonce=",
           ):
               if marker not in source:
                   raise SystemExit(f"OAuth callback body is missing marker: {marker}")

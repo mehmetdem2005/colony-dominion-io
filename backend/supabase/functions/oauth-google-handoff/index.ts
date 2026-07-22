@@ -44,32 +44,7 @@ function randomHex(byteCount: number): string {
   ).join("");
 }
 
-function randomNonce(): string {
-  return randomHex(16);
-}
-
-function html(htmlSource: string, nonce: string, status = 200): Response {
-  const headers = new Headers({
-    "Content-Type": "text/html; charset=utf-8",
-    "Content-Disposition": "inline",
-    "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
-    Pragma: "no-cache",
-    Expires: "0",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
-    "Cross-Origin-Opener-Policy": "same-origin",
-    "Cross-Origin-Resource-Policy": "same-origin",
-    "Permissions-Policy":
-      "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-    "Content-Security-Policy":
-      `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
-  });
-  return new Response(UTF8_ENCODER.encode(htmlSource), { status, headers });
-}
-
 function callbackPage(ok: boolean, reason: string, status = 200): Response {
-  const nonce = randomNonce();
   const safeReason = reason === "cancelled"
     ? "Google girişi iptal edildi."
     : reason === "expired"
@@ -80,24 +55,31 @@ function callbackPage(ok: boolean, reason: string, status = 200): Response {
     ? "Kimlik doğrulama tamamlandı. Colony Dominion.io uygulamasına geri dön."
     : "Google girişi tamamlanamadı. Uygulamadan yeniden dene.";
   const title = ok ? "Google girişi doğrulandı" : "Google girişi tamamlanamadı";
-  const mark = ok ? "✓" : "!";
-  const detailClass = ok ? "detail" : "detail error";
-  const autoClose = ok
-    ? `<script nonce="${nonce}">setTimeout(() => window.close(), 900);</script>`
-    : `<script nonce="${nonce}">document.documentElement.dataset.oauthResult = "complete";</script>`;
-  const source = `<!doctype html>
-<html lang="tr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="referrer" content="no-referrer">
-<title>Colony Dominion.io — Google Girişi</title>
-<style>
-:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,sans-serif;background:#07110d;color:#eef7f1}*{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 0,#143d2b 0,#07110d 52%,#030805 100%)}main{width:min(520px,100%);padding:34px;border:1px solid #315d47;border-radius:24px;background:rgba(8,22,15,.96);box-shadow:0 28px 80px rgba(0,0,0,.45);text-align:center}.mark{width:58px;height:58px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;background:#c8f56a;color:#0a160e;font-weight:900;font-size:30px}.mark.error{background:#ffd3d3;color:#3a1717}h1{font-size:27px;margin:0 0 12px}p{line-height:1.55;color:#b8cabe;margin:0}.detail{margin-top:18px;padding:14px;border-radius:14px;background:#0d2a1b;color:#d9ebe0;font-size:14px}.detail.error{background:#3a1717;color:#ffd8d8}</style>
-</head>
-<body><main><div class="mark${ok ? "" : " error"}">${mark}</div><h1>${title}</h1><p>Bu sayfa hiçbir oturum anahtarı içermez.</p><div class="${detailClass}">${safeReason}</div></main>${autoClose}</body>
-</html>`;
-  return html(source, nonce, status);
+  // Supabase's Edge platform force-serves function responses as text/plain with a
+  // sandbox CSP (anti-abuse), so an HTML page would appear as raw markup in the
+  // browser. Emit a clean plain-text notice instead. Sign-in still completes: the
+  // app polls for the single-use PKCE code regardless of what this page shows.
+  const body = [
+    "Colony Dominion.io — Google Girişi",
+    "",
+    `${ok ? "[OK] " : "[!] "}${title}`,
+    safeReason,
+    "",
+    "Bu sayfa hiçbir oturum anahtarı içermez. Uygulamaya geri dönebilirsin.",
+    "",
+  ].join("\n");
+  const headers = new Headers({
+    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Disposition": "inline",
+    "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+  });
+  return new Response(UTF8_ENCODER.encode(body), { status, headers });
 }
 
 function requiredEnvironment(name: string): string {
