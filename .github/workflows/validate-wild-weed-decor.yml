@@ -1,0 +1,56 @@
+name: Validate Wild Weed Decor
+
+on:
+  pull_request:
+    paths:
+      - "assets/props/wild_weeds/**"
+      - "gameplay/world/world_content_catalog.gd"
+      - "gameplay/world/streamed_world_prop.gd"
+      - "tests/wild_weed_decor_catalog_test.gd"
+      - ".github/workflows/validate-wild-weed-decor.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: wild-weed-decor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot
+        run: |
+          set -euxo pipefail
+          tools/install_godot_ci.sh
+          "$GODOT_BIN" --version
+
+      - name: Import project resources
+        run: |
+          set -o pipefail
+          timeout 600 "$GODOT_BIN" --headless --path . --import 2>&1 | tee wild-weed-import.log
+
+      - name: Validate atlas, catalog, spacing and collision policy
+        run: |
+          set -o pipefail
+          timeout 120 "$GODOT_BIN" --headless --path . \
+            --script tests/wild_weed_decor_catalog_test.gd \
+            2>&1 | tee wild-weed-test.log
+
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wild-weed-decor-validation
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            wild-weed-import.log
+            wild-weed-test.log
