@@ -1,6 +1,8 @@
 class_name WorldContentCatalog
 extends RefCounted
 
+const GROUP_WILD_WEEDS: StringName = &"yabani_otlar"
+
 const PROP_VARIANTS: Array[Dictionary] = [
 	{
 		"key": &"tall_grass",
@@ -90,7 +92,109 @@ const PROP_VARIANTS: Array[Dictionary] = [
 		"solid": false,
 		"ground": true,
 	},
+	{
+		"key": &"wild_weed_grass_sparse",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_grass_sparse.png",
+		"size": 190.0,
+		"radius": 44.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_grass_dense",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_grass_dense.png",
+		"size": 200.0,
+		"radius": 52.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_thistle",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_thistle.png",
+		"size": 155.0,
+		"radius": 44.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_broadleaf_small",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_broadleaf_small.png",
+		"size": 135.0,
+		"radius": 38.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_broadleaf_large",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_broadleaf_large.png",
+		"size": 165.0,
+		"radius": 48.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_shrub",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_shrub.png",
+		"size": 170.0,
+		"radius": 50.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_lavender",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_lavender.png",
+		"size": 155.0,
+		"radius": 38.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_yellow_flower",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_yellow_flower.png",
+		"size": 150.0,
+		"radius": 38.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_white_daisy",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_white_daisy.png",
+		"size": 150.0,
+		"radius": 38.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
+	{
+		"key": &"wild_weed_mixed_flowers",
+		"group": GROUP_WILD_WEEDS,
+		"path": "res://assets/props/wild_weeds/wild_weed_mixed_flowers.png",
+		"size": 165.0,
+		"radius": 44.0,
+		"solid": false,
+		"ground": false,
+		"decor_only": true,
+	},
 ]
+
+const WILD_WEED_PROP_INDICES: Array[int] = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 const RESOURCE_VARIANTS: Array[Dictionary] = [
 	{
@@ -132,10 +236,16 @@ const RESOURCE_VARIANTS: Array[Dictionary] = [
 ]
 
 const BIOME_PROP_INDICES: Dictionary = {
-	&"meadow": [0, 0, 1, 1, 2, 2, 3, 6, 7, 8, 10],
-	&"forest": [0, 1, 2, 3, 3, 4, 5, 7, 8, 9, 9, 10],
-	&"rocky": [1, 2, 4, 4, 5, 5, 6, 6, 9, 10],
-	&"dry": [1, 2, 4, 5, 6, 6, 8, 10],
+	&"meadow": [
+		0, 0, 1, 1, 2, 2, 3, 6, 7, 8, 10,
+		11, 11, 12, 12, 13, 14, 15, 16, 17, 18, 19, 20, 20,
+	],
+	&"forest": [
+		0, 1, 2, 3, 3, 4, 5, 7, 8, 9, 9, 10,
+		11, 12, 14, 15, 16, 17, 19, 20,
+	],
+	&"rocky": [1, 2, 4, 4, 5, 5, 6, 6, 9, 10, 11, 13, 14, 17],
+	&"dry": [1, 2, 4, 5, 6, 6, 8, 10, 11, 13, 14, 18],
 }
 
 const BIOME_RESOURCE_INDICES: Dictionary = {
