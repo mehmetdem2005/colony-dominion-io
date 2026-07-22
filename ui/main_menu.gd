@@ -55,145 +55,150 @@ func _build_menu() -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
 
-	var nest := TextureRect.new()
-	nest.texture = load("res://assets/structures/nest_blue.png")
-	nest.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	nest.position = Vector2(56.0, -226.0)
-	nest.size = Vector2(450.0, 450.0)
-	nest.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	nest.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	nest.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(nest)
-
+	# Hero artwork fills the space to the right of the navigation sidebar.
 	var commander := TextureRect.new()
 	commander.texture = load("res://assets/units/commander.png")
-	commander.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	commander.position = Vector2(-416.0, -180.0)
-	commander.size = Vector2(320.0, 370.0)
+	commander.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	commander.offset_left = -760.0
+	commander.offset_top = 40.0
+	commander.offset_bottom = -40.0
+	commander.offset_right = -60.0
 	commander.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	commander.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	commander.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(commander)
 
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-370.0, -350.0)
-	panel.size = Vector2(740.0, 700.0)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
-	add_child(panel)
+	# Left navigation sidebar (full height).
+	var sidebar := PanelContainer.new()
+	sidebar.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	sidebar.offset_right = 540.0
+	var sidebar_style := ColonyUiKit.rounded_style(
+		Color(ColonyUiKit.SURFACE, 0.97),
+		Color(ColonyUiKit.ACCENT, 0.5),
+		0,
+		0,
+		Vector4(38.0, 30.0, 34.0, 26.0)
+	)
+	sidebar_style.border_width_right = 2
+	sidebar.add_theme_stylebox_override("panel", sidebar_style)
+	add_child(sidebar)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sidebar.add_child(scroll)
 
 	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 10)
-	panel.add_child(box)
+	scroll.add_child(box)
 
 	var title := Label.new()
 	title.text = "COLONY DOMINION.IO"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 43)
-	title.add_theme_color_override("font_color", Color("ffd447"))
+	ColonyUiKit.apply_label(title, 33, 800, ColonyUiKit.ACCENT)
 	box.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = "Kolonini büyüt • Bölgeni seç • Rakip yuvaları yık"
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 19)
-	subtitle.add_theme_color_override("font_color", Color(0.92, 0.92, 0.86, 1.0))
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ColonyUiKit.apply_label(subtitle, 15, 400, ColonyUiKit.TEXT_SECONDARY)
 	box.add_child(subtitle)
+
+	box.add_child(_menu_spacer(4.0))
 
 	_name_input = LineEdit.new()
 	_name_input.text = GameSession.player_name
 	_name_input.placeholder_text = "Oyuncu adı"
 	_name_input.max_length = 16
-	_name_input.custom_minimum_size = Vector2(440.0, 50.0)
-	_name_input.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_name_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_input.add_theme_font_size_override("font_size", 20)
+	_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ColonyUiKit.apply_input(_name_input)
 	box.add_child(_name_input)
 
-	_offline_button = _make_primary_button("ÇEVRİM DIŞI OYNA", Color("d69a20"))
-	_offline_button.pressed.connect(_start_offline)
-	box.add_child(_offline_button)
-
-	_online_button = _make_primary_button("ÇOK OYUNCULU OYNA", Color("4ba86a"))
+	_online_button = _nav_button("ÇOK OYUNCULU OYNA", &"primary", 60.0)
 	_online_button.pressed.connect(_request_online_play)
 	box.add_child(_online_button)
 
-	_resume_button = _make_primary_button("DEVAM EDEN MAÇA DÖN", Color("3c83b8"))
-	_resume_button.custom_minimum_size.y = 52.0
+	_offline_button = _nav_button("ÇEVRİM DIŞI OYNA", &"default", 54.0)
+	_offline_button.pressed.connect(_start_offline)
+	box.add_child(_offline_button)
+
+	_resume_button = _nav_button("DEVAM EDEN MAÇA DÖN", &"default", 50.0)
 	_resume_button.pressed.connect(_resume_online_match)
 	_resume_button.visible = false
 	box.add_child(_resume_button)
 
-	var region_row := HBoxContainer.new()
-	region_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	region_row.add_theme_constant_override("separation", 10)
-	box.add_child(region_row)
-	_region_button = Button.new()
-	_region_button.text = "BÖLGE SEÇ"
-	_region_button.custom_minimum_size = Vector2(210.0, 50.0)
-	_region_button.add_theme_font_size_override("font_size", 17)
+	box.add_child(_menu_divider())
+
+	_region_button = _nav_button("BÖLGE SEÇ", &"ghost", 46.0)
 	_region_button.pressed.connect(_open_region_selector)
-	region_row.add_child(_region_button)
+	box.add_child(_region_button)
 	_region_status = Label.new()
-	_region_status.custom_minimum_size = Vector2(360.0, 50.0)
-	_region_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_region_status.add_theme_font_size_override("font_size", 16)
-	region_row.add_child(_region_status)
+	ColonyUiKit.apply_label(_region_status, 14, 500, ColonyUiKit.TEXT_SECONDARY)
+	box.add_child(_region_status)
 
-	var account_row := HBoxContainer.new()
-	account_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	account_row.add_theme_constant_override("separation", 10)
-	box.add_child(account_row)
-	_account_button = Button.new()
-	_account_button.custom_minimum_size = Vector2(210.0, 48.0)
-	_account_button.add_theme_font_size_override("font_size", 16)
+	_account_button = _nav_button("GİRİŞ / KAYIT", &"ghost", 46.0)
 	_account_button.pressed.connect(_on_account_pressed)
-	account_row.add_child(_account_button)
+	box.add_child(_account_button)
 	_account_status = Label.new()
-	_account_status.custom_minimum_size = Vector2(250.0, 48.0)
-	_account_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_account_status.add_theme_font_size_override("font_size", 15)
-	account_row.add_child(_account_status)
-	_legal_button = Button.new()
-	_legal_button.text = "YASAL"
-	_legal_button.custom_minimum_size = Vector2(108.0, 48.0)
-	_legal_button.pressed.connect(_open_legal_gate)
-	account_row.add_child(_legal_button)
-	_profile_button = Button.new()
-	_profile_button.text = "PROFİL"
-	_profile_button.custom_minimum_size = Vector2(108.0, 48.0)
-	_profile_button.pressed.connect(_open_profile_panel)
-	account_row.add_child(_profile_button)
+	ColonyUiKit.apply_label(_account_status, 14, 500, ColonyUiKit.TEXT_SECONDARY)
+	box.add_child(_account_status)
 
-	_settings_button = Button.new()
-	_settings_button.text = "⚙ AYARLAR"
-	_settings_button.custom_minimum_size = Vector2(440.0, 52.0)
-	_settings_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_settings_button.add_theme_font_size_override("font_size", 18)
-	_settings_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var secondary_row := HBoxContainer.new()
+	secondary_row.add_theme_constant_override("separation", 10)
+	box.add_child(secondary_row)
+	_profile_button = _nav_button("PROFİL", &"ghost", 44.0)
+	_profile_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_profile_button.pressed.connect(_open_profile_panel)
+	secondary_row.add_child(_profile_button)
+	_legal_button = _nav_button("YASAL", &"ghost", 44.0)
+	_legal_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_legal_button.pressed.connect(_open_legal_gate)
+	secondary_row.add_child(_legal_button)
+
+	_settings_button = _nav_button("⚙  AYARLAR", &"ghost", 46.0)
 	_settings_button.pressed.connect(_open_settings)
 	box.add_child(_settings_button)
 
+	box.add_child(_menu_spacer(10.0))
+
 	_status_label = Label.new()
-	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status_label.custom_minimum_size = Vector2(640.0, 55.0)
-	_status_label.add_theme_font_size_override("font_size", 15)
-	_status_label.add_theme_color_override("font_color", Color(0.86, 0.82, 0.66, 1.0))
+	ColonyUiKit.apply_label(_status_label, 14, 500, ColonyUiKit.TEXT_SECONDARY)
 	box.add_child(_status_label)
 
 	var version := Label.new()
 	version.text = (
-		"Godot 4.6.3 • Üretim online runtime • Protokol %d" % OnlineServices.config.protocol_version
+		"Godot 4.6.3 • Üretim online • Protokol %d" % OnlineServices.config.protocol_version
 	)
-	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	version.add_theme_font_size_override("font_size", 13)
-	version.add_theme_color_override("font_color", Color(0.65, 0.67, 0.60, 1.0))
+	ColonyUiKit.apply_label(version, 12, 400, ColonyUiKit.TEXT_MUTED)
 	box.add_child(version)
 
 	_build_modals()
+
+
+func _nav_button(text: String, variant: StringName, height: float) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ColonyUiKit.apply_button(button, variant, height)
+	return button
+
+
+func _menu_spacer(height: float, expand: bool = false) -> Control:
+	var spacer := Control.new()
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if expand:
+		spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	else:
+		spacer.custom_minimum_size.y = height
+	return spacer
+
+
+func _menu_divider() -> Control:
+	var line := ColorRect.new()
+	line.color = Color(ColonyUiKit.BORDER, 0.7)
+	line.custom_minimum_size.y = 2.0
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return line
 
 
 func _build_modals() -> void:
@@ -561,41 +566,3 @@ func _start_error(message: String) -> void:
 	_set_buttons_enabled(true)
 	_show_status(message, true)
 	push_error(message)
-
-
-func _make_panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.03, 0.02, 0.90)
-	style.border_color = Color(1.0, 0.76, 0.14, 0.92)
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(28)
-	style.content_margin_left = 36.0
-	style.content_margin_right = 36.0
-	style.content_margin_top = 24.0
-	style.content_margin_bottom = 24.0
-	return style
-
-
-func _make_primary_button(text: String, color: Color) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(440.0, 66.0)
-	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	button.focus_mode = Control.FOCUS_ALL
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.add_theme_font_size_override("font_size", 24)
-	button.add_theme_color_override("font_color", Color(0.06, 0.05, 0.02, 1.0))
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = color
-	normal.border_color = color.lightened(0.42)
-	normal.set_border_width_all(3)
-	normal.set_corner_radius_all(17)
-	button.add_theme_stylebox_override("normal", normal)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = color.lightened(0.12)
-	button.add_theme_stylebox_override("hover", hover)
-	var pressed := normal.duplicate() as StyleBoxFlat
-	pressed.bg_color = color.darkened(0.15)
-	pressed.content_margin_top = 4.0
-	button.add_theme_stylebox_override("pressed", pressed)
-	return button
