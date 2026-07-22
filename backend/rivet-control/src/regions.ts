@@ -1,7 +1,5 @@
 import type { RegionDefinition } from "./types.js";
 
-const DEPLOYED_PROVIDER_REGION = "fra";
-
 const fallbackRegions: RegionDefinition[] = [
   {
     id: "eu",
@@ -9,7 +7,7 @@ const fallbackRegions: RegionDefinition[] = [
     shortName: "EU-FRA",
     probeUrl: "",
     enabled: true,
-    providerRegion: DEPLOYED_PROVIDER_REGION,
+    providerRegion: "fra",
   },
 ];
 
