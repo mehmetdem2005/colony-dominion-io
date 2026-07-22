@@ -83,14 +83,33 @@ jobs:
             2>&1 | tee build/android/import.log
           echo "IMPORT_EXIT=${PIPESTATUS[0]}"
 
-      - name: Configure Android editor settings
+      - name: Write Godot editor settings (Android SDK + debug keystore)
         run: |
-          set -uxo pipefail
-          timeout 420 "$GODOT_BIN" --headless --editor --path . \
-            --script res://tools/configure_android_ci.gd \
-            2>&1 | tee build/android/configure.log
-          echo "CONFIGURE_EXIT=${PIPESTATUS[0]}"
-          grep -q "ANDROID_CI_EDITOR_SETTINGS_OK" build/android/configure.log
+          set -euxo pipefail
+          # Godot's headless `--export-debug` reads the Android SDK path (to
+          # locate apksigner for signing) and the debug keystore from the global
+          # editor settings. Booting `--editor` to set them hangs (EditorNode
+          # never quits) and EditorSettings has no save(), so write the file
+          # directly. Godot loads it and merges built-in defaults for the rest.
+          CFG_DIR="$HOME/.config/godot"
+          mkdir -p "$CFG_DIR"
+          cat > /tmp/editor_settings.tres <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_SDK_ROOT}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/debug_keystore = "${GODOT_ANDROID_KEYSTORE_DEBUG_PATH}"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          # Godot 4 names this file by version; write the plausible variants so
+          # the running build (4.6.3) picks up whichever it looks for.
+          for name in editor_settings-4.tres editor_settings-4.6.tres editor_settings-4.3.tres; do
+            install -m 0644 /tmp/editor_settings.tres "$CFG_DIR/$name"
+          done
+          ls -la "$CFG_DIR"
+          echo "EDITOR_SETTINGS_WRITTEN"
 
       - name: Export debug APK
         run: |
@@ -116,5 +135,4 @@ jobs:
             build/android/colony-dominion.apk
             build/android/SHA256SUMS.txt
             build/android/import.log
-            build/android/configure.log
             build/android/export.log
