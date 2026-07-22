@@ -1,0 +1,29 @@
+plugins {
+    id 'com.android.library' version '8.7.2'
+}
+
+android {
+    namespace 'io.colonydominion.identity'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Godot supplies this at runtime; the plugin only compiles against its API.
+    compileOnly 'org.godotengine:godot:4.6.3.stable'
+
+    // Android's supported native account chooser and its Google provider.
+    implementation 'androidx.credentials:credentials:1.6.0'
+    implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.2.0'
+
+}

@@ -17,6 +17,7 @@ var _session: Dictionary = {}
 func _ready() -> void:
 	_http = HttpJsonClient.new()
 	_http.name = "AuthHTTP"
+	_http.timeout_seconds = 15.0
 	add_child(_http)
 
 
@@ -127,6 +128,39 @@ func sign_in_pkce_code(auth_code: String, code_verifier: String) -> Dictionary:
 	)
 	cleaned_code = ""
 	cleaned_verifier = ""
+	return _consume_auth_response(response)
+
+
+func sign_in_google_id_token(id_token: String, nonce: String) -> Dictionary:
+	if not is_configured():
+		return _fail("Supabase istemci ayarları eksik")
+	var cleaned_token := id_token.strip_edges()
+	var cleaned_nonce := nonce.strip_edges()
+	if (
+		cleaned_token.length() < 128
+		or cleaned_token.length() > 16384
+		or cleaned_token.count(".") != 2
+		or cleaned_nonce.length() < 16
+		or cleaned_nonce.length() > 256
+	):
+		cleaned_token = ""
+		cleaned_nonce = ""
+		return _fail("Google kimlik yanıtı geçersiz")
+	var response: Dictionary = await (
+		_http
+		. request_json(
+			HTTPClient.METHOD_POST,
+			"%s/auth/v1/token?grant_type=id_token" % _base_url,
+			_base_headers(),
+			{
+				"provider": "google",
+				"id_token": cleaned_token,
+				"nonce": cleaned_nonce,
+			}
+		)
+	)
+	cleaned_token = ""
+	cleaned_nonce = ""
 	return _consume_auth_response(response)
 
 

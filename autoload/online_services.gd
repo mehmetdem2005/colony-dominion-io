@@ -8,6 +8,7 @@ signal legal_sync_completed(succeeded: bool, message: String)
 var config: BackendRuntimeConfig
 var auth: SupabaseAuthClient
 var oauth: SupabaseOAuthHandoff
+var android_identity: AndroidGoogleIdentity
 var data: SupabaseDataClient
 var region_probe: RegionProbeService
 var matchmaking: RivetMatchmakingClient
@@ -35,6 +36,10 @@ func _ready() -> void:
 	oauth.name = "SupabaseOAuthHandoff"
 	add_child(oauth)
 	oauth.configure(config.supabase_url, config.supabase_publishable_key)
+
+	android_identity = AndroidGoogleIdentity.new()
+	android_identity.name = "AndroidGoogleIdentity"
+	add_child(android_identity)
 
 	data = SupabaseDataClient.new()
 	data.name = "SupabaseData"
@@ -149,12 +154,20 @@ func select_region(region_id: String) -> void:
 
 
 func sign_in_google() -> Dictionary:
+	# On Android, prefer the native system account chooser (Credential Manager) —
+	# the "normal", in-app one-tap experience. Only fall back to the Custom Tab /
+	# browser OAuth handoff when the native module is genuinely unavailable
+	# (e.g. plugin missing), so the player is never stranded.
+	if is_instance_valid(android_identity) and android_identity.is_supported():
+		return await android_identity.sign_in(auth, config.google_web_client_id)
 	if not is_instance_valid(oauth):
 		return {"ok": false, "error": "Google giriş servisi hazır değil"}
 	return await oauth.sign_in_google(auth)
 
 
 func cancel_google_sign_in() -> void:
+	if is_instance_valid(android_identity):
+		android_identity.cancel()
 	if is_instance_valid(oauth):
 		oauth.cancel()
 
