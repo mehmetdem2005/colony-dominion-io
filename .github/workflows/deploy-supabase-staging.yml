@@ -76,18 +76,41 @@ jobs:
         working-directory: backend
         run: |
           set -euo pipefail
-          npx --yes supabase@latest functions deploy auth-confirmed \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            --no-verify-jwt
+          # --use-api bundles via the Management API instead of pulling the
+          # edge-runtime Docker image, which avoids the flaky ECR pull rate limit
+          # (docker: toomanyrequests). Retry for any other transient hiccup.
+          for attempt in 1 2 3 4 5; do
+            if npx --yes supabase@latest functions deploy auth-confirmed \
+                --project-ref "$SUPABASE_PROJECT_REF" \
+                --use-api \
+                --no-verify-jwt; then
+              echo "AUTH_CONFIRMED_DEPLOY_OK"
+              exit 0
+            fi
+            echo "auth-confirmed deploy attempt $attempt failed; retrying in $((attempt * 20))s"
+            sleep $((attempt * 20))
+          done
+          echo "auth-confirmed deploy failed after retries" >&2
+          exit 1
 
       - name: Deploy Google OAuth PKCE handoff Edge Function
         timeout-minutes: 8
         working-directory: backend
         run: |
           set -euo pipefail
-          npx --yes supabase@latest functions deploy oauth-google-handoff \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            --no-verify-jwt
+          for attempt in 1 2 3 4 5; do
+            if npx --yes supabase@latest functions deploy oauth-google-handoff \
+                --project-ref "$SUPABASE_PROJECT_REF" \
+                --use-api \
+                --no-verify-jwt; then
+              echo "OAUTH_HANDOFF_DEPLOY_OK"
+              exit 0
+            fi
+            echo "oauth-google-handoff deploy attempt $attempt failed; retrying in $((attempt * 20))s"
+            sleep $((attempt * 20))
+          done
+          echo "oauth-google-handoff deploy failed after retries" >&2
+          exit 1
 
       - name: Verify Google OAuth PKCE handoff Edge Function
         timeout-minutes: 3
