@@ -4,6 +4,10 @@ name: Build Android APK
 # of the Rivet deploy/verification gate (which can fail for infra reasons). The
 # APK embeds config/backend_config.json (Supabase + Rivet already wired), so it
 # is installable and online-capable. Download the artifact from the run page.
+#
+# Every Godot / sdkmanager invocation is wrapped in `timeout` and split into its
+# own step so a hang fails fast with a pinpointed cause instead of burning the
+# full job budget. Logs upload even on failure for diagnosis.
 
 on:
   workflow_dispatch:
@@ -20,7 +24,7 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -41,20 +45,25 @@ jobs:
 
       - name: Install Godot and export templates
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           tools/install_godot_ci.sh
           "$GODOT_BIN" --version
 
-      - name: Configure Android SDK and debug signing
+      - name: Install Android SDK packages
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
+          yes | timeout 180 "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          timeout 600 "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "build-tools;35.0.1" \
             "platforms;android-35"
+          echo "SDK_PACKAGES_OK"
+
+      - name: Generate debug keystore
+        run: |
+          set -euxo pipefail
           keytool -keyalg RSA -genkeypair \
             -alias androiddebugkey \
             -keypass android \
@@ -63,18 +72,34 @@ jobs:
             -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
             -validity 10000 \
             -deststoretype PKCS12
-          "$GODOT_BIN" --headless --editor --path . \
-            --script res://tools/configure_android_ci.gd
+          test -f "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
+          echo "KEYSTORE_OK"
+
+      - name: Import project resources (headless)
+        run: |
+          set -uxo pipefail
+          mkdir -p build/android
+          timeout 900 "$GODOT_BIN" --headless --path . --import \
+            2>&1 | tee build/android/import.log
+          echo "IMPORT_EXIT=${PIPESTATUS[0]}"
+
+      - name: Configure Android editor settings
+        run: |
+          set -uxo pipefail
+          timeout 420 "$GODOT_BIN" --headless --editor --path . \
+            --script res://tools/configure_android_ci.gd \
+            2>&1 | tee build/android/configure.log
+          echo "CONFIGURE_EXIT=${PIPESTATUS[0]}"
+          grep -q "ANDROID_CI_EDITOR_SETTINGS_OK" build/android/configure.log
 
       - name: Export debug APK
         run: |
-          set -uo pipefail
-          mkdir -p build/android
-          "$GODOT_BIN" --headless --path . --editor --quit 2>&1 | tee build/android/import.log || true
-          "$GODOT_BIN" --headless --path . \
+          set -uxo pipefail
+          timeout 900 "$GODOT_BIN" --headless --path . \
             --export-debug "Android" \
             "$GITHUB_WORKSPACE/build/android/colony-dominion.apk" \
             2>&1 | tee build/android/export.log
+          echo "EXPORT_EXIT=${PIPESTATUS[0]}"
           test -s build/android/colony-dominion.apk
           unzip -t build/android/colony-dominion.apk >/dev/null
           sha256sum build/android/colony-dominion.apk | tee build/android/SHA256SUMS.txt
@@ -90,4 +115,6 @@ jobs:
           path: |
             build/android/colony-dominion.apk
             build/android/SHA256SUMS.txt
+            build/android/import.log
+            build/android/configure.log
             build/android/export.log
