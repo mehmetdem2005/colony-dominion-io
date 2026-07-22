@@ -55,10 +55,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING_DIR=.asset_staging/wild_weeds_atlas
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm -r "$STAGING_DIR"
           git add assets/props/wild_weeds/wild_weeds_atlas.png
+          if git diff --cached --quiet; then
+            echo "Verified atlas is already materialized."
+            exit 0
+          fi
           git commit -m "Materialize verified wild weed atlas"
           git push origin HEAD:feature/wild-weed-decor-pack-v2
