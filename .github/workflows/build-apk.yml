@@ -1,0 +1,93 @@
+name: Build Android APK
+
+# Builds a signed debug Android APK straight from the current main, independent
+# of the Rivet deploy/verification gate (which can fail for infra reasons). The
+# APK embeds config/backend_config.json (Supabase + Rivet already wired), so it
+# is installable and online-capable. Download the artifact from the run page.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-apk.yml"
+      - ".github/apk-trigger.txt"
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/colony-debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Godot and export templates
+        run: |
+          set -euo pipefail
+          tools/install_godot_ci.sh
+          "$GODOT_BIN" --version
+
+      - name: Configure Android SDK and debug signing
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "build-tools;35.0.1" \
+            "platforms;android-35"
+          keytool -keyalg RSA -genkeypair \
+            -alias androiddebugkey \
+            -keypass android \
+            -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" \
+            -storepass android \
+            -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
+            -validity 10000 \
+            -deststoretype PKCS12
+          "$GODOT_BIN" --headless --editor --path . \
+            --script res://tools/configure_android_ci.gd
+
+      - name: Export debug APK
+        run: |
+          set -uo pipefail
+          mkdir -p build/android
+          "$GODOT_BIN" --headless --path . --editor --quit 2>&1 | tee build/android/import.log || true
+          "$GODOT_BIN" --headless --path . \
+            --export-debug "Android" \
+            "$GITHUB_WORKSPACE/build/android/colony-dominion.apk" \
+            2>&1 | tee build/android/export.log
+          test -s build/android/colony-dominion.apk
+          unzip -t build/android/colony-dominion.apk >/dev/null
+          sha256sum build/android/colony-dominion.apk | tee build/android/SHA256SUMS.txt
+          stat --printf='APK size: %s bytes\n' build/android/colony-dominion.apk
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: colony-dominion-apk
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            build/android/colony-dominion.apk
+            build/android/SHA256SUMS.txt
+            build/android/export.log
