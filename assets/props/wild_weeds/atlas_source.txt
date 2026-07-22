@@ -1,1 +1,0 @@
-Atlas binary is committed through the Git data API. Tile layout: 5 columns x 2 rows, 256 px cells.
