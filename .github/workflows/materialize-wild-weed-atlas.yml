@@ -4,8 +4,7 @@ on:
   push:
     branches: [feature/wild-weed-decor-pack-v2]
     paths:
-      - ".asset_staging/wild_weeds_atlas/**"
-      - ".github/workflows/materialize-wild-weed-atlas.yml"
+      - ".asset_staging/wild_weeds_atlas/READY"
 
 permissions:
   contents: write
@@ -29,14 +28,14 @@ jobs:
         run: |
           set -euo pipefail
           STAGING_DIR=.asset_staging/wild_weeds_atlas
-          if ! compgen -G "$STAGING_DIR/part_*" >/dev/null; then
-            echo "No atlas parts remain; nothing to materialize."
-            exit 0
-          fi
+          test -f "$STAGING_DIR/READY"
+          test "$(cat "$STAGING_DIR/READY")" = "sha256:78aa6b6c5e6482bd71544e30490554b2c39043aa2b30d37bf6f417902ca4a742"
+          compgen -G "$STAGING_DIR/part_*" >/dev/null
           cat "$STAGING_DIR"/part_* > /tmp/wild_weeds_atlas.b64
           base64 --decode /tmp/wild_weeds_atlas.b64 > assets/props/wild_weeds/wild_weeds_atlas.png
           python - <<'PY'
           from pathlib import Path
+          import hashlib
           import struct
           p = Path("assets/props/wild_weeds/wild_weeds_atlas.png")
           data = p.read_bytes()
@@ -45,9 +44,11 @@ jobs:
           width, height = struct.unpack(">II", data[16:24])
           if (width, height) != (1280, 512):
               raise SystemExit(f"Unexpected atlas dimensions: {width}x{height}")
-          if len(data) < 50000:
-              raise SystemExit(f"Atlas is unexpectedly small: {len(data)} bytes")
-          print(f"Verified PNG atlas: {width}x{height}, {len(data)} bytes")
+          digest = hashlib.sha256(data).hexdigest()
+          expected = "78aa6b6c5e6482bd71544e30490554b2c39043aa2b30d37bf6f417902ca4a742"
+          if digest != expected:
+              raise SystemExit(f"Atlas SHA-256 mismatch: {digest}")
+          print(f"Verified PNG atlas: {width}x{height}, {len(data)} bytes, {digest}")
           PY
 
       - name: Commit materialized atlas
@@ -55,9 +56,6 @@ jobs:
         run: |
           set -euo pipefail
           STAGING_DIR=.asset_staging/wild_weeds_atlas
-          if ! compgen -G "$STAGING_DIR/part_*" >/dev/null; then
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm -r "$STAGING_DIR"
