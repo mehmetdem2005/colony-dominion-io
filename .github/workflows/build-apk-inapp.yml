@@ -34,9 +34,12 @@ jobs:
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
-      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/colony-debug.keystore
-      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
-      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+      # Sign with the committed, STABLE keystore so the APK's SHA-1 never
+      # changes — native Google sign-in needs that one SHA-1 registered in
+      # Google Cloud Console. (Test key; password is intentionally public.)
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/android/keystore/colony-release.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: colonyio
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: colonyio
     steps:
       - uses: actions/checkout@v4
 
@@ -63,35 +66,38 @@ jobs:
             "platforms;android-35"
           echo "SDK_PACKAGES_OK"
 
-      - name: Generate debug keystore
+      - name: Verify stable signing keystore
         run: |
           set -euxo pipefail
-          keytool -keyalg RSA -genkeypair \
-            -alias androiddebugkey \
-            -keypass android \
+          test -f "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
+          keytool -list -v \
             -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" \
-            -storepass android \
-            -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
-            -validity 10000 \
-            -deststoretype PKCS12
+            -storepass "$GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD" \
+            -alias "$GODOT_ANDROID_KEYSTORE_DEBUG_USER" | grep -i "SHA1:"
           echo "KEYSTORE_OK"
 
-      - name: Build Custom Tabs plugin AAR
-        working-directory: android_plugins/colony_custom_tabs
+      - name: Build Android plugin AARs (Custom Tabs + Google Identity)
         run: |
           set -euxo pipefail
           if ! command -v gradle >/dev/null 2>&1; then
             sudo apt-get update && sudo apt-get install -y gradle
           fi
           gradle --version
-          gradle wrapper --gradle-version 8.10.2 --no-daemon
-          ./gradlew --no-daemon --stacktrace assembleRelease
-          AAR="$(find build/outputs/aar -name '*.aar' | head -n1)"
-          test -n "$AAR"
           mkdir -p "$GITHUB_WORKSPACE/android/plugins"
-          cp "$AAR" "$GITHUB_WORKSPACE/android/plugins/ColonyCustomTabs.aar"
+          build_plugin() {
+            local dir="$1"; local out="$2"
+            ( cd "$dir"
+              gradle wrapper --gradle-version 8.10.2 --no-daemon
+              ./gradlew --no-daemon --stacktrace assembleRelease
+              local aar; aar="$(find build/outputs/aar -name '*.aar' | head -n1)"
+              test -n "$aar"
+              cp "$aar" "$GITHUB_WORKSPACE/android/plugins/$out"
+            )
+          }
+          build_plugin android_plugins/colony_custom_tabs ColonyCustomTabs.aar
+          build_plugin android_plugins/colony_google_identity ColonyGoogleIdentity.aar
           ls -la "$GITHUB_WORKSPACE/android/plugins"
-          echo "PLUGIN_AAR_OK"
+          echo "PLUGIN_AARS_OK"
 
       - name: Install Godot Android build template
         run: |
@@ -119,8 +125,8 @@ jobs:
           export/android/android_sdk_path = "${ANDROID_SDK_ROOT}"
           export/android/java_sdk_path = "${JAVA_HOME}"
           export/android/debug_keystore = "${GODOT_ANDROID_KEYSTORE_DEBUG_PATH}"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
+          export/android/debug_keystore_user = "${GODOT_ANDROID_KEYSTORE_DEBUG_USER}"
+          export/android/debug_keystore_pass = "${GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD}"
           EOF
           for name in editor_settings-4.tres editor_settings-4.6.tres editor_settings-4.3.tres; do
             install -m 0644 /tmp/editor_settings.tres "$CFG_DIR/$name"

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application>
+        <!-- Registers the plugin with Godot's v2 Android plugin runtime so the
+             ColonyGoogleIdentity singleton actually loads. Without this the AAR
+             ships but is never instantiated and native sign-in silently no-ops. -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.ColonyGoogleIdentity"
+            android:value="io.colonydominion.identity.ColonyGoogleIdentity" />
+    </application>
+</manifest>
