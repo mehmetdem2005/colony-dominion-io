@@ -1,0 +1,88 @@
+name: Capture UI Screens
+
+# Renders the live game UI in CI (Godot under a virtual X display) and uploads
+# PNG screenshots as an artifact, so the menu/HUD can be reviewed without a
+# local Godot install. No game code is touched: the running window is grabbed
+# straight off the virtual framebuffer.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/capture-ui-screens.yml"
+      - ".github/capture-ui-trigger.txt"
+      - "ui/**"
+      - "scenes/**"
+      - "project.godot"
+
+concurrency:
+  group: capture-ui-screens
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+      DISPLAY: ":99"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot, Xvfb and screen grabber
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb imagemagick x11-utils
+          tools/install_godot_ci.sh
+          "$GODOT_BIN" --version
+
+      - name: Import project resources (headless)
+        run: |
+          set -uo pipefail
+          # Let Godot build its .godot import cache so textures/scenes load.
+          timeout 240 "$GODOT_BIN" --headless --path . --import || true
+
+      - name: Render UI and grab screenshots
+        run: |
+          set -uo pipefail
+          mkdir -p build/ui-shots
+          Xvfb :99 -screen 0 1280x720x24 -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
+          XVFB_PID=$!
+          sleep 3
+
+          # Boot the real game (boot.tscn -> main_menu). Software GL via llvmpipe.
+          "$GODOT_BIN" --path . --resolution 1280x720 --rendering-driver opengl3 \
+            >/tmp/godot.log 2>&1 &
+          GODOT_PID=$!
+
+          grab() {
+            local label="$1"
+            import -window root "build/ui-shots/${label}.png" 2>/dev/null \
+              && echo "grabbed ${label}" \
+              || echo "grab failed ${label}"
+          }
+
+          sleep 8;  grab 01_main_menu_08s
+          sleep 6;  grab 02_main_menu_14s
+          sleep 6;  grab 03_main_menu_20s
+
+          kill "$GODOT_PID" 2>/dev/null || true
+          kill "$XVFB_PID" 2>/dev/null || true
+          echo "===== godot.log tail ====="; tail -40 /tmp/godot.log || true
+          echo "===== xvfb.log tail ====="; tail -10 /tmp/xvfb.log || true
+          ls -la build/ui-shots/
+
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screens
+          path: build/ui-shots/
+          if-no-files-found: warn
+          retention-days: 14
