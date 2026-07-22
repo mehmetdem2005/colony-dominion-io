@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: write
     env:
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
@@ -136,3 +136,19 @@ jobs:
             build/android/SHA256SUMS.txt
             build/android/import.log
             build/android/export.log
+
+      - name: Publish APK to a direct-download Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: "Colony Dominion.io — Son APK"
+          body: |
+            Otomatik derlenen imzalı debug APK (arm64-v8a, Android).
+            Doğrudan indir: colony-dominion.apk
+            Bütünlük doğrulaması için SHA256SUMS.txt.
+            Her yeni derlemede bu sürüm güncellenir.
+          files: |
+            build/android/colony-dominion.apk
+            build/android/SHA256SUMS.txt
+          fail_on_unmatched_files: true
