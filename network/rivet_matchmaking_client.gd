@@ -9,10 +9,26 @@ var _protocol_version: int = 1
 var _http: HttpJsonClient
 var _queue_ticket_id: String = ""
 
+# Rivet actors scale to zero, so the first request after idle can cold-start for
+# well over the default 8s timeout. Use a longer per-request budget and retry a
+# few times on transient failures (timeout, gateway busy/5xx) so matchmaking
+# survives the cold start instead of surfacing http_result_13 to the player.
+const JOIN_TIMEOUT_SECONDS: float = 25.0
+const JOIN_MAX_ATTEMPTS: int = 3
+const JOIN_RETRY_BACKOFF_SECONDS: float = 1.5
+const TRANSIENT_RESULTS: Array[int] = [
+	HTTPRequest.RESULT_TIMEOUT,
+	HTTPRequest.RESULT_CANT_CONNECT,
+	HTTPRequest.RESULT_CONNECTION_ERROR,
+	HTTPRequest.RESULT_NO_RESPONSE,
+]
+const TRANSIENT_STATUSES: Array[int] = [408, 425, 429, 500, 502, 503, 504]
+
 
 func _ready() -> void:
 	_http = HttpJsonClient.new()
 	_http.name = "RivetControlHTTP"
+	_http.timeout_seconds = JOIN_TIMEOUT_SECONDS
 	add_child(_http)
 
 
@@ -42,22 +58,28 @@ func join_queue(
 ) -> Dictionary:
 	if not is_configured():
 		return {"ok": false, "error": "Rivet kontrol adresi yapılandırılmadı"}
-	var response: Dictionary = await (
-		_http
-		. request_json(
+	var payload := {
+		"player_id": player_id,
+		"display_name": display_name,
+		"region_preference": region_preference,
+		"selected_region_id": selected_region_id,
+		"build_id": _build_id,
+		"protocol_version": _protocol_version,
+	}
+	var response: Dictionary = {}
+	for attempt in range(JOIN_MAX_ATTEMPTS):
+		response = await _http.request_json(
 			HTTPClient.METHOD_POST,
 			_endpoint_url("/v1/matchmaking/join"),
 			_auth_headers(access_token),
-			{
-				"player_id": player_id,
-				"display_name": display_name,
-				"region_preference": region_preference,
-				"selected_region_id": selected_region_id,
-				"build_id": _build_id,
-				"protocol_version": _protocol_version,
-			}
+			payload
 		)
-	)
+		if bool(response.get("ok", false)) or not _is_transient(response):
+			break
+		if attempt < JOIN_MAX_ATTEMPTS - 1:
+			await get_tree().create_timer(
+				JOIN_RETRY_BACKOFF_SECONDS * float(attempt + 1), true, false, true
+			).timeout
 	if not bool(response.get("ok", false)):
 		return {"ok": false, "error": _extract_error(response)}
 	var body_variant: Variant = response.get("body", {})
@@ -108,6 +130,16 @@ func _auth_headers(access_token: String) -> PackedStringArray:
 			"Accept: application/json",
 		]
 	)
+
+
+func _is_transient(response: Dictionary) -> bool:
+	# Cold-start timeouts, the client's own single-flight guard and gateway 5xx
+	# are all worth another attempt; real 4xx (bad build/auth) are not.
+	if String(response.get("error", "")) == "request_busy":
+		return true
+	if int(response.get("result", -1)) in TRANSIENT_RESULTS:
+		return true
+	return int(response.get("status", 0)) in TRANSIENT_STATUSES
 
 
 func _extract_error(response: Dictionary) -> String:

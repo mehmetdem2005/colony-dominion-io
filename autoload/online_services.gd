@@ -159,6 +159,14 @@ func cancel_google_sign_in() -> void:
 		oauth.cancel()
 
 
+func _is_transient_result(result: Dictionary) -> bool:
+	if String(result.get("error", "")) == "request_busy":
+		return true
+	if int(result.get("result", -1)) == HTTPRequest.RESULT_TIMEOUT:
+		return true
+	return int(result.get("status", 0)) in [408, 425, 429, 500, 502, 503, 504]
+
+
 func sync_legal_acceptances() -> Dictionary:
 	if not auth.has_session():
 		return {"ok": false, "error": "Yasal kayıt senkronizasyonu için oturum gerekli"}
@@ -167,7 +175,15 @@ func sync_legal_acceptances() -> Dictionary:
 	var rows: Array[Dictionary] = legal_store.build_remote_rows(
 		auth.get_user_id(), config.build_id, "tr-TR"
 	)
-	var result: Dictionary = await data.upsert_legal_acceptances(rows)
+	# request_busy is the shared HTTP client's single-flight guard and cold-start
+	# timeouts are transient, so retry before reporting a hard failure — otherwise
+	# a momentary collision blocks matchmaking with "Sözleşme kaydı ... request_busy".
+	var result: Dictionary = {}
+	for attempt in range(3):
+		result = await data.upsert_legal_acceptances(rows)
+		if bool(result.get("ok", false)) or not _is_transient_result(result):
+			break
+		await get_tree().create_timer(1.0 * float(attempt + 1), true, false, true).timeout
 	var succeeded: bool = bool(result.get("ok", false))
 	var message: String = (
 		"Kullanıcı sözleşmeleri kaydedildi"
