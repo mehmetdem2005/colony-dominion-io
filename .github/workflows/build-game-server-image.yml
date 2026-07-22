@@ -1,0 +1,86 @@
+name: Build Game Server Image
+
+# Exports the Godot "Dedicated Server" (Linux, headless) and packages it as a
+# container image pushed to GHCR. Edgegap deploys this image on the edge node
+# nearest the matched players and hands the client a direct ip:port. This is
+# the foundation of the Edgegap migration and needs no Edgegap token.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/edgegap/**"
+      - ".github/workflows/build-game-server-image.yml"
+      - ".github/game-server-trigger.txt"
+      - "gameplay/**"
+      - "network/**"
+      - "core/**"
+      - "autoload/**"
+      - "project.godot"
+      - "export_presets.cfg"
+
+concurrency:
+  group: build-game-server-image
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GODOT_VERSION: "4.6.3"
+      GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
+      IMAGE: ghcr.io/${{ github.repository_owner }}/colony-dominion-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot and export templates
+        run: |
+          set -euxo pipefail
+          tools/install_godot_ci.sh
+          "$GODOT_BIN" --version
+
+      - name: Import project resources (headless)
+        run: |
+          set -uxo pipefail
+          mkdir -p build/server
+          timeout 900 "$GODOT_BIN" --headless --path . --import \
+            2>&1 | tee build/server/import.log
+          echo "IMPORT_EXIT=${PIPESTATUS[0]}"
+
+      - name: Export Linux dedicated server
+        run: |
+          set -uxo pipefail
+          timeout 600 "$GODOT_BIN" --headless --path . \
+            --export-debug "Dedicated Server" \
+            "$GITHUB_WORKSPACE/build/server/colony-dominion-server.x86_64" \
+            2>&1 | tee build/server/export.log
+          echo "EXPORT_EXIT=${PIPESTATUS[0]}"
+          ls -la build/server
+          test -s build/server/colony-dominion-server.x86_64
+
+      - name: Build and push server image to GHCR
+        run: |
+          set -euxo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          TAG="$(date -u +%Y%m%d-%H%M%S)"
+          docker build -f deploy/edgegap/Dockerfile -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "PUSHED_IMAGE=$IMAGE:$TAG"
+
+      - name: Upload server build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-server-build
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build/server/import.log
+            build/server/export.log
