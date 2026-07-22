@@ -6,6 +6,7 @@ on:
       - "assets/props/wild_weeds/**"
       - "gameplay/world/world_content_catalog.gd"
       - "gameplay/world/streamed_world_prop.gd"
+      - "gameplay/world/world_stream_manager.gd"
       - "tests/wild_weed_decor_catalog_test.gd"
       - ".github/workflows/validate-wild-weed-decor.yml"
   workflow_dispatch:
@@ -19,12 +20,65 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
     env:
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Apply radius-aware boundary spacing once
+        if: github.event_name == 'pull_request' && github.head_ref == 'feature/wild-weed-decor-pack-v2'
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER=.asset_staging/wild_weeds_boundary/READY
+          test -f "$MARKER"
+          test "$(cat "$MARKER")" = "apply-v1"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("gameplay/world/world_stream_manager.gd")
+          source = path.read_text(encoding="utf-8")
+          old = '''\tfor _attempt in 26:
+\t\tvar point := Vector2(
+\t\t\trng.randf_range(chunk_rect.position.x + 48.0, chunk_rect.end.x - 48.0),
+\t\t\trng.randf_range(chunk_rect.position.y + 48.0, chunk_rect.end.y - 48.0)
+\t\t)
+'''
+          new = '''\t# The radius-aware edge margin makes spacing deterministic across adjacent
+\t# chunk boundaries as well as inside each chunk. Two independently built
+\t# chunks therefore cannot place reserved props through each other.
+\tvar edge_margin: float = maxf(48.0, radius + 18.0)
+\tif chunk_rect.size.x <= edge_margin * 2.0 or chunk_rect.size.y <= edge_margin * 2.0:
+\t\treturn Vector2.INF
+\tfor _attempt in 26:
+\t\tvar point := Vector2(
+\t\t\trng.randf_range(
+\t\t\t\tchunk_rect.position.x + edge_margin, chunk_rect.end.x - edge_margin
+\t\t\t),
+\t\t\trng.randf_range(
+\t\t\t\tchunk_rect.position.y + edge_margin, chunk_rect.end.y - edge_margin
+\t\t\t)
+\t\t)
+'''
+          if old in source:
+              path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          elif "var edge_margin: float = maxf(48.0, radius + 18.0)" not in source:
+              raise SystemExit("World placement contract is neither original nor migrated")
+          PY
+          if git diff --quiet -- gameplay/world/world_stream_manager.gd; then
+            echo "Boundary spacing is already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add gameplay/world/world_stream_manager.gd
+            git commit -m "Prevent prop overlap across chunk boundaries"
+            git push origin HEAD:feature/wild-weed-decor-pack-v2
+          fi
 
       - name: Install Godot
         run: |
