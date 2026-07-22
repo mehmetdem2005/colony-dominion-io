@@ -1,0 +1,67 @@
+name: Apply Wild Weed Boundary Spacing
+
+on:
+  push:
+    branches: [feature/wild-weed-decor-pack-v2]
+    paths:
+      - ".asset_staging/wild_weeds_boundary/READY"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/wild-weed-decor-pack-v2
+          fetch-depth: 0
+
+      - name: Apply deterministic cross-chunk spacing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .asset_staging/wild_weeds_boundary/READY)" = "apply-v1"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("gameplay/world/world_stream_manager.gd")
+          source = path.read_text(encoding="utf-8")
+          old = '''\tfor _attempt in 26:
+\t\tvar point := Vector2(
+\t\t\trng.randf_range(chunk_rect.position.x + 48.0, chunk_rect.end.x - 48.0),
+\t\t\trng.randf_range(chunk_rect.position.y + 48.0, chunk_rect.end.y - 48.0)
+\t\t)
+'''
+          new = '''\t# The radius-aware edge margin makes spacing deterministic across adjacent
+\t# chunk boundaries as well as inside each chunk. Two independently built
+\t# chunks therefore cannot place reserved props through each other.
+\tvar edge_margin: float = maxf(48.0, radius + 18.0)
+\tif chunk_rect.size.x <= edge_margin * 2.0 or chunk_rect.size.y <= edge_margin * 2.0:
+\t\treturn Vector2.INF
+\tfor _attempt in 26:
+\t\tvar point := Vector2(
+\t\t\trng.randf_range(
+\t\t\t\tchunk_rect.position.x + edge_margin, chunk_rect.end.x - edge_margin
+\t\t\t),
+\t\t\trng.randf_range(
+\t\t\t\tchunk_rect.position.y + edge_margin, chunk_rect.end.y - edge_margin
+\t\t\t)
+\t\t)
+'''
+          if source.count(old) != 1:
+              raise SystemExit("Expected world placement block was not found exactly once")
+          path.write_text(source.replace(old, new), encoding="utf-8")
+          PY
+
+      - name: Commit spacing policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gameplay/world/world_stream_manager.gd
+          git commit -m "Prevent prop overlap across chunk boundaries"
+          git push origin HEAD:feature/wild-weed-decor-pack-v2
