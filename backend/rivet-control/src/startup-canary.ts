@@ -21,9 +21,13 @@ export async function runStartupCanary(): Promise<void> {
       protocolVersion: Number(process.env.PROTOCOL_VERSION ?? 4),
       expectedPlayers: 1,
       maxPlayers: 1,
+      humanPlayerCount: 1,
+      botCount: 0,
+      ranked: true,
       matchSeed: 1,
       serverAuthToken: randomBytes(32).toString("base64url"),
     },
+    region: process.env.CONTROL_PROVIDER_REGION?.trim() || "fra",
   });
 
   try {

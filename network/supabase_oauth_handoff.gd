@@ -40,6 +40,11 @@ func is_configured() -> bool:
 
 
 func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
+	if OS.get_name() == "Android":
+		return {
+			"ok": false,
+			"error": "Android'de Google girişi yalnızca oyun içi hesap seçiciyle yapılır",
+		}
 	if not is_configured() or not is_instance_valid(auth_client):
 		return {"ok": false, "error": "Google giriş servisi yapılandırılmadı"}
 	if not _active_request_id.is_empty():
@@ -65,16 +70,10 @@ func sign_in_google(auth_client: SupabaseAuthClient) -> Dictionary:
 
 
 func _open_authorize_url(url: String) -> bool:
-	# Prefer an in-app Chrome Custom Tab (Android): the sign-in page overlays the
-	# game in the same task and returns automatically, instead of switching to the
-	# external browser app. Falls back to OS.shell_open on desktop or when the
-	# native plugin is unavailable, so the flow always has a way to open.
-	if Engine.has_singleton("ColonyCustomTabs"):
-		var custom_tabs: Object = Engine.get_singleton("ColonyCustomTabs")
-		if is_instance_valid(custom_tabs) and custom_tabs.has_method("openCustomTab"):
-			if bool(custom_tabs.call("openCustomTab", url)):
-				return true
-	return OS.shell_open(url) == OK
+	if OS.get_name() in ["Windows", "macOS", "Linux", "FreeBSD"]:
+		if OS.shell_open(url) == OK:
+			return true
+	return false
 
 
 func cancel() -> void:

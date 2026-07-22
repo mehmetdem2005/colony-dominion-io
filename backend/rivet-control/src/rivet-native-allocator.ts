@@ -1,5 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import type { Client } from "rivetkit/client";
 import type { GameServerActorInput } from "./game-server-actor.js";
+import type { runtimeRegistry } from "./runtime-registry.js";
 import type { QueueEntry, RegionDefinition, ServerAssignment } from "./types.js";
 
 export type AllocationResult = {
@@ -8,30 +10,10 @@ export type AllocationResult = {
   serverAuthToken: string;
 };
 
-type GameServerStatus = {
-  status: string;
-  ready: boolean;
-  lastError?: string;
-};
-
-type GameServerHandle = {
-  getStatus: () => Promise<GameServerStatus>;
-  getGatewayUrl: () => Promise<string>;
-};
-
-type GameServerCreateOptions = {
-  input: GameServerActorInput;
-  createInRegion?: string;
-};
-
-type RuntimeActorClient = {
-  gameServer: {
-    create: (
-      key: string[],
-      options: GameServerCreateOptions,
-    ) => Promise<GameServerHandle>;
-  };
-};
+type RuntimeActorClient = Client<typeof runtimeRegistry>;
+type GameServerCreateOptions = Parameters<
+  RuntimeActorClient["gameServer"]["create"]
+>[1];
 
 const ASSIGNMENT_TTL_MS = 120_000;
 const MAX_PLAYERS = 10;
@@ -95,7 +77,9 @@ export async function allocateRivetGameServer(
   };
   const options: GameServerCreateOptions = { input };
   if (region.providerRegion) {
-    options.createInRegion = region.providerRegion;
+    // Rivet's create() API uses `region`; `createInRegion` belongs to
+    // getOrCreate(). Using the latter silently let game actors land outside FRA.
+    options.region = region.providerRegion;
   }
   const handle = await client.gameServer.create([matchId], options);
   const status = await handle.getStatus();

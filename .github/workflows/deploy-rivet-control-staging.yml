@@ -20,6 +20,8 @@ on:
       - "core/boot.gd"
       - "project.godot"
       - "export_presets.cfg"
+      - "tools/configure_android_ci.gd"
+      - "tools/prepare_android_native_build.sh"
 
 concurrency:
   group: colony-rivet-full-online-staging
@@ -45,6 +47,8 @@ jobs:
       MAX_PLAYERS: "10"
       QUEUE_TTL_SECONDS: "120"
       BOT_BACKFILL_WAIT_SECONDS: "30"
+      CONTROL_PROVIDER_REGION: fra
+      GOOGLE_WEB_CLIENT_ID: 1042972714033-b208vfbhkubpirbl62e2t0lnk9caqnm5.apps.googleusercontent.com
       REGIONS_JSON: >-
         [{"id":"eu","displayName":"Avrupa — Frankfurt","shortName":"EU-FRA","probeUrl":"","enabled":true,"providerRegion":"fra"}]
       GODOT_VERSION: "4.6.3"
@@ -52,8 +56,9 @@ jobs:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
       GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/colony-debug.keystore
-      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
-      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v6
@@ -71,6 +76,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
       - name: Install validation tools and Godot
         shell: bash
@@ -91,16 +100,38 @@ jobs:
             "platform-tools" \
             "build-tools;35.0.1" \
             "platforms;android-35"
-          keytool -keyalg RSA -genkeypair \
-            -alias androiddebugkey \
-            -keypass android \
-            -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" \
-            -storepass android \
-            -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
-            -validity 10000 \
-            -deststoretype PKCS12
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            test -n "${ANDROID_KEYSTORE_ALIAS:-}"
+            test -n "${ANDROID_KEYSTORE_PASSWORD:-}"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode \
+              > "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
+            KEY_ALIAS="$ANDROID_KEYSTORE_ALIAS"
+            KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          else
+            echo "::warning::Using an ephemeral signing key for the staging APK; do not publish it as the canonical Google-enabled build."
+            KEY_ALIAS="androiddebugkey"
+            KEY_PASSWORD="android"
+            keytool -keyalg RSA -genkeypair \
+              -alias "$KEY_ALIAS" \
+              -keypass "$KEY_PASSWORD" \
+              -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" \
+              -storepass "$KEY_PASSWORD" \
+              -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
+              -validity 10000 \
+              -deststoretype PKCS12
+          fi
+          export GODOT_ANDROID_KEYSTORE_DEBUG_USER="$KEY_ALIAS"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD="$KEY_PASSWORD"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           "$GODOT_BIN" --headless --editor --path . \
             --script res://tools/configure_android_ci.gd
+
+      - name: Build native Android identity module
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools/prepare_android_native_build.sh
 
       - name: Resolve and validate staging credentials
         shell: bash
@@ -203,9 +234,9 @@ jobs:
               --cpu 2 \
               --memory 2Gi \
               --instance-request-concurrency 80 \
-              --min-scale 0 \
+              --min-scale 1 \
               --max-scale 4 \
-              --max-concurrent-actors 3 \
+              --max-concurrent-actors 8 \
               --env "NODE_ENV=production" \
               --env "SUPABASE_URL=${SUPABASE_URL}" \
               --env "SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}" \
@@ -216,6 +247,7 @@ jobs:
               --env "QUEUE_TTL_SECONDS=${QUEUE_TTL_SECONDS}" \
               --env "BOT_BACKFILL_WAIT_SECONDS=${BOT_BACKFILL_WAIT_SECONDS}" \
               --env "REGIONS_JSON=${REGIONS_JSON}" \
+              --env "CONTROL_PROVIDER_REGION=${CONTROL_PROVIDER_REGION}" \
               --env "RIVET_STARTUP_CANARY=1" \
               2>&1 | tee "$ATTEMPT_LOG" | tee -a "$RAW_LOG"
             DEPLOY_STATUS=${PIPESTATUS[0]}
@@ -278,7 +310,8 @@ jobs:
           Path(sys.argv[2]).write_text(text, encoding="utf-8")
           PY
               if grep -q 'RIVET_GAME_ACTOR_CANARY_OK' build/rivet-staging/runtime.log \
-                && grep -q 'RIVET_PUBLIC_CONTROL_GATEWAY_READY' build/rivet-staging/runtime.log; then
+                && grep -q 'RIVET_PUBLIC_CONTROL_GATEWAY_READY' build/rivet-staging/runtime.log \
+                && grep -q 'RIVET_REGION_PROBE_READY' build/rivet-staging/runtime.log; then
                 FOUND=1
                 break
               fi
@@ -319,6 +352,28 @@ jobs:
           if parsed.scheme != "https" or not parsed.netloc or not parsed.path.rstrip("/").endswith("/request"):
               raise SystemExit("Public control gateway is invalid")
 
+          probe_marker = None
+          for line in reversed(text.splitlines()):
+              if "RIVET_REGION_PROBE_READY" not in line:
+                  continue
+              match = re.search(r'\{.*"marker"\s*:\s*"RIVET_REGION_PROBE_READY".*\}', line)
+              if not match:
+                  continue
+              candidate = json.loads(match.group(0))
+              if candidate.get("region_id") == "eu" and candidate.get("provider_region") == "fra":
+                  probe_marker = candidate
+                  break
+          if probe_marker is None:
+              raise SystemExit("Frankfurt region probe marker was not found")
+          probe_url = str(probe_marker.get("probe_url", "")).strip()
+          probe_parts = urllib.parse.urlsplit(probe_url)
+          if (
+              probe_parts.scheme != "https"
+              or not probe_parts.netloc
+              or not probe_parts.path.rstrip("/").endswith("/request/v1/ping")
+          ):
+              raise SystemExit("Frankfurt region probe gateway is invalid")
+
           def endpoint(path: str) -> str:
               current = urllib.parse.urlsplit(base)
               full_path = current.path.rstrip("/") + "/" + path.lstrip("/")
@@ -346,8 +401,8 @@ jobs:
               raise SystemExit(f"Unexpected deployed region catalog: {regions}")
           if service_config.get("limits", {}).get("bot_backfill_wait_seconds") != 30:
               raise SystemExit("Bot backfill wait mismatch")
-
-          probe_url = endpoint("/v1/health/ping")
+          if str(regions[0].get("probe_url", "")) != probe_url:
+              raise SystemExit("Region catalog does not expose the dedicated Frankfurt probe")
           probe_request = urllib.request.Request(
               probe_url,
               headers={"Accept": "application/json", "Cache-Control": "no-cache"},
@@ -355,6 +410,14 @@ jobs:
           with urllib.request.urlopen(probe_request, timeout=45) as response:
               if response.status != 200:
                   raise SystemExit("EU probe endpoint is unavailable")
+              probe_body = json.loads(response.read().decode("utf-8"))
+          if (
+              probe_body.get("ok") is not True
+              or probe_body.get("scope") != "region-probe"
+              or probe_body.get("region") != "eu"
+              or probe_body.get("provider_region") != "fra"
+          ):
+              raise SystemExit(f"EU probe identity mismatch: {probe_body}")
 
           Path("build/rivet-staging/public-control-url.txt").write_text(base + "\n", encoding="utf-8")
           client_config = {
@@ -363,6 +426,7 @@ jobs:
               "protocol_version": int(os.environ["PROTOCOL_VERSION"]),
               "supabase_url": f"https://{os.environ['SUPABASE_PROJECT_REF']}.supabase.co",
               "supabase_publishable_key": os.environ["SUPABASE_PUBLISHABLE_KEY"],
+              "google_web_client_id": os.environ["GOOGLE_WEB_CLIENT_ID"],
               "rivet_control_base_url": base,
               "persist_refresh_token": True,
               "region_probe_interval_seconds": 20.0,
@@ -387,6 +451,8 @@ jobs:
               "region": "eu",
               "provider_region": "fra",
               "query_safe_probe": True,
+              "dedicated_region_probe": True,
+              "control_provider_region": "fra",
               "bot_backfill_wait_seconds": 30,
           }
           Path("build/rivet-staging/live-verification.json").write_text(
@@ -409,6 +475,8 @@ jobs:
           fi
           "$GODOT_BIN" --headless --path . \
             --script res://tests/google_oauth_bot_backfill_test.gd
+          "$GODOT_BIN" --headless --path . \
+            --script res://tests/native_google_region_matchmaking_regression_test.gd
           "$GODOT_BIN" --headless --path . \
             --export-debug "Android" \
             build/android/colony-dominion-rivet-staging.apk \

@@ -24,6 +24,9 @@ func _run() -> void:
 	_assert_contains(
 		"res://network/supabase_auth_client.gd",
 		[
+			"grant_type=id_token",
+			'"provider": "google"',
+			"sign_in_google_id_token",
 			"grant_type=pkce",
 			"auth_code",
 			"code_verifier",
@@ -45,8 +48,8 @@ func _run() -> void:
 			"new Headers",
 			"UTF8_ENCODER.encode",
 			"Content-Disposition",
-			"Cross-Origin-Resource-Policy",
-			"randomNonce",
+			"Content-Security-Policy",
+			"randomHex",
 			"flow_type",
 			"pkce",
 			"callback_nonce_hash",
@@ -77,7 +80,7 @@ func _run() -> void:
 		"res://.github/workflows/deploy-supabase-staging.yml",
 		[
 			"Verify OAuth callback renders as secure UTF-8 HTML",
-			"text/html;charset=utf-8",
+			"text/plain;charset=utf-8",
 			"google-oauth-callback-verification.json",
 			"secret_markers_absent",
 			"tokens_in_browser",
@@ -122,7 +125,7 @@ func _run() -> void:
 	)
 	_assert_contains(
 		"res://backend/rivet-control/src/rivet-native-allocator.ts",
-		["createInRegion", "region.providerRegion", "EU"],
+		["options.region = region.providerRegion", "region.providerRegion", "EU"],
 		failures,
 		false
 	)
@@ -179,7 +182,9 @@ func _run() -> void:
 				var region: Dictionary = region_variant
 				if String(region.get("id", "")) != "eu":
 					failures.append("The deployed client region must be Europe")
-				if not String(region.get("probe_url", "")).contains("/request/v1/health/ping?"):
+				if not String(region.get("probe_url", "")).contains(
+					"/gateway/regionProbe/request/v1/ping?"
+				):
 					failures.append("EU probe URL is not query-safe")
 
 	var full_human := NetworkProtocol.normalize_assignment(

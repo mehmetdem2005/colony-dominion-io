@@ -53,7 +53,8 @@ function responseHeaders(source: Headers): Headers {
 export const controlApi = actor({
   options: {
     name: "Colony Public Control API",
-    sleepTimeout: 60_000,
+    sleepTimeout: 4 * 60 * 60 * 1_000,
+    actionTimeout: 20_000,
   },
   onRequest: async (_c, request): Promise<Response> => {
     const incomingUrl = new URL(request.url);

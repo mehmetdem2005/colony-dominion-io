@@ -1,35 +1,30 @@
 import { createClient } from "rivetkit/client";
+import { composeActorRequestUrl } from "./actor-gateway-url.js";
 import { runtimeRegistry } from "./runtime-registry.js";
 
 const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
-export const PUBLIC_CONTROL_ACTOR_KEY = "public-control-v1";
+export const PUBLIC_CONTROL_ACTOR_KEY = "public-control-eu-fra-v2";
 
 export async function ensurePublicControlGateway(): Promise<string> {
   const port = Number(process.env.RIVET_PORT ?? process.env.PORT ?? 3000);
   const internalBaseUrl = process.env.INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`;
   const client = createClient<typeof runtimeRegistry>(`${internalBaseUrl.replace(/\/$/, "")}/api/rivet`);
-  const actorHandle = await client.controlApi.getOrCreate([PUBLIC_CONTROL_ACTOR_KEY]);
+  const controlRegion = process.env.CONTROL_PROVIDER_REGION?.trim() || "fra";
+  const actorHandle = await client.controlApi.getOrCreate([PUBLIC_CONTROL_ACTOR_KEY], {
+    createInRegion: controlRegion,
+  });
   const rawGatewayUrl = await actorHandle.getGatewayUrl();
-  const gatewayUrl = new URL(rawGatewayUrl);
-  gatewayUrl.hash = "";
-
-  // RivetKit 2.3.4 (Engine - Serverless) hands back actor gateway URLs that may
-  // carry a routing query string. Do not reject it: the dedicated game-server
-  // allocation path already forwards query-bearing gateway URLs to clients, so
-  // the control gateway is treated the same way. The request path is inserted
-  // before the query string so the composed public URL stays valid.
-  const gatewayQuery = gatewayUrl.search;
-  gatewayUrl.search = "";
-  gatewayUrl.pathname = `${gatewayUrl.pathname.replace(/\/$/, "")}/request`;
-  const publicBaseUrl = `${gatewayUrl.toString().replace(/\/$/, "")}${gatewayQuery}`;
+  const publicBaseUrl = composeActorRequestUrl(rawGatewayUrl);
+  const gatewayUrl = new URL(publicBaseUrl);
 
   console.log(JSON.stringify({
     marker: "RIVET_CONTROL_GATEWAY_RESOLVED",
     raw_gateway_url: rawGatewayUrl,
     public_base_url: publicBaseUrl,
-    has_query: gatewayQuery.length > 0,
+    has_query: gatewayUrl.search.length > 0,
+    provider_region: controlRegion,
   }));
 
   if (process.env.NODE_ENV === "production" && gatewayUrl.protocol !== "https:") {
@@ -51,6 +46,7 @@ export async function ensurePublicControlGateway(): Promise<string> {
         console.log(JSON.stringify({
           marker: "RIVET_PUBLIC_CONTROL_GATEWAY_READY",
           actor_key: PUBLIC_CONTROL_ACTOR_KEY,
+          provider_region: controlRegion,
           public_base_url: publicBaseUrl,
           health_verified: true,
           verification_scope: "local_actor",

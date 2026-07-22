@@ -94,7 +94,7 @@ func _build() -> void:
 	box.add_child(_close_button)
 
 	var note := Label.new()
-	note.text = "Giriş güvenli bir Google penceresinde tamamlanır; Google şifren oyuna veya Supabase'e verilmez."
+	note.text = "Android'de Google hesabını oyundan çıkmadan telefonun güvenli hesap penceresinden seçersin; şifren oyuna veya Supabase'e verilmez."
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(540.0, 38.0)
@@ -105,7 +105,7 @@ func _build() -> void:
 func _on_google_sign_in() -> void:
 	if _busy:
 		return
-	_set_busy(true, "Google güvenli giriş sayfası açılıyor...")
+	_set_busy(true, "Google hesap seçicisi açılıyor...")
 	var result: Dictionary = await OnlineServices.sign_in_google()
 	_set_busy(false, "")
 	if not visible:

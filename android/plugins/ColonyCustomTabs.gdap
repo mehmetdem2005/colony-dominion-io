@@ -1,9 +1,0 @@
-[config]
-
-name="ColonyCustomTabs"
-binary_type="local"
-binary="ColonyCustomTabs.aar"
-
-[dependencies]
-
-remote=["androidx.browser:browser:1.8.0"]

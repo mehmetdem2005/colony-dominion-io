@@ -4,12 +4,9 @@ extends Node
 const JSON_CONTENT_TYPE: String = "Content-Type: application/json"
 
 var timeout_seconds: float = 8.0
-var _request: HTTPRequest
-var _busy: bool = false
-
-
-func _ready() -> void:
-	_ensure_request()
+var _request_sequence: int = 0
+var _active_requests: Dictionary = {}
+var _idle_requests: Array[HTTPRequest] = []
 
 
 func request_json(
@@ -18,13 +15,17 @@ func request_json(
 	headers: PackedStringArray = PackedStringArray(),
 	body: Variant = null
 ) -> Dictionary:
-	if _busy:
-		return _error_response("request_busy", 0)
 	if not _is_allowed_url(url):
 		return _error_response("invalid_url", 0)
-	_ensure_request()
-	_busy = true
-	_request.timeout = timeout_seconds
+
+	# HTTPRequest is deliberately scoped to one operation. A shared HTTPRequest
+	# rejects overlapping calls with ERR_BUSY; account bootstrap, legal sync and
+	# matchmaking are independent operations and are allowed to overlap.
+	_request_sequence += 1
+	var request_id: int = _request_sequence
+	var request := _acquire_request(request_id)
+	_active_requests[request_id] = request
+
 	var request_headers: PackedStringArray = headers.duplicate()
 	var body_text: String = ""
 	if body != null:
@@ -32,12 +33,12 @@ func request_json(
 			request_headers.append(JSON_CONTENT_TYPE)
 		body_text = JSON.stringify(body)
 	var start_msec: int = Time.get_ticks_msec()
-	var start_error: Error = _request.request(url, request_headers, method, body_text)
+	var start_error: Error = request.request(url, request_headers, method, body_text)
 	if start_error != OK:
-		_busy = false
+		_release_request(request_id, request)
 		return _error_response(error_string(start_error), 0)
-	var completed: Array = await _request.request_completed
-	_busy = false
+	var completed: Array = await request.request_completed
+	_release_request(request_id, request)
 	var result: int = int(completed[0])
 	var response_code: int = int(completed[1])
 	var response_headers: PackedStringArray = completed[2]
@@ -54,17 +55,34 @@ func request_json(
 		"headers": response_headers,
 		"body": parsed if parsed != null else text,
 		"elapsed_ms": elapsed_msec,
-		"error": "" if result == HTTPRequest.RESULT_SUCCESS else "http_result_%d" % result,
+		"error": "" if result == HTTPRequest.RESULT_SUCCESS else _transport_error(result),
+		"error_code": "" if result == HTTPRequest.RESULT_SUCCESS else "http_result_%d" % result,
 	}
 
 
-func _ensure_request() -> void:
-	if is_instance_valid(_request):
-		return
-	_request = HTTPRequest.new()
-	_request.name = "HTTPRequest"
-	_request.accept_gzip = true
-	add_child(_request)
+func _acquire_request(request_id: int) -> HTTPRequest:
+	var request: HTTPRequest
+	if _idle_requests.is_empty():
+		request = HTTPRequest.new()
+		request.accept_gzip = true
+		add_child(request)
+	else:
+		request = _idle_requests.pop_back()
+	request.name = "HTTPRequest_%d" % request_id
+	request.timeout = timeout_seconds
+	return request
+
+
+func _release_request(request_id: int, request: HTTPRequest) -> void:
+	_active_requests.erase(request_id)
+	if is_instance_valid(request) and not _idle_requests.has(request):
+		# Keep completed nodes in a tiny connection pool. Sequential latency
+		# samples reuse the same HTTPRequest/TLS connection while concurrent API
+		# operations still receive separate nodes and cannot return ERR_BUSY.
+		if _idle_requests.size() < 4:
+			_idle_requests.append(request)
+		else:
+			request.queue_free()
 
 
 func _is_allowed_url(url: String) -> bool:
@@ -88,4 +106,21 @@ func _error_response(message: String, status: int) -> Dictionary:
 		"body": null,
 		"elapsed_ms": 0,
 		"error": message,
+		"error_code": message,
 	}
+
+
+func _transport_error(result: int) -> String:
+	match result:
+		HTTPRequest.RESULT_TIMEOUT:
+			return "Sunucu zamanında yanıt vermedi. Bağlantını kontrol edip yeniden dene."
+		HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CONNECTION_ERROR:
+			return "Sunucuya bağlanılamadı. Kısa süre sonra yeniden dene."
+		HTTPRequest.RESULT_CANT_RESOLVE:
+			return "Sunucu adresi çözümlenemedi. İnternet bağlantını kontrol et."
+		HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR:
+			return "Sunucuyla güvenli bağlantı kurulamadı."
+		HTTPRequest.RESULT_NO_RESPONSE:
+			return "Sunucudan yanıt alınamadı."
+		_:
+			return "Ağ isteği tamamlanamadı (kod %d)." % result

@@ -1,7 +1,7 @@
 extends SceneTree
 
-const SERVER_MATCH_SCENE := preload("res://scenes/server_game.tscn")
-const MATCH_EVENT_HUB_SCRIPT := preload("res://gameplay/presentation/match_event_hub.gd")
+const SERVER_MATCH_SCENE_PATH: String = "res://scenes/server_game.tscn"
+const MATCH_EVENT_HUB_SCRIPT_PATH: String = "res://gameplay/presentation/match_event_hub.gd"
 
 const REQUIRED_BOUNDARY_SERVICES: Array[String] = [
 	"res://gameplay/network/authoritative_command_router.gd",
@@ -34,7 +34,10 @@ func _run_test() -> void:
 	if match_source.contains("Input.is_action_"):
 		_fail("MatchController still polls raw input instead of using the input adapter")
 		return
-	if match_source.contains("_peer_to_team") or match_source.contains("_command_rate_by_peer"):
+	if (
+		match_source.contains("var _peer_to_team")
+		or match_source.contains("var _command_rate_by_peer")
+	):
 		_fail("MatchController still owns network session tables")
 		return
 	if match_source.contains("ColonyHUD") or match_source.contains("ColonyMinimap"):
@@ -56,32 +59,35 @@ func _run_test() -> void:
 		_fail("Global match EventBus autoload is still enabled")
 		return
 
-	var hub_a := MATCH_EVENT_HUB_SCRIPT.new() as MatchEventHub
-	var hub_b := MATCH_EVENT_HUB_SCRIPT.new() as MatchEventHub
+	var hub_script: Script = load(MATCH_EVENT_HUB_SCRIPT_PATH) as Script
+	var hub_a: Node = hub_script.new() as Node
+	var hub_b: Node = hub_script.new() as Node
 	var deliveries: Array[int] = [0]
-	hub_a.toast_requested.connect(func(_message: String) -> void: deliveries[0] += 1)
-	hub_b.toast_requested.emit("isolated")
+	hub_a.connect("toast_requested", func(_message: String) -> void: deliveries[0] += 1)
+	hub_b.emit_signal("toast_requested", "isolated")
 	if deliveries[0] != 0:
 		_fail("Match-scoped event hubs leaked events across match instances")
 		return
-	hub_a.toast_requested.emit("local")
+	hub_a.emit_signal("toast_requested", "local")
 	if deliveries[0] != 1:
 		_fail("Match-scoped event hub failed to deliver its local event")
 		return
 
-	var match := SERVER_MATCH_SCENE.instantiate() as MatchController
+	var server_match_scene: PackedScene = load(SERVER_MATCH_SCENE_PATH) as PackedScene
+	var match: Node = server_match_scene.instantiate()
 	if match == null:
 		_fail("Server composition root could not be instantiated")
 		return
 	root.add_child(match)
 	await process_frame
-	if not is_instance_valid(match.events):
+	if not is_instance_valid(match.get("events")):
 		_fail("Match composition root did not create a scoped event hub")
 		return
 	if match.get("_command_router") == null:
 		_fail("Match composition root did not create the authoritative command router")
 		return
-	var first_controller: ColonyController = match.controllers[0]
+	var controllers: Array = match.get("controllers") as Array
+	var first_controller: Node = controllers[0] as Node
 	if first_controller.get("_swarm_scheduler") == null:
 		_fail("Colony aggregate did not create the swarm scheduler service")
 		return

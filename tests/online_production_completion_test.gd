@@ -65,7 +65,10 @@ func _run() -> void:
 		"res://backend/rivet-control/src/rivet-native-allocator.ts"
 	)
 	for marker in [
-		"gameServer.create", "getGatewayUrl", 'transport: "websocket"', "createInRegion"
+		"gameServer.create",
+		"getGatewayUrl",
+		'transport: "websocket"',
+		"options.region = region.providerRegion",
 	]:
 		if not allocator.contains(marker):
 			failures.append("Rivet-native allocator is missing: %s" % marker)

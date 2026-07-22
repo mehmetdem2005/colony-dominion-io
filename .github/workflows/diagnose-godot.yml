@@ -102,6 +102,7 @@ jobs:
           TESTS=(
             tests/phase_04_5_1_compile_smoke_test.gd
             tests/online_foundation_regression_test.gd
+            tests/native_google_region_matchmaking_regression_test.gd
             tests/online_security_contract_test.gd
             tests/online_transport_regression_test.gd
             tests/online_production_completion_test.gd

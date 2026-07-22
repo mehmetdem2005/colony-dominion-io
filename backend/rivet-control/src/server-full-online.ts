@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireSupabaseAuth, type AuthVariables } from "./auth.js";
 import { authConfirmationResponse } from "./auth-confirmation-page.js";
 import { evaluateMatchmakingWindow } from "./matchmaking-policy.js";
+import { resolveRegionProbeUrl } from "./region-probe-directory.js";
 import { findRegion, loadRegions } from "./regions.js";
 import { allocateRivetGameServer } from "./rivet-native-allocator.js";
 import { runtimeRegistry } from "./runtime-registry.js";
@@ -101,7 +102,13 @@ app.get("/v1/health/config", (c) => {
 });
 
 app.get("/v1/health/ping", (c) =>
-  c.json({ ok: true, now: Date.now(), region: process.env.RIVET_REGION ?? "unknown" }),
+  c.json({
+    ok: true,
+    scope: "control-plane",
+    latency_measurement: false,
+    now: Date.now(),
+    provider_region: process.env.CONTROL_PROVIDER_REGION ?? "fra",
+  }),
 );
 app.get("/v1/auth/confirmed", () => authConfirmationResponse());
 
@@ -111,7 +118,7 @@ app.get("/v1/regions", (c) =>
       id: region.id,
       display_name: region.displayName,
       short_name: region.shortName,
-      probe_url: region.probeUrl,
+      probe_url: resolveRegionProbeUrl(region.id, region.probeUrl),
       enabled: region.enabled,
     })),
   }),

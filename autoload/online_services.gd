@@ -8,6 +8,7 @@ signal legal_sync_completed(succeeded: bool, message: String)
 var config: BackendRuntimeConfig
 var auth: SupabaseAuthClient
 var oauth: SupabaseOAuthHandoff
+var android_identity: AndroidGoogleIdentity
 var data: SupabaseDataClient
 var region_probe: RegionProbeService
 var matchmaking: RivetMatchmakingClient
@@ -36,6 +37,10 @@ func _ready() -> void:
 	add_child(oauth)
 	oauth.configure(config.supabase_url, config.supabase_publishable_key)
 
+	android_identity = AndroidGoogleIdentity.new()
+	android_identity.name = "AndroidGoogleIdentity"
+	add_child(android_identity)
+
 	data = SupabaseDataClient.new()
 	data.name = "SupabaseData"
 	add_child(data)
@@ -43,7 +48,9 @@ func _ready() -> void:
 
 	_control_http = HttpJsonClient.new()
 	_control_http.name = "RivetDirectoryHTTP"
-	_control_http.timeout_seconds = config.region_probe_timeout_seconds
+	# Directory/matchmaking control calls can include actor routing and must not
+	# inherit the deliberately short latency-probe timeout.
+	_control_http.timeout_seconds = 15.0
 	add_child(_control_http)
 
 	region_probe = RegionProbeService.new()
@@ -149,12 +156,20 @@ func select_region(region_id: String) -> void:
 
 
 func sign_in_google() -> Dictionary:
+	if OS.get_name() == "Android":
+		if not is_instance_valid(android_identity):
+			return {"ok": false, "error": "Android Google giriş modülü hazır değil"}
+		# Android has exactly one path: the native system account chooser. Never
+		# fall through to browser OAuth, even when the plugin is unavailable.
+		return await android_identity.sign_in(auth, config.google_web_client_id)
 	if not is_instance_valid(oauth):
 		return {"ok": false, "error": "Google giriş servisi hazır değil"}
 	return await oauth.sign_in_google(auth)
 
 
 func cancel_google_sign_in() -> void:
+	if is_instance_valid(android_identity):
+		android_identity.cancel()
 	if is_instance_valid(oauth):
 		oauth.cancel()
 
@@ -243,7 +258,11 @@ func begin_matchmaking(display_name: String) -> Dictionary:
 		if _matchmaking_cancelled:
 			return {"ok": false, "error": "Eşleştirme iptal edildi"}
 		await get_tree().create_timer(1.0, true, false, true).timeout
+		if _matchmaking_cancelled:
+			return {"ok": false, "error": "Eşleştirme iptal edildi"}
 		var status_result: Dictionary = await matchmaking.get_queue_status(auth.get_access_token())
+		if _matchmaking_cancelled:
+			return {"ok": false, "error": "Eşleştirme iptal edildi"}
 		if not bool(status_result.get("ok", false)):
 			continue
 		var body_variant: Variant = status_result.get("body", {})
@@ -369,8 +388,6 @@ func _normalize_regions(value: Variant) -> Array[Dictionary]:
 		if region_id.is_empty() or seen.has(region_id) or not enabled:
 			continue
 		var probe_url: String = String(region.get("probe_url", "")).strip_edges()
-		if probe_url.is_empty():
-			probe_url = QuerySafeUrl.append_path(config.rivet_control_base_url, "/v1/health/ping")
 		if (
 			not probe_url.begins_with("https://")
 			and not (OS.is_debug_build() and probe_url.begins_with("http://"))

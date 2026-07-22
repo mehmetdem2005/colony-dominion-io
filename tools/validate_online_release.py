@@ -39,8 +39,12 @@ def validate() -> dict[str, object]:
     require(regions[0].get("id") == "eu", "deployed client region must be Europe")
     require(regions[0].get("enabled") is True, "Europe region must be enabled")
     require(
-        "/request/v1/health/ping?" in str(regions[0].get("probe_url", "")),
+        "/gateway/regionProbe/request/v1/ping?" in str(regions[0].get("probe_url", "")),
         "Europe probe URL must insert its path before the Rivet query string",
+    )
+    require(
+        str(config.get("google_web_client_id", "")).endswith(".apps.googleusercontent.com"),
+        "Google Web Client ID is missing",
     )
 
     protocol = read("network/network_protocol.gd")
@@ -74,7 +78,8 @@ def validate() -> dict[str, object]:
         (
             "QuerySafeUrl.append_path",
             '"/v1/regions"',
-            '"/v1/health/ping"',
+            "android_identity.sign_in",
+            'OS.get_name() == "Android"',
         ),
     )
     require_markers(
@@ -130,6 +135,7 @@ def validate() -> dict[str, object]:
             "matchmaker",
             "gameServer",
             "controlApi",
+            "regionProbe",
             "maxIncomingMessageSize",
             "maxOutgoingMessageSize",
         ),
@@ -152,13 +158,20 @@ def validate() -> dict[str, object]:
         (
             "PUBLIC_CONTROL_ACTOR_KEY",
             "getGatewayUrl",
+            "createInRegion",
+            "composeActorRequestUrl",
             "RIVET_PUBLIC_CONTROL_GATEWAY_READY",
             "health_verified",
         ),
     )
     require_markers(
         "backend/rivet-control/src/bootstrap.ts",
-        ("ensurePublicControlGateway", "runStartupCanary", "RIVET_FULL_ONLINE_BOOTSTRAP_FAILED"),
+        (
+            "ensurePublicControlGateway",
+            "ensureRegionProbeGateways",
+            "runStartupCanary",
+            "RIVET_FULL_ONLINE_BOOTSTRAP_FAILED",
+        ),
     )
     require_markers(
         "backend/rivet-control/src/game-server-actor.ts",
@@ -183,13 +196,26 @@ def validate() -> dict[str, object]:
             "humanPlayerCount",
             "botCount",
             "ranked",
-            "createInRegion",
+            "Client<typeof runtimeRegistry>",
+            "options.region = region.providerRegion",
             "region.providerRegion",
         ),
     )
+    require(
+        "options.createInRegion" not in read("backend/rivet-control/src/rivet-native-allocator.ts"),
+        "Rivet create() still uses the getOrCreate-only createInRegion field",
+    )
     require_markers(
         "backend/rivet-control/src/regions.ts",
-        ("Avrupa — Frankfurt", 'providerRegion: "fra"', "appendPathBeforeQuery"),
+        ("Avrupa — Frankfurt", 'providerRegion: "fra"'),
+    )
+    require_markers(
+        "backend/rivet-control/src/region-probe-actor.ts",
+        ('scope: "region-probe"', "provider_region", 'endsWith("/v1/ping")'),
+    )
+    require_markers(
+        "backend/rivet-control/src/region-probe-gateway.ts",
+        ("createWithInput", "createInRegion", "RIVET_REGION_PROBE_READY"),
     )
     require_markers(
         "backend/rivet-control/src/server-full-online.ts",
@@ -239,6 +265,8 @@ def validate() -> dict[str, object]:
         (
             "Crypto.new()",
             "OS.shell_open",
+            'OS.get_name() == "Android"',
+            "yalnızca oyun içi hesap seçici",
             "x-colony-oauth-secret",
             "code_challenge",
             "sign_in_pkce_code",
@@ -246,15 +274,66 @@ def validate() -> dict[str, object]:
             "flow_type",
         ),
     )
+    require(
+        "openInAppBrowser" not in read("network/supabase_oauth_handoff.gd"),
+        "Android browser OAuth fallback remains in the handoff client",
+    )
     require_markers(
         "network/supabase_auth_client.gd",
         (
+            "grant_type=id_token",
+            '"provider": "google"',
+            "sign_in_google_id_token",
             "grant_type=pkce",
             "auth_code",
             "code_verifier",
             "PKCE_VERIFIER_PATTERN",
         ),
     )
+    require_markers(
+        "network/android_google_identity.gd",
+        (
+            "startNativeSignIn",
+            "consumeIdToken",
+            "consumeRawNonce",
+            "sign_in_google_id_token",
+        ),
+    )
+    require(
+        "fallback_allowed" not in read("network/android_google_identity.gd"),
+        "Android native sign-in still advertises a browser fallback",
+    )
+    require_markers(
+        "android_plugins/colony_google_identity/src/main/java/io/colonydominion/identity/ColonyGoogleIdentity.java",
+        (
+            "CredentialManager",
+            "GetSignInWithGoogleOption",
+            "GoogleIdTokenCredential",
+            "SecureRandom",
+        ),
+    )
+    native_plugin = read(
+        "android_plugins/colony_google_identity/src/main/java/io/colonydominion/identity/ColonyGoogleIdentity.java"
+    )
+    for marker in ("CustomTabsIntent", "openInAppBrowser", "launchUrl"):
+        require(marker not in native_plugin, f"Android browser fallback remains: {marker}")
+    require(
+        "androidx.browser:browser" not in read("android_plugins/colony_google_identity/build.gradle"),
+        "unused Android browser dependency remains",
+    )
+    require(
+        "androidx.browser:browser" not in read("android/plugins/ColonyGoogleIdentity.gdap"),
+        "Android plugin descriptor still packages browser OAuth support",
+    )
+    require_markers(
+        "tools/prepare_android_native_build.sh",
+        ("android/build/.gdignore",),
+    )
+    require_markers(
+        "network/http_json_client.gd",
+        ("_active_requests", "_idle_requests", "_acquire_request", "_transport_error"),
+    )
+    require("request_busy" not in read("network/http_json_client.gd"), "HTTP request_busy race remains")
     require_markers(
         "ui/auth_panel.gd",
         ("GOOGLE İLE DEVAM ET", "OnlineServices.sign_in_google", "E-posta veya şifre formu kullanılmaz"),
@@ -309,7 +388,34 @@ def validate() -> dict[str, object]:
         "config/*.json,legal/*.json,legal/*.md" in export_text,
         "Android legal/config export filter missing",
     )
-    require('version/name="0.5.5"' in export_text, "Android version mismatch")
+    require('version/name="0.5.6"' in export_text, "Android version mismatch")
+    require(
+        "gradle_build/use_gradle_build=true" in export_text,
+        "canonical Android build does not use Gradle plugins",
+    )
+    require(
+        "plugins/ColonyGoogleIdentity=true" in export_text,
+        "native Google identity plugin is disabled",
+    )
+    require("AndroidInApp" not in export_text, "obsolete split Android preset remains")
+
+    canonical_apk_workflow = read(".github/workflows/build-apk.yml")
+    require(
+        "ANDROID_KEYSTORE_BASE64 is required" in canonical_apk_workflow,
+        "canonical APK can still publish with an ephemeral signing certificate",
+    )
+    require(
+        "configure_android_ci.gd" in canonical_apk_workflow,
+        "canonical APK does not use the validated Godot Android settings path",
+    )
+    require(
+        not (ROOT / ".github/workflows/deploy-rivet-control-staging-v2.yml").exists(),
+        "obsolete cold Rivet staging workflow remains",
+    )
+    require(
+        "settings.save()" not in read("tools/configure_android_ci.gd"),
+        "Godot Android settings script calls a nonexistent save() method",
+    )
 
     deploy_workflow = read(".github/workflows/deploy-rivet-control-staging.yml")
     for marker in (
@@ -320,8 +426,13 @@ def validate() -> dict[str, object]:
         "colony-dominion-rivet-staging.apk",
         "live-verification.json",
         "query_safe_probe",
+        "dedicated_region_probe",
         "BOT_BACKFILL_WAIT_SECONDS",
         'providerRegion":"fra"',
+        "--min-scale 1",
+        "--max-concurrent-actors 8",
+        "RIVET_REGION_PROBE_READY",
+        "GOOGLE_WEB_CLIENT_ID",
     ):
         require(marker in deploy_workflow, f"deployment workflow marker missing: {marker}")
 
@@ -362,10 +473,12 @@ def validate() -> dict[str, object]:
         "bot_backfill_wait_seconds": 30,
         "google_oauth_handoff": True,
         "google_oauth_flow": "pkce",
+        "google_android_flow": "credential_manager_id_token",
         "tokens_in_browser": False,
         "google_only_auth_ui": True,
         "deployed_region": "eu",
         "provider_region": "fra",
+        "dedicated_region_probe": True,
         "migrations": names,
         "text_files_scanned": scanned,
         "external_hosting": False,

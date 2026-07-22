@@ -4,7 +4,7 @@ Public endpoints:
 
 - `GET /v1/health`
 - `GET /v1/health/config`
-- `GET /v1/health/ping`
+- `GET /v1/health/ping` (control diagnostics only; never used as player latency)
 - `GET /v1/regions`
 - `POST /v1/matchmaking/join`
 - `GET /v1/matchmaking/status/:ticket`
@@ -27,6 +27,12 @@ assignment state, hashed one-time join tickets and per-server credential hashes.
 
 The broad `RIVET_CLOUD_TOKEN` is deployment-only and must not be injected into the running
 control plane. Any future allocator integration must use a separate least-privilege runtime credential.
+
+`regionProbe` actors are created once per enabled region and pinned with
+`createInRegion`. The EU probe and every EU game actor use Rivet's `fra` region;
+the public control actor is pinned there separately. Clients validate the probe
+payload identity before displaying latency, so control-plane startup time can no
+longer be mislabeled as game ping.
 
 Each allocation generates a random per-server authentication token. Only its hash is persisted
 in actor state; the raw token is injected into that one Godot container. No shared static
