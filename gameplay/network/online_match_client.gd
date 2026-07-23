@@ -1,7 +1,7 @@
 class_name OnlineMatchClient
 extends Node2D
 
-const PROXY_SCRIPT := preload("res://gameplay/network/network_entity_proxy.gd")
+const PROXY_SCENE := preload("res://scenes/network/network_entity_proxy.tscn")
 const WORLD_STREAM_SCRIPT := preload("res://gameplay/world/world_stream_manager.gd")
 
 var world_bounds := Rect2(-18000.0, -12000.0, 36000.0, 24000.0)
@@ -13,17 +13,19 @@ var _movement_input := Vector2.ZERO
 var _joystick_input := Vector2.ZERO
 var _input_left: float = 0.0
 var _latest_player_state: Dictionary = {}
+var _latest_colony_summaries: Array[Dictionary] = []
 var _leaving: bool = false
 var _input_enabled: bool = true
 var _had_local_anchor: bool = false
 var _lifecycle_state: StringName = &"connecting"
+var _camera_anchor: Node2D = null
 
 @onready var ground_root: Node2D = $World/Ground
 @onready var decoration_root: Node2D = $World/Decorations
 @onready var resource_root: Node2D = $World/Resources
 @onready var entities_root: Node2D = $World/Entities
 @onready var camera: PlayerCameraController = $PlayerCamera
-@onready var hud: OnlineMatchHUD = $HUD
+@onready var hud: ColonyHUD = $HUD
 
 
 func _ready() -> void:
@@ -37,16 +39,19 @@ func _ready() -> void:
 	GameTransport.client_disconnected.connect(_on_disconnected)
 	GameTransport.reconnect_failed.connect(_on_reconnect_failed)
 	GameTransport.match_ended.connect(_on_match_ended)
-	hud.movement_changed.connect(_on_movement_changed)
+	hud.movement_requested.connect(_on_movement_changed)
 	hud.command_requested.connect(_on_command_requested)
 	hud.exit_requested.connect(_exit_to_menu)
 	camera.set_world_bounds(world_bounds)
-	camera.set_safe_frame_insets(Vector4(24.0, 112.0, 24.0, 224.0))
+	if not hud.safe_frame_insets_changed.is_connected(camera.set_safe_frame_insets):
+		hud.safe_frame_insets_changed.connect(camera.set_safe_frame_insets)
+	camera.set_safe_frame_insets(hud.get_world_safe_frame_insets())
 	_world_stream = WORLD_STREAM_SCRIPT.new() as WorldStreamManager
 	add_child(_world_stream)
 	_world_stream.configure(
 		world_bounds, ground_root, decoration_root, resource_root, [], true, false
 	)
+	hud.bind_online(self, GameTransport.get_local_team_id())
 	AudioSystem.enter_match()
 
 
@@ -91,6 +96,13 @@ func _on_snapshot_received(snapshot: Dictionary) -> void:
 			if not entity_variant is Dictionary:
 				continue
 			_apply_entity_snapshot(entity_variant as Dictionary, server_tick)
+	var colonies_variant: Variant = snapshot.get("colonies", [])
+	if colonies_variant is Array and not (colonies_variant as Array).is_empty():
+		_latest_colony_summaries.clear()
+		for colony_variant in colonies_variant:
+			if colony_variant is Dictionary:
+				_latest_colony_summaries.append((colony_variant as Dictionary).duplicate(true))
+		hud.apply_online_leaderboard(_build_leaderboard_entries())
 	var resource_states: Variant = snapshot.get("resource_states", [])
 	if resource_states is Array and is_instance_valid(_world_stream):
 		_world_stream.apply_network_resource_states(resource_states as Array)
@@ -110,7 +122,7 @@ func _apply_entity_snapshot(data: Dictionary, server_tick: int) -> void:
 		return
 	var proxy: NetworkEntityProxy = _proxies.get(entity_id) as NetworkEntityProxy
 	if not is_instance_valid(proxy):
-		proxy = PROXY_SCRIPT.new() as NetworkEntityProxy
+		proxy = PROXY_SCENE.instantiate() as NetworkEntityProxy
 		entities_root.add_child(proxy)
 		proxy.configure(
 			entity_id, int(data.get("team", -1)), StringName(data.get("kind", &"worker"))
@@ -193,6 +205,9 @@ func _set_lifecycle(state: StringName, detail: String = "") -> void:
 
 
 func _set_camera_anchor(anchor: Node2D) -> void:
+	if _camera_anchor == anchor:
+		return
+	_camera_anchor = anchor
 	camera.set_target(anchor)
 	if not is_instance_valid(_world_stream):
 		return
@@ -205,9 +220,89 @@ func _set_camera_anchor(anchor: Node2D) -> void:
 
 func _on_player_state_received(state: Dictionary) -> void:
 	_latest_player_state = state.duplicate(true)
-	hud.apply_player_state(state)
+	hud.apply_online_player_state(state)
 	if bool(state.get("eliminated", false)):
 		_set_lifecycle(&"eliminated", "Sunucu koloninin elendiğini doğruladı.")
+
+
+func get_minimap_snapshot() -> Dictionary:
+	var summaries_by_team: Dictionary = {}
+	for summary in _latest_colony_summaries:
+		summaries_by_team[int(summary.get("team", -1))] = summary
+
+	var colony_entries_by_team: Dictionary = {}
+	for proxy_variant in _proxies.values():
+		var proxy := proxy_variant as NetworkEntityProxy
+		if not is_instance_valid(proxy):
+			continue
+		var team_id: int = proxy.team_id
+		var entry: Dictionary = (
+			colony_entries_by_team
+			. get(
+				team_id,
+				{
+					"team_id": team_id,
+					"color": ColonyVisualCatalog.team_color(team_id),
+					"commander": Vector2.INF,
+					"facing": Vector2.UP,
+					"nest": Vector2.INF,
+					"army_size": 0,
+					"active": true,
+					"is_player": team_id == GameTransport.get_local_team_id(),
+				}
+			)
+		)
+		if proxy.kind == &"commander":
+			entry["commander"] = proxy.global_position
+			entry["facing"] = proxy.facing_direction
+		elif proxy.kind == &"nest":
+			entry["nest"] = proxy.global_position
+		var summary: Dictionary = summaries_by_team.get(team_id, {})
+		if not summary.is_empty():
+			entry["army_size"] = int(summary.get("army", 0))
+			entry["active"] = bool(summary.get("active", true))
+		colony_entries_by_team[team_id] = entry
+
+	var chunk_entries: Array[Dictionary] = []
+	var resource_points: Array[Dictionary] = []
+	var loaded_chunks: Array[Vector2i] = []
+	var chunk_size: float = 1200.0
+	if is_instance_valid(_world_stream):
+		chunk_entries = _world_stream.get_minimap_chunk_entries()
+		resource_points = _world_stream.get_minimap_resource_points()
+		loaded_chunks = _world_stream.get_loaded_chunk_coords()
+		chunk_size = _world_stream.get_chunk_size()
+	return {
+		"world_bounds": world_bounds,
+		"colonies": colony_entries_by_team.values(),
+		"view_rect": camera.get_world_view_rect() if is_instance_valid(camera) else Rect2(),
+		"loaded_chunks": loaded_chunks,
+		"chunk_entries": chunk_entries,
+		"resources": resource_points,
+		"chunk_size": chunk_size,
+	}
+
+
+func _build_leaderboard_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for summary in _latest_colony_summaries:
+		var team_id: int = int(summary.get("team", -1))
+		(
+			entries
+			. append(
+				{
+					"name": String(summary.get("name", "Koloni %d" % (team_id + 1))),
+					"score": int(summary.get("score", 0)),
+					"eliminated": not bool(summary.get("active", true)),
+					"team_color": ColonyVisualCatalog.team_color(team_id),
+				}
+			)
+		)
+	entries.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			return int(a.get("score", 0)) > int(b.get("score", 0))
+	)
+	return entries
 
 
 func _on_movement_changed(value: Vector2) -> void:

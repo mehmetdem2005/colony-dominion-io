@@ -8,9 +8,12 @@ on:
   pull_request:
     paths:
       - "autoload/**"
+      - "gameplay/**"
       - "network/**"
+      - "scenes/**"
       - "tests/**"
       - "tools/configure_android_ci.gd"
+      - "ui/**"
       - "config/backend_config.json"
       - "project.godot"
       - "export_presets.cfg"
@@ -94,6 +97,7 @@ jobs:
             tests/online_foundation_regression_test.gd
             tests/online_security_contract_test.gd
             tests/online_transport_regression_test.gd
+            tests/online_presentation_parity_regression_test.gd
             tests/online_production_completion_test.gd
             tests/google_oauth_bot_backfill_test.gd
           )
@@ -101,7 +105,7 @@ jobs:
             "$GODOT_BIN" --headless --path . --script "res://$test_path"
           done
 
-      - name: Verify live Rivet control surface
+      - name: Verify live Edgegap matchmaking boundary
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -112,43 +116,45 @@ jobs:
           from pathlib import Path
 
           config = json.loads(Path("config/backend_config.json").read_text(encoding="utf-8"))
-          base = str(config["rivet_control_base_url"]).strip()
+          base = str(config["supabase_url"]).rstrip("/")
+          publishable_key = str(config["supabase_publishable_key"]).strip()
 
           def endpoint(path: str) -> str:
-              parsed = urllib.parse.urlsplit(base)
-              full_path = parsed.path.rstrip("/") + "/" + path.lstrip("/")
-              return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, full_path, parsed.query, ""))
+              return f"{base}/functions/v1/matchmaking/{path.lstrip('/')}"
 
           def get_json(path: str) -> dict:
               request = urllib.request.Request(
                   endpoint(path),
-                  headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+                  headers={
+                      "Accept": "application/json",
+                      "Cache-Control": "no-cache",
+                      "apikey": publishable_key,
+                  },
               )
               with urllib.request.urlopen(request, timeout=30) as response:
                   if response.status != 200:
                       raise SystemExit(f"{path} returned HTTP {response.status}")
                   return json.loads(response.read().decode("utf-8"))
 
-          health = get_json("/v1/health")
-          regions = get_json("/v1/regions")
-          if health.get("ok") is not True:
-              raise SystemExit(f"Rivet health failed: {health}")
-          if not any(bool(region.get("enabled")) for region in regions.get("regions", [])):
-              raise SystemExit(f"No enabled Rivet region: {regions}")
+          health = get_json("/health")
+          if health.get("ok") is not True or health.get("service") != "colony-edgegap-matchmaking":
+              raise SystemExit(f"Edgegap matchmaking health failed: {health}")
 
           payload = json.dumps({
               "player_id": "00000000-0000-4000-8000-000000000001",
               "display_name": "APKSmoke",
               "region_preference": "auto",
-              "selected_region_id": "eu",
-              "build_id": config["build_id"],
-              "protocol_version": config["protocol_version"],
+              "selected_region_id": "auto",
           }).encode("utf-8")
           unauthorized = urllib.request.Request(
-              endpoint("/v1/matchmaking/join"),
+              endpoint("/join"),
               data=payload,
               method="POST",
-              headers={"Accept": "application/json", "Content-Type": "application/json"},
+              headers={
+                  "Accept": "application/json",
+                  "Content-Type": "application/json",
+                  "apikey": publishable_key,
+              },
           )
           try:
               urllib.request.urlopen(unauthorized, timeout=30)
@@ -160,7 +166,12 @@ jobs:
 
           report = {
               "health": True,
-              "enabled_regions": [r.get("id") for r in regions.get("regions", []) if r.get("enabled")],
+              "edgegap_configured": bool(health.get("configured")),
+              "placement_targets": [
+                  region.get("id")
+                  for region in config.get("regions", [])
+                  if region.get("enabled")
+              ],
               "auth_boundary": True,
               "build_id": config["build_id"],
               "protocol_version": config["protocol_version"],

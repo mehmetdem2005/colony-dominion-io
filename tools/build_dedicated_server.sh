@@ -75,6 +75,7 @@ TESTS=(
   tests/online_foundation_regression_test.gd
   tests/online_security_contract_test.gd
   tests/online_transport_regression_test.gd
+  tests/online_presentation_parity_regression_test.gd
   tests/online_production_completion_test.gd
   tests/north_world_depth_regression_test.gd
 )

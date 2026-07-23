@@ -5,20 +5,29 @@ on:
   push:
     branches: [main]
     paths:
+      - "autoload/**"
+      - "config/**"
       - "network/**"
       - "backend/**"
-      - "gameplay/network/**"
-      - "gameplay/world/**"
+      - "deploy/edgegap/**"
+      - "gameplay/**"
+      - "scenes/**"
+      - "ui/**"
       - "tools/**"
       - "tests/**"
       - "project.godot"
       - "export_presets.cfg"
+      - ".github/workflows/online-release.yml"
   pull_request:
     paths:
+      - "autoload/**"
+      - "config/**"
       - "network/**"
       - "backend/**"
-      - "gameplay/network/**"
-      - "gameplay/world/**"
+      - "deploy/edgegap/**"
+      - "gameplay/**"
+      - "scenes/**"
+      - "ui/**"
       - "tools/**"
       - "tests/**"
       - "project.godot"
@@ -35,20 +44,30 @@ jobs:
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          package-manager-cache: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - name: Install validation tools
         run: |
           python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
       - name: Install Godot 4.6.3 and export templates
         run: tools/install_godot_ci.sh
+      - name: Import and parse Godot project
+        run: |
+          "$GODOT_BIN" \
+            --headless \
+            --quiet \
+            --no-header \
+            --path "$GITHUB_WORKSPACE" \
+            --editor \
+            --quit
       - name: Validate online release architecture
         run: python tools/validate_online_release.py
+      - name: Typecheck Edgegap matchmaking function
+        run: deno check backend/supabase/functions/matchmaking/index.ts
       - name: Lint project GDScript
         shell: bash
         run: |
@@ -94,18 +113,24 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: build/diagnostics/
-      - name: Run deployment bootstrap regression
-        run: python tools/test_deploy_online_stack.py
-      - name: Typecheck Rivet control plane
-        working-directory: backend/rivet-control
+      - name: Run online regression tests
+        shell: bash
         run: |
-          npm install --no-audit --no-fund
-          npm run typecheck
-          npm run test:policy
+          set -euo pipefail
+          tests=(
+            tests/online_foundation_regression_test.gd
+            tests/online_security_contract_test.gd
+            tests/online_transport_regression_test.gd
+            tests/online_presentation_parity_regression_test.gd
+            tests/online_production_completion_test.gd
+          )
+          for test_path in "${tests[@]}"; do
+            "$GODOT_BIN" --headless --path . --script "res://$test_path"
+          done
       - name: Build dedicated server
         run: tools/build_dedicated_server.sh
       - name: Build container image
-        run: docker build -f backend/game-server/Dockerfile -t colony-dominion-server:${{ github.sha }} .
+        run: docker build -f deploy/edgegap/Dockerfile -t colony-dominion-server:${{ github.sha }} .
       - uses: actions/upload-artifact@v6
         with:
           name: colony-dedicated-server

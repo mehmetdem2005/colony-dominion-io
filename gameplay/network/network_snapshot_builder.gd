@@ -63,6 +63,7 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 				. append(
 					{
 						"team": controller.team_id,
+						"name": controller.display_name,
 						"army": controller.get_army_size(),
 						"active": controller.is_active(),
 						"score": controller.get_score(),
@@ -88,25 +89,11 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 
 
 func _build_player_state(viewer: ColonyController) -> Dictionary:
-	var inventory_snapshot: Dictionary = {}
-	if viewer.inventory != null:
-		inventory_snapshot = viewer.inventory.snapshot()
-	var queue: Array[StringName] = []
-	var production_progress: float = 0.0
-	if is_instance_valid(viewer.nest):
-		queue = viewer.nest.production_queue.duplicate()
-		production_progress = clampf(viewer.nest.production_progress, 0.0, 1.0)
-	return {
-		"team_id": viewer.team_id,
-		"inventory": inventory_snapshot,
-		"level": viewer.progression.level if viewer.progression != null else 1,
-		"army": viewer.get_army_size(),
-		"capacity": viewer.get_unit_capacity(),
-		"score": viewer.get_score(),
-		"queue": queue,
-		"production_progress": production_progress,
-		"match_time": float(_host.get("match_seconds_left")) if is_instance_valid(_host) else 0.0,
-	}
+	var state: Dictionary = viewer.get_player_presentation_state()
+	state["match_time"] = (
+		float(_host.get("match_seconds_left")) if is_instance_valid(_host) else 0.0
+	)
+	return state
 
 
 func retire_entity(entity_id: int) -> void:
@@ -168,20 +155,18 @@ func _append_relevant_units(
 			full_keyframe
 			or _is_entity_due(viewer_team_id, unit.network_entity_id, interval_ticks, server_tick)
 		)
-		(
-			entities
-			. append(
-				{
-					"id": unit.network_entity_id,
-					"team": unit.team_id,
-					"kind": unit.definition.unit_id,
-					"position": _quantize_position(unit.global_position),
-					"health": roundi(unit.get_health_ratio() * 255.0),
-					"_distance_sq": distance_squared,
-					"_due": due,
-				}
-			)
-		)
+		var entry := {
+			"id": unit.network_entity_id,
+			"team": unit.team_id,
+			"kind": unit.definition.unit_id,
+			"position": _quantize_position(unit.global_position),
+			"health": roundi(unit.get_health_ratio() * 255.0),
+			"_distance_sq": distance_squared,
+			"_due": due,
+		}
+		if unit.definition.role == &"commander":
+			entry["name"] = controller.display_name
+		entities.append(entry)
 
 
 func _append_relevant_nest(
@@ -214,6 +199,7 @@ func _append_relevant_nest(
 				"kind": &"nest",
 				"position": _quantize_position(controller.nest.global_position),
 				"health": roundi(controller.nest.get_health_ratio() * 255.0),
+				"level": controller.progression.level if controller.progression != null else 1,
 				"_distance_sq": origin.distance_squared_to(controller.nest.global_position),
 				"_due": due,
 			}

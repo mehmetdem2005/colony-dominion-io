@@ -62,7 +62,10 @@ func _ready() -> void:
 	matchmaking.name = "EdgegapMatchmaking"
 	add_child(matchmaking)
 	matchmaking.configure(
-		config.supabase_url, config.supabase_publishable_key, config.build_id, config.protocol_version
+		config.supabase_url,
+		config.supabase_publishable_key,
+		config.build_id,
+		config.protocol_version
 	)
 	matchmaking.queue_status_changed.connect(matchmaking_status_changed.emit)
 
@@ -88,10 +91,13 @@ func get_missing_client_settings() -> PackedStringArray:
 func get_regions() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for region in config.regions:
-		if not bool(region.get("enabled", true)):
+		if not bool(region.get("enabled", true)) or String(region.get("id", "")) == "auto":
 			continue
 		var copy: Dictionary = region.duplicate(true)
-		copy["metrics"] = region_probe.get_metrics(String(region.get("id", "")))
+		var metrics: Dictionary = region_probe.get_metrics(String(region.get("id", "")))
+		if bool(region.get("placement_only", false)):
+			metrics["placement_only"] = true
+		copy["metrics"] = metrics
 		result.append(copy)
 	return result
 
@@ -314,7 +320,17 @@ func _consume_queue_status(status: Dictionary) -> Dictionary:
 			}
 		NetworkSession.set_match_assignment(assignment)
 		var region_id: String = String(assignment.get("region_id", ""))
-		if not region_id.is_empty():
+		if region_id == "auto":
+			var actual_region_name: String = String(
+				assignment.get("region_name", "Edgegap — En Yakın")
+			)
+			NetworkSession.select_region(
+				"auto",
+				"Otomatik — %s" % actual_region_name,
+				String(assignment.get("region_short_name", "EDGE")),
+				{}
+			)
+		elif not region_id.is_empty():
 			_apply_region_selection(region_id, false)
 		NetworkSession.set_connection_state(
 			NetworkSession.ConnectionState.CONNECTING, "Oyun sunucusuna bağlanılıyor"

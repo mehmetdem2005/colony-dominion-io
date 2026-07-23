@@ -26,6 +26,36 @@ const JSON_HEADERS = new Headers({
   "Cache-Control": "no-store",
 });
 
+type RegionTarget = {
+  latitude: number;
+  longitude: number;
+  displayName: string;
+  shortName: string;
+};
+
+// Manual targets are deliberately resolved server-side. The client may select
+// an id, but it cannot inject arbitrary coordinates into the Edgegap request.
+const REGION_TARGETS: Record<string, RegionTarget> = {
+  "tr": {
+    latitude: 41.0082,
+    longitude: 28.9784,
+    displayName: "Türkiye",
+    shortName: "TR",
+  },
+  "eu-se": {
+    latitude: 42.6977,
+    longitude: 23.3219,
+    displayName: "Güneydoğu Avrupa",
+    shortName: "EU-SE",
+  },
+  "eu-central": {
+    latitude: 50.1109,
+    longitude: 8.6821,
+    displayName: "Orta Avrupa",
+    shortName: "EU-C",
+  },
+};
+
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: JSON_HEADERS });
 }
@@ -46,10 +76,79 @@ function edgegapHeaders(): HeadersInit {
   return { authorization: value, "content-type": "application/json" };
 }
 
+function normalizeIpv4(value: string): string {
+  const parts = value.split(".");
+  if (parts.length !== 4) return "";
+  const numbers = parts.map((part) => Number(part));
+  if (numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return "";
+  return numbers.join(".");
+}
+
+function normalizeIp(value: string): string {
+  let candidate = value.trim().replace(/^for=/i, "").replace(/^["']|["']$/g, "");
+  if (candidate.startsWith("[") && candidate.includes("]")) {
+    candidate = candidate.slice(1, candidate.indexOf("]"));
+  }
+  const mappedV4 = candidate.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1] ?? "";
+  if (mappedV4) return normalizeIpv4(mappedV4);
+  const ipv4 = normalizeIpv4(candidate);
+  if (ipv4) return ipv4;
+  if (
+    candidate.length <= 64 &&
+    candidate.includes(":") &&
+    /^[0-9a-f:]+$/i.test(candidate)
+  ) {
+    return candidate.toLowerCase();
+  }
+  return "";
+}
+
 function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for") ?? "";
-  const first = forwarded.split(",")[0]?.trim();
-  return first || (request.headers.get("x-real-ip") ?? "").trim();
+  // Supabase/Cloudflare may expose the original address under different
+  // trusted proxy headers. Validate every candidate before passing it to
+  // Edgegap so a malformed header cannot silently force a remote deployment.
+  const headerNames = [
+    "cf-connecting-ip",
+    "x-real-ip",
+    "x-forwarded-for",
+    "true-client-ip",
+  ];
+  for (const headerName of headerNames) {
+    const raw = request.headers.get(headerName) ?? "";
+    for (const part of raw.split(",")) {
+      const normalized = normalizeIp(part);
+      if (normalized) return normalized;
+    }
+  }
+  return "";
+}
+
+function normalizeRegionId(value: unknown): string {
+  const cleaned = String(value ?? "").trim().toLowerCase();
+  return /^[a-z0-9-]{2,32}$/.test(cleaned) ? cleaned : "auto";
+}
+
+function requestedRegion(payload: Record<string, unknown>): string {
+  const selected = normalizeRegionId(payload.selected_region_id);
+  if (selected !== "auto" && REGION_TARGETS[selected]) return selected;
+  const preferred = normalizeRegionId(payload.region_preference);
+  if (preferred !== "auto" && REGION_TARGETS[preferred]) return preferred;
+  return "auto";
+}
+
+async function requestObject(request: Request): Promise<Record<string, unknown> | null> {
+  const parsed = await request.json().catch(() => null);
+  if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") return null;
+  return parsed as Record<string, unknown>;
+}
+
+function deploymentRegionId(payload: Record<string, unknown>): string {
+  const tags = Array.isArray(payload.tags) ? payload.tags : [];
+  for (const tag of tags) {
+    const match = String(tag).match(/^region-([a-z0-9-]{2,32})$/);
+    if (match) return normalizeRegionId(match[1]);
+  }
+  return "auto";
 }
 
 function routeParts(request: Request): string[] {
@@ -62,16 +161,33 @@ function routeParts(request: Request): string[] {
 
 // Verify the caller is a signed-in Supabase user (the function is deployed with
 // --no-verify-jwt so /health stays public, so /join must check auth itself).
-async function requireUser(request: Request): Promise<boolean> {
+async function authenticatedUserId(request: Request): Promise<string> {
   const auth = request.headers.get("authorization") ?? "";
-  if (!/^Bearer\s+.+/i.test(auth)) return false;
+  if (!/^Bearer\s+.+/i.test(auth)) return "";
   const base = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
   const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  if (!base || !anon) return false;
+  if (!base || !anon) return "";
   const response = await fetch(`${base}/auth/v1/user`, {
     headers: { apikey: anon, authorization: auth },
   }).catch(() => null);
-  return Boolean(response && response.ok);
+  if (!response?.ok) return "";
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const userId = String(payload.id ?? "").trim();
+  return /^[A-Za-z0-9_-]{16,128}$/.test(userId) ? userId : "";
+}
+
+function displayName(payload: Record<string, unknown>): string {
+  const cleaned = String(payload.display_name ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 24);
+  return cleaned || "Player";
+}
+
+function gameMaxPlayers(): number {
+  const configured = Number.parseInt(env("GAME_MAX_PLAYERS"), 10);
+  if (!Number.isInteger(configured)) return 10;
+  return Math.min(Math.max(configured, 1), 10);
 }
 
 // POST /join — deploy a server near the player and return a request handle.
@@ -81,39 +197,61 @@ async function join(request: Request): Promise<Response> {
   if (!env("EDGEGAP_API_TOKEN") || !appName || !versionName) {
     return json({ ok: false, error: "matchmaking_not_configured" }, 503);
   }
-  if (!(await requireUser(request))) {
+  const authenticatedPlayerId = await authenticatedUserId(request);
+  if (!authenticatedPlayerId) {
     return json({ ok: false, error: "authentication_required" }, 401);
   }
   const ip = clientIp(request);
   if (!ip) return json({ ok: false, error: "client_ip_unavailable" }, 400);
+  const requestPayload = await requestObject(request);
+  if (requestPayload === null) {
+    return json({ ok: false, error: "invalid_request_payload" }, 400);
+  }
+  const claimedPlayerId = String(requestPayload.player_id ?? "").trim();
+  if (claimedPlayerId && claimedPlayerId !== authenticatedPlayerId) {
+    return json({ ok: false, error: "player_identity_mismatch" }, 403);
+  }
+  const trustedDisplayName = displayName(requestPayload);
+  const regionId = requestedRegion(requestPayload);
+  const regionTarget = REGION_TARGETS[regionId];
 
-  // The game server authenticates each client with a join ticket + match/server
-  // identity. Generate them here, hand them to the server via env, and return
-  // them to the client so the two sides agree. The server accepts the ticket
-  // directly (DEV_ACCEPT_JOIN_TICKETS) instead of calling a control plane.
+  // The game server authenticates each client with a single-use join ticket,
+  // authenticated player id, and match/server identity. Generate them here,
+  // inject the trusted claims into the server, and return only the client claim.
   const matchId = crypto.randomUUID();
   const serverId = crypto.randomUUID();
   const joinTicket = randomHex(24);
-  const maxPlayers = env("GAME_MAX_PLAYERS") || "10";
+  const maxPlayers = gameMaxPlayers();
   const buildId = env("GAME_BUILD_ID") || "colony";
 
-  const body = {
+  const body: Record<string, unknown> = {
     app_name: appName,
     version_name: versionName,
     ip_list: [ip],
+    skip_telemetry: true,
+    tags: ["colony", `region-${regionId}`],
     env_vars: [
       { key: "MATCH_ID", value: matchId },
       { key: "SERVER_ID", value: serverId },
       { key: "BUILD_ID", value: buildId },
-      { key: "MAX_PLAYERS", value: maxPlayers },
+      { key: "MAX_PLAYERS", value: String(maxPlayers) },
       { key: "EXPECTED_PLAYERS", value: "1" },
-      { key: "HUMAN_PLAYERS", value: "1" },
-      { key: "BOT_PLAYERS", value: String(Math.max(0, Number(maxPlayers) - 1)) },
+      { key: "HUMAN_PLAYER_COUNT", value: "1" },
+      { key: "BOT_COUNT", value: String(maxPlayers - 1) },
+      { key: "RANKED_MATCH", value: "0" },
       { key: "NETWORK_TRANSPORT", value: "enet" },
       { key: "GAME_PORT", value: "20000" },
-      { key: "DEV_ACCEPT_JOIN_TICKETS", value: "1" },
+      { key: "EXPECTED_JOIN_TICKET", value: joinTicket, is_hidden: true },
+      { key: "EXPECTED_PLAYER_ID", value: authenticatedPlayerId, is_hidden: true },
+      { key: "EXPECTED_DISPLAY_NAME", value: trustedDisplayName },
     ],
   };
+  if (regionTarget) {
+    body.location = {
+      latitude: regionTarget.latitude,
+      longitude: regionTarget.longitude,
+    };
+  }
   const response = await fetch(`${EDGEGAP_API}/deploy`, {
     method: "POST",
     headers: edgegapHeaders(),
@@ -133,6 +271,7 @@ async function join(request: Request): Promise<Response> {
     match_id: matchId,
     server_id: serverId,
     build_id: buildId,
+    region_id: regionId,
     poll_interval_ms: 1500,
   });
 }
@@ -145,7 +284,7 @@ async function status(requestId: string): Promise<Response> {
   const response = await fetch(`${EDGEGAP_API}/status/${encodeURIComponent(requestId)}`, {
     headers: edgegapHeaders(),
   });
-  const payload = await response.json().catch(() => ({}));
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) return json({ ok: false, error: "status_failed" }, 502);
 
   const current = String(payload.current_status ?? "");
@@ -165,6 +304,11 @@ async function status(requestId: string): Promise<Response> {
     return json({ ok: false, error: "invalid_deployment_endpoint" }, 502);
   }
 
+  const regionId = deploymentRegionId(payload);
+  const regionTarget = REGION_TARGETS[regionId];
+  const city = String(payload.city ?? "").trim();
+  const country = String(payload.country ?? "").trim();
+  const actualLocation = [city, country].filter(Boolean).join(", ");
   return json({
     ok: true,
     ready: true,
@@ -173,7 +317,9 @@ async function status(requestId: string): Promise<Response> {
       host: publicIp,
       port: externalPort,
       request_id: requestId,
-      region_name: String(payload.city ?? payload.country ?? "Edge"),
+      region_id: regionId,
+      region_name: actualLocation || regionTarget?.displayName || "Edgegap — En Yakın",
+      region_short_name: regionTarget?.shortName ?? "EDGE",
     },
   });
 }

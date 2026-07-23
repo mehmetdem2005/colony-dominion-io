@@ -102,6 +102,7 @@ func _apply(data: Dictionary) -> void:
 					String(region.get("short_name", region_id.to_upper())).strip_edges(),
 					"probe_url": String(region.get("probe_url", "")).strip_edges(),
 					"enabled": bool(region.get("enabled", true)),
+					"placement_only": bool(region.get("placement_only", false)),
 				}
 			)
 		)

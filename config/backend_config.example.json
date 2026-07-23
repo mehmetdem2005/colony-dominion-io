@@ -10,10 +10,11 @@
   "region_probe_timeout_seconds": 2.5,
   "regions": [
     {
-      "id": "eu",
-      "display_name": "Avrupa",
-      "short_name": "EU",
-      "probe_url": "https://eu.example.com/v1/health/ping",
+      "id": "auto",
+      "display_name": "Otomatik — En Yakın Sunucu",
+      "short_name": "AUTO",
+      "probe_url": "",
+      "placement_only": true,
       "enabled": true
     }
   ]

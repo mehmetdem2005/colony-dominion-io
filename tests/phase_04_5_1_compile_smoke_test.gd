@@ -15,7 +15,7 @@ const REQUIRED_RESOURCES: Array[String] = [
 	"res://network/supabase_auth_client.gd",
 	"res://network/supabase_data_client.gd",
 	"res://network/region_probe_service.gd",
-	"res://network/rivet_matchmaking_client.gd",
+	"res://network/edgegap_matchmaking_client.gd",
 	"res://scenes/main_menu.tscn",
 	"res://scenes/main_game.tscn",
 	"res://scenes/server_game.tscn",

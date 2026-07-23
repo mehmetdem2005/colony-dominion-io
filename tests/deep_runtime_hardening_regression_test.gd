@@ -1,9 +1,9 @@
 extends SceneTree
 
-const SERVER_MATCH_SCENE := preload("res://scenes/server_game.tscn")
 const REGISTRY_SCRIPT := preload("res://gameplay/network/network_entity_registry.gd")
-const PROJECTILE_SCENE := preload("res://scenes/combat/projectile.tscn")
-const RESOURCE_SCENE := preload("res://scenes/resources/resource_node.tscn")
+const SERVER_MATCH_SCENE_PATH := "res://scenes/server_game.tscn"
+const PROJECTILE_SCENE_PATH := "res://scenes/combat/projectile.tscn"
+const RESOURCE_SCENE_PATH := "res://scenes/resources/resource_node.tscn"
 
 
 class EntityStub:
@@ -69,7 +69,11 @@ func _test_inventory_negative_cost(failures: Array[String]) -> void:
 
 
 func _test_invalid_projectile_configuration(failures: Array[String]) -> void:
-	var projectile := PROJECTILE_SCENE.instantiate() as AcidProjectile
+	var projectile_scene := load(PROJECTILE_SCENE_PATH) as PackedScene
+	if projectile_scene == null:
+		failures.append("Projectile scene could not be loaded")
+		return
+	var projectile := projectile_scene.instantiate()
 	var resolver := EntityStub.new()
 	var attacker := EntityStub.new()
 	var target := EntityStub.new()
@@ -79,11 +83,11 @@ func _test_invalid_projectile_configuration(failures: Array[String]) -> void:
 	root.add_child(projectile)
 	attacker.network_entity_id = 1
 	target.network_entity_id = 2
-	projectile.configure(resolver, attacker, target, NAN, 420.0, Color.WHITE)
-	if projectile.active:
+	projectile.call("configure", resolver, attacker, target, NAN, 420.0, Color.WHITE)
+	if bool(projectile.get("active")):
 		failures.append("Projectile accepted non-finite damage")
-	projectile.configure(resolver, attacker, target, 10.0, -1.0, Color.WHITE)
-	if projectile.active:
+	projectile.call("configure", resolver, attacker, target, 10.0, -1.0, Color.WHITE)
+	if bool(projectile.get("active")):
 		failures.append("Projectile accepted non-positive speed")
 	projectile.free()
 	resolver.free()
@@ -93,50 +97,64 @@ func _test_invalid_projectile_configuration(failures: Array[String]) -> void:
 
 
 func _test_resource_input_sanitization(failures: Array[String]) -> void:
-	var resource := RESOURCE_SCENE.instantiate() as WorldResourceNode
+	var resource_scene := load(RESOURCE_SCENE_PATH) as PackedScene
+	if resource_scene == null:
+		failures.append("Resource scene could not be loaded")
+		return
+	var resource := resource_scene.instantiate()
 	root.add_child(resource)
-	resource.configure(&"seed", null, -50, NAN)
-	if resource.amount != 1 or resource.max_amount != 1:
+	resource.call("configure", &"seed", null, -50, NAN)
+	if int(resource.get("amount")) != 1 or int(resource.get("max_amount")) != 1:
 		failures.append("Resource activation did not clamp an invalid starting amount")
-	resource.advance_simulation(NAN)
-	if resource.amount != 1:
+	resource.call("advance_simulation", NAN)
+	if int(resource.get("amount")) != 1:
 		failures.append("Non-finite resource simulation delta mutated state")
 	resource.free()
 	await process_frame
 
 
 func _test_server_match_runtime_guards(failures: Array[String]) -> void:
-	var match_node := SERVER_MATCH_SCENE.instantiate() as MatchController
+	var server_match_scene := load(SERVER_MATCH_SCENE_PATH) as PackedScene
+	if server_match_scene == null:
+		failures.append("Server match scene could not be loaded")
+		return
+	var match_node := server_match_scene.instantiate()
+	if match_node == null:
+		failures.append("Server match composition root could not be instantiated")
+		return
 	root.add_child(match_node)
 	await process_frame
-	if match_node.controllers.is_empty():
+	var controllers_variant: Variant = match_node.get("controllers")
+	if not controllers_variant is Array or controllers_variant.is_empty():
 		failures.append("Server match did not initialize colonies")
 		match_node.free()
 		return
-	var player_controller: ColonyController = match_node.controllers[0]
-	for controller_variant in match_node.controllers:
-		var active_controller: ColonyController = controller_variant
-		if not active_controller.is_active():
+	var controllers: Array = controllers_variant
+	var player_controller := controllers[0] as Node
+	for controller_variant in controllers:
+		var active_controller := controller_variant as Node
+		if not bool(active_controller.call("is_active")):
 			failures.append("A live server colony was reported inactive")
 	match_node.call("_check_victory")
-	if match_node.match_finished:
+	if bool(match_node.get("match_finished")):
 		failures.append("Server match ended while multiple colonies were alive")
-	var eliminated_controller: ColonyController = match_node.controllers[1]
-	eliminated_controller.eliminated = true
-	if match_node.assign_peer_to_team(99, eliminated_controller.team_id):
+	var eliminated_controller := controllers[1] as Node
+	eliminated_controller.set("eliminated", true)
+	if bool(match_node.call("assign_peer_to_team", 99, int(eliminated_controller.get("team_id")))):
 		failures.append("A peer was assigned to an eliminated colony")
-	eliminated_controller.eliminated = false
-	player_controller.set_joystick_input(Vector2(NAN, 0.0))
-	if player_controller.get_movement_input() != Vector2.ZERO:
+	eliminated_controller.set("eliminated", false)
+	player_controller.call("set_joystick_input", Vector2(NAN, 0.0))
+	if player_controller.call("get_movement_input") != Vector2.ZERO:
 		failures.append("Non-finite movement input reached colony simulation")
-	var snapshot: Dictionary = match_node.build_network_snapshot_for_team(0, NAN)
+	var snapshot_variant: Variant = match_node.call("build_network_snapshot_for_team", 0, NAN)
+	var snapshot: Dictionary = snapshot_variant if snapshot_variant is Dictionary else {}
 	if snapshot.is_empty() or not snapshot.has("entities"):
 		failures.append("Non-finite snapshot radius broke snapshot generation")
-	var commander: ColonyUnit = player_controller.commander
+	var commander := player_controller.get("commander") as Node
 	if is_instance_valid(commander):
-		var health_before: float = commander.health
-		commander.take_damage(NAN)
-		if not is_equal_approx(commander.health, health_before):
+		var health_before: float = float(commander.get("health"))
+		commander.call("take_damage", NAN)
+		if not is_equal_approx(float(commander.get("health")), health_before):
 			failures.append("Non-finite unit damage changed health")
 	match_node.free()
 	await process_frame
@@ -183,7 +201,10 @@ func _test_source_contracts(failures: Array[String]) -> void:
 			"on_controller_commander_changed",
 			"if is_instance_valid(camera_anchor):",
 			"controller.eliminated",
-			"_build_empty_network_snapshot",
+		],
+		"res://gameplay/network/network_snapshot_builder.gd":
+		[
+			"_build_empty",
 		],
 		"res://gameplay/world/streamed_world_prop.gd":
 		[

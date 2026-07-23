@@ -187,14 +187,9 @@ func _create_nest(spawn_position: Vector2) -> void:
 	match_controller.structures_root.add_child(nest)
 	nest.global_position = spawn_position
 	nest.refresh_world_depth()
-	var texture_path: String = (
-		"res://assets/structures/nest_blue.png"
-		if is_player
-		else "res://assets/structures/nest_red.png"
-	)
 	var nest_texture: Texture2D = null
 	if is_presentation_enabled():
-		nest_texture = load(texture_path) as Texture2D
+		nest_texture = ColonyVisualCatalog.nest_texture(team_id)
 	var nest_entity_id: int = match_controller.register_network_entity(nest)
 	if nest_entity_id <= 0:
 		push_error("Failed to register colony nest network entity for team %d" % team_id)
@@ -699,6 +694,41 @@ func get_swarm_scheduler_stats() -> Dictionary:
 
 func get_unit_capacity() -> int:
 	return mini(progression.get_capacity(), match_controller.unit_cap_per_colony)
+
+
+func get_player_presentation_state() -> Dictionary:
+	var queue: Array[StringName] = []
+	var production_progress: float = 0.0
+	if is_instance_valid(nest):
+		queue = nest.production_queue.duplicate()
+		if not queue.is_empty():
+			var definition: UnitDefinition = UnitCatalog.get_definition(queue[0])
+			if definition != null:
+				var duration: float = maxf(
+					definition.spawn_time * get_production_time_multiplier(), 0.12
+				)
+				production_progress = clampf(nest.production_progress / duration, 0.0, 1.0)
+	var gather_state: Dictionary = (
+		_gather_service.get_presentation_state() if _gather_service != null else {}
+	)
+	return {
+		"team_id": team_id,
+		"inventory": inventory.snapshot() if inventory != null else {},
+		"level": progression.level if progression != null else 1,
+		"army": get_army_size(),
+		"capacity": get_unit_capacity(),
+		"score": get_score(),
+		"queue": queue,
+		"production_progress": production_progress,
+		"next_upgrade_cost": progression.get_next_upgrade_cost() if progression != null else {},
+		"nest_active": is_instance_valid(nest) and nest.is_alive(),
+		"eliminated": eliminated,
+		"split_mode": squad_manager.split_mode if squad_manager != null else false,
+		"spread_mode": squad_manager.spread_mode if squad_manager != null else false,
+		"gather_active": bool(gather_state.get("active", false)),
+		"gather_seconds_left": int(gather_state.get("seconds_left", 0)),
+		"gather_resource_id": StringName(gather_state.get("resource_id", &"")),
+	}
 
 
 func get_gather_amount(base_amount: int) -> int:

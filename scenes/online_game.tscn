@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://gameplay/network/online_match_client.gd" id="1_client"]
 [ext_resource type="Script" path="res://gameplay/world/camera_controller.gd" id="2_camera"]
-[ext_resource type="Script" path="res://ui/online_match_hud.gd" id="3_hud"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="3_hud"]
 
 [node name="OnlineMatchRoot" type="Node2D"]
 script = ExtResource("1_client")
@@ -22,5 +22,4 @@ z_index = -4090
 process_callback = 0
 script = ExtResource("2_camera")
 
-[node name="HUD" type="CanvasLayer" parent="."]
-script = ExtResource("3_hud")
+[node name="HUD" parent="." instance=ExtResource("3_hud")]

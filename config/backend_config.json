@@ -15,6 +15,31 @@
       "display_name": "Otomatik — En Yakın Sunucu",
       "short_name": "AUTO",
       "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "tr",
+      "display_name": "Türkiye",
+      "short_name": "TR",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "eu-se",
+      "display_name": "Güneydoğu Avrupa",
+      "short_name": "EU-SE",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "eu-central",
+      "display_name": "Orta Avrupa",
+      "short_name": "EU-C",
+      "probe_url": "",
+      "placement_only": true,
       "enabled": true
     }
   ]

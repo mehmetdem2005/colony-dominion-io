@@ -26,6 +26,7 @@ var _request_id: String = ""
 var _join_ticket: String = ""
 var _match_id: String = ""
 var _server_id: String = ""
+var _requested_region_id: String = "auto"
 
 
 func _ready() -> void:
@@ -51,15 +52,31 @@ func is_configured() -> bool:
 
 func join_queue(
 	access_token: String,
-	_player_id: String,
-	_region_preference: String,
-	_selected_region_id: String,
-	_display_name: String
+	player_id: String,
+	region_preference: String,
+	selected_region_id: String,
+	display_name: String
 ) -> Dictionary:
 	if not is_configured():
 		return {"ok": false, "error": "Eşleştirme servisi yapılandırılmadı"}
-	var response: Dictionary = await _http.request_json(
-		HTTPClient.METHOD_POST, _endpoint("/join"), _headers(access_token), {}
+	var preferred_id: String = _normalize_region_id(region_preference)
+	var selected_id: String = _normalize_region_id(selected_region_id)
+	_requested_region_id = selected_id if selected_id != "auto" else preferred_id
+	if _requested_region_id.is_empty():
+		_requested_region_id = "auto"
+	var response: Dictionary = await (
+		_http
+		. request_json(
+			HTTPClient.METHOD_POST,
+			_endpoint("/join"),
+			_headers(access_token),
+			{
+				"player_id": player_id.strip_edges(),
+				"display_name": display_name.strip_edges().left(24),
+				"region_preference": preferred_id,
+				"selected_region_id": selected_id,
+			}
+		)
 	)
 	if not bool(response.get("ok", false)):
 		return {"ok": false, "error": _extract_error(response)}
@@ -112,10 +129,17 @@ func get_queue_status(access_token: String) -> Dictionary:
 	assignment["server_id"] = _server_id
 	assignment["build_id"] = _build_id
 	assignment["protocol_version"] = _protocol_version
+	if String(assignment.get("region_id", "")).is_empty():
+		assignment["region_id"] = _requested_region_id
+	if String(assignment.get("region_short_name", "")).is_empty():
+		assignment["region_short_name"] = (
+			"EDGE" if _requested_region_id == "auto" else _requested_region_id.to_upper().left(8)
+		)
 	# NetworkProtocol.validate_assignment requires the human/bot split to fill the
 	# match and a future expiry. Each Edgegap /join deploys a fresh dedicated
-	# server for this one player, and the server is launched with HUMAN_PLAYERS=1
-	# / BOT_PLAYERS=(max-1) backfill, so mirror that split here. Without these the
+	# server for this one player, and the server is launched with
+	# HUMAN_PLAYER_COUNT=1 / BOT_COUNT=(max-1) backfill, so mirror that split here.
+	# Without these the
 	# assignment is rejected as "güvenlik denetiminden geçemedi".
 	assignment["human_players"] = 1
 	assignment["bot_players"] = maxi(NetworkProtocol.DEFAULT_MAX_PLAYERS - 1, 0)
@@ -143,6 +167,7 @@ func clear_ticket() -> void:
 	_join_ticket = ""
 	_match_id = ""
 	_server_id = ""
+	_requested_region_id = "auto"
 
 
 func _endpoint(path: String) -> String:
@@ -167,3 +192,13 @@ func _extract_error(response: Dictionary) -> String:
 			if body.has(key):
 				return String(body[key])
 	return String(response.get("error", "Eşleştirme isteği başarısız"))
+
+
+func _normalize_region_id(value: String) -> String:
+	var cleaned: String = value.strip_edges().to_lower()
+	if cleaned.is_empty() or cleaned == "auto":
+		return "auto"
+	var valid := RegEx.new()
+	if valid.compile("^[a-z0-9-]{2,32}$") != OK or valid.search(cleaned) == null:
+		return "auto"
+	return cleaned

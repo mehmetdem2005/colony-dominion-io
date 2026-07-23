@@ -1,6 +1,13 @@
 class_name ColonyHUD
 extends MatchPresentationAdapter
 
+# The shared offline/online HUD intentionally keeps one UI construction source.
+# gdlint: disable=max-file-lines
+
+signal movement_requested(value: Vector2)
+signal command_requested(command_type: StringName, payload: Dictionary)
+signal exit_requested
+
 const HUD_EVENT_BINDER_SCRIPT := preload("res://ui/hud_event_binder.gd")
 const HUD_LAYOUT_CONTEXT_SCRIPT := preload("res://ui/hud_layout_context.gd")
 const HUD_RESPONSIVE_LAYOUT_SCRIPT := preload("res://ui/hud_responsive_layout.gd")
@@ -42,6 +49,8 @@ var level_label: Label
 var toast_label: Label
 var game_over_panel: PanelContainer
 var result_label: Label
+var restart_button: Button
+var menu_button: Button
 var stick: ColonyVirtualStick
 var gather_button: TouchActionButton
 var rally_button: TouchActionButton
@@ -59,6 +68,9 @@ var production_cards: Array[ProductionTouchCard] = []
 var _toast_left: float = 0.0
 var _gameplay_interaction_enabled: bool = true
 var _scene_transition_requested: bool = false
+var _online_mode: bool = false
+var _bound_team_id: int = -1
+var _online_nest_active: bool = true
 
 
 func _ready() -> void:
@@ -66,6 +78,8 @@ func _ready() -> void:
 	_event_binder = HUD_EVENT_BINDER_SCRIPT.new() as HudEventBinder
 	_responsive_layout = HUD_RESPONSIVE_LAYOUT_SCRIPT.new() as HudResponsiveLayout
 	_build_ui()
+	if not stick.vector_changed.is_connected(_on_stick_vector_changed):
+		stick.vector_changed.connect(_on_stick_vector_changed)
 	_configure_layout_context()
 	if not get_viewport().size_changed.is_connected(_apply_responsive_layout):
 		get_viewport().size_changed.connect(_apply_responsive_layout)
@@ -80,10 +94,10 @@ func bind_match(match_node: Node, controller: Node) -> void:
 	if not is_instance_valid(match_controller) or not is_instance_valid(player_controller):
 		push_error("ColonyHUD received an invalid match presentation binding")
 		return
+	_online_mode = false
+	_bound_team_id = player_controller.team_id
 	if _event_binder != null:
 		_event_binder.bind(match_controller.events, self)
-	if not stick.vector_changed.is_connected(match_controller.request_local_movement):
-		stick.vector_changed.connect(match_controller.request_local_movement)
 	_on_inventory_changed(player_controller.team_id, player_controller.inventory.snapshot())
 	_on_colony_progress_changed(
 		player_controller.team_id,
@@ -98,6 +112,114 @@ func bind_match(match_node: Node, controller: Node) -> void:
 	if is_instance_valid(minimap):
 		minimap.bind_match(match_controller)
 	_apply_responsive_layout()
+
+
+func bind_online(read_model: Node, team_id: int) -> void:
+	if not is_instance_valid(read_model) or not read_model.has_method("get_minimap_snapshot"):
+		push_error("ColonyHUD received an invalid online presentation read model")
+		return
+	if _event_binder != null:
+		_event_binder.unbind()
+	match_controller = null
+	player_controller = null
+	_online_mode = true
+	_bound_team_id = team_id
+	_online_nest_active = true
+	_scene_transition_requested = false
+	restart_button.text = "YENİ MAÇ"
+	if is_instance_valid(minimap):
+		minimap.bind_source(read_model)
+	_set_gameplay_interaction_enabled(true)
+	_apply_responsive_layout()
+
+
+func apply_online_player_state(state: Dictionary) -> void:
+	if not _online_mode or _bound_team_id < 0:
+		return
+	var inventory_variant: Variant = state.get("inventory", {})
+	var inventory: Dictionary = inventory_variant if inventory_variant is Dictionary else {}
+	var next_cost_variant: Variant = state.get("next_upgrade_cost", {})
+	var next_upgrade_cost: Dictionary = next_cost_variant if next_cost_variant is Dictionary else {}
+	_online_nest_active = bool(state.get("nest_active", true))
+	_on_inventory_changed(_bound_team_id, inventory)
+	_on_colony_progress_changed(
+		_bound_team_id,
+		int(state.get("level", 1)),
+		int(state.get("capacity", 0)),
+		int(state.get("army", 0)),
+		next_upgrade_cost
+	)
+	_on_squad_state_changed(_bound_team_id, bool(state.get("split_mode", false)))
+	_on_formation_spread_changed(_bound_team_id, bool(state.get("spread_mode", false)))
+	_on_gather_state_changed(
+		_bound_team_id,
+		bool(state.get("gather_active", false)),
+		int(state.get("gather_seconds_left", 0)),
+		StringName(state.get("gather_resource_id", &""))
+	)
+	var queue_variant: Variant = state.get("queue", [])
+	var queue: Array = queue_variant if queue_variant is Array else []
+	_on_production_queue_changed(
+		_bound_team_id, queue, clampf(float(state.get("production_progress", 0.0)), 0.0, 1.0)
+	)
+	_on_match_time_changed(maxi(ceili(float(state.get("match_time", 0.0))), 0))
+
+
+func apply_online_leaderboard(entries: Array) -> void:
+	if _online_mode:
+		_on_leaderboard_changed(entries)
+
+
+func set_lifecycle_state(state: StringName, detail: String = "") -> void:
+	if not _online_mode:
+		return
+	match state:
+		&"active":
+			game_over_panel.visible = false
+			modal_input_blocker.visible = false
+			restart_button.visible = true
+			menu_button.visible = true
+			_set_gameplay_interaction_enabled(true)
+		&"respawning":
+			_show_online_state(
+				"KOMUTAN YENİDEN DOĞUYOR",
+				(
+					detail
+					if not detail.is_empty()
+					else "Komutan yeniden doğana kadar kontroller kilitli."
+				),
+				Color("ffd45a"),
+				false
+			)
+		&"eliminated":
+			_show_online_state(
+				"ELENDİN",
+				detail if not detail.is_empty() else "Yuvan ve komutanın yok edildi.",
+				Color("ff685d"),
+				true
+			)
+
+
+func show_match_result(winner_name: String, player_won: bool) -> void:
+	if not _online_mode:
+		return
+	_on_match_ended(winner_name, player_won)
+
+
+func show_toast(message: String) -> void:
+	_show_toast(message)
+
+
+func _show_online_state(title: String, detail: String, color: Color, allow_exit: bool) -> void:
+	audio_settings_panel.visible = false
+	modal_input_blocker.visible = true
+	_set_gameplay_interaction_enabled(false)
+	result_label.text = "%s\n%s" % [title, detail]
+	result_label.add_theme_color_override("font_color", color)
+	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	restart_button.visible = allow_exit
+	menu_button.visible = allow_exit
+	game_over_panel.visible = true
 
 
 func _exit_tree() -> void:
@@ -554,17 +676,17 @@ func _build_game_over() -> void:
 	result_label.add_theme_font_size_override("font_size", 34)
 	box.add_child(result_label)
 
-	var restart := Button.new()
-	restart.text = "YENİDEN OYNA"
-	restart.custom_minimum_size = Vector2(300.0, 58.0)
-	restart.pressed.connect(_on_restart_pressed)
-	box.add_child(restart)
+	restart_button = Button.new()
+	restart_button.text = "YENİDEN OYNA"
+	restart_button.custom_minimum_size = Vector2(300.0, 58.0)
+	restart_button.pressed.connect(_on_restart_pressed)
+	box.add_child(restart_button)
 
-	var menu := Button.new()
-	menu.text = "ANA MENÜ"
-	menu.custom_minimum_size = Vector2(300.0, 52.0)
-	menu.pressed.connect(_on_menu_pressed)
-	box.add_child(menu)
+	menu_button = Button.new()
+	menu_button.text = "ANA MENÜ"
+	menu_button.custom_minimum_size = Vector2(300.0, 52.0)
+	menu_button.pressed.connect(_on_menu_pressed)
+	box.add_child(menu_button)
 
 
 func _command_button(
@@ -600,6 +722,9 @@ func _on_merge_pressed() -> void:
 
 
 func _on_upgrade_pressed() -> void:
+	if _online_mode:
+		_emit_online_command(&"upgrade")
+		return
 	if not is_instance_valid(match_controller):
 		return
 	var accepted: bool = match_controller.request_local_command(&"upgrade")
@@ -609,6 +734,11 @@ func _on_upgrade_pressed() -> void:
 
 func _on_restart_pressed() -> void:
 	if _scene_transition_requested:
+		return
+	if _online_mode:
+		_scene_transition_requested = true
+		_set_gameplay_interaction_enabled(false)
+		exit_requested.emit()
 		return
 	_scene_transition_requested = true
 	game_over_panel.visible = false
@@ -623,11 +753,17 @@ func _on_menu_pressed() -> void:
 		return
 	_scene_transition_requested = true
 	_set_gameplay_interaction_enabled(false)
+	if _online_mode:
+		exit_requested.emit()
+		return
 	if is_instance_valid(match_controller):
 		match_controller.return_to_menu()
 
 
 func _on_produce_pressed(unit_id: StringName) -> void:
+	if _online_mode:
+		_emit_online_command(&"produce", {"unit_id": unit_id})
+		return
 	if not is_instance_valid(match_controller):
 		return
 	var accepted: bool = match_controller.request_local_command(&"produce", {"unit_id": unit_id})
@@ -638,12 +774,33 @@ func _on_produce_pressed(unit_id: StringName) -> void:
 func _execute_command(
 	command_id: StringName, audio_event: StringName, haptic_ms: int, haptic_strength: float
 ) -> void:
+	if _online_mode:
+		var accepted: bool = _emit_online_command(command_id)
+		AudioSystem.play_ui(audio_event if accepted else &"ui_invalid")
+		if accepted:
+			AudioSystem.request_haptic(haptic_ms, haptic_strength)
+		return
 	if not is_instance_valid(match_controller):
 		return
 	var accepted: bool = match_controller.request_local_command(command_id)
 	AudioSystem.play_ui(audio_event if accepted else &"ui_invalid")
 	if accepted:
 		AudioSystem.request_haptic(haptic_ms, haptic_strength)
+
+
+func _emit_online_command(command_id: StringName, payload: Dictionary = {}) -> bool:
+	if not _online_mode or not _gameplay_interaction_enabled:
+		return false
+	command_requested.emit(command_id, payload.duplicate(true))
+	return true
+
+
+func _on_stick_vector_changed(value: Vector2) -> void:
+	var safe_value: Vector2 = value.limit_length(1.0) if value.is_finite() else Vector2.ZERO
+	if _online_mode:
+		movement_requested.emit(safe_value)
+	elif is_instance_valid(match_controller):
+		match_controller.request_local_movement(safe_value)
 
 
 func _on_audio_settings_pressed() -> void:
@@ -707,7 +864,7 @@ func _on_settings_panel_closed() -> void:
 
 
 func _on_inventory_changed(team_id: int, inventory: Dictionary) -> void:
-	if not is_instance_valid(player_controller) or team_id != player_controller.team_id:
+	if not _accepts_team(team_id):
 		return
 	for resource_id in resource_labels:
 		var amount_label := resource_labels[resource_id] as Label
@@ -718,12 +875,16 @@ func _on_inventory_changed(team_id: int, inventory: Dictionary) -> void:
 func _on_colony_progress_changed(
 	team_id: int, level: int, capacity: int, army_size: int, _next_cost: Dictionary
 ) -> void:
-	if not is_instance_valid(player_controller) or team_id != player_controller.team_id:
+	if not _accepts_team(team_id):
 		return
 	level_label.text = "YUVA %d • %d/%d" % [level, army_size, capacity]
-	var nest_active: bool = (
-		is_instance_valid(player_controller.nest) and player_controller.nest.is_alive()
-	)
+	var nest_active: bool = _online_nest_active
+	if not _online_mode:
+		nest_active = (
+			is_instance_valid(player_controller)
+			and is_instance_valid(player_controller.nest)
+			and player_controller.nest.is_alive()
+		)
 	var can_upgrade: bool = nest_active and level < ColonyProgression.MAX_LEVEL
 	upgrade_button.set_enabled(can_upgrade)
 	upgrade_button.set_label_text(
@@ -732,14 +893,14 @@ func _on_colony_progress_changed(
 
 
 func _on_squad_state_changed(team_id: int, split_mode: bool) -> void:
-	if not is_instance_valid(player_controller) or team_id != player_controller.team_id:
+	if not _accepts_team(team_id):
 		return
 	split_button.set_enabled(not split_mode)
 	merge_button.set_enabled(split_mode)
 
 
 func _on_formation_spread_changed(team_id: int, spread_mode: bool) -> void:
-	if not is_instance_valid(player_controller) or team_id != player_controller.team_id:
+	if not _accepts_team(team_id):
 		return
 	spread_button.set_label_text("SIKILAŞ" if spread_mode else "DAĞIT")
 
@@ -747,7 +908,7 @@ func _on_formation_spread_changed(team_id: int, spread_mode: bool) -> void:
 func _on_gather_state_changed(
 	team_id: int, active: bool, seconds_left: int, _resource_id: StringName
 ) -> void:
-	if not is_instance_valid(player_controller) or team_id != player_controller.team_id:
+	if not _accepts_team(team_id):
 		return
 	gather_button.set_label_text("HASAT %d" % seconds_left if active else "HASAT")
 	gather_button.set_enabled(not active)
@@ -781,7 +942,7 @@ func _on_match_time_changed(seconds_left: int) -> void:
 
 
 func _on_production_queue_changed(team_id: int, queue: Array, progress: float) -> void:
-	if not is_instance_valid(player_controller) or team_id != player_controller.team_id:
+	if not _accepts_team(team_id):
 		return
 	queue_progress.value = progress
 	if queue.is_empty():
@@ -792,6 +953,12 @@ func _on_production_queue_changed(team_id: int, queue: Array, progress: float) -
 		queue_label.text = "%s • %d sırada" % [definition.display_name, queue.size()]
 	else:
 		queue_label.text = "Geçersiz üretim kaydı temizleniyor"
+
+
+func _accepts_team(team_id: int) -> bool:
+	if _online_mode:
+		return team_id == _bound_team_id
+	return is_instance_valid(player_controller) and team_id == player_controller.team_id
 
 
 func _show_toast(message: String) -> void:
@@ -808,6 +975,8 @@ func _on_match_ended(winner_name: String, player_won: bool) -> void:
 	result_label.add_theme_color_override(
 		"font_color", Color("ffd447") if player_won else Color("ff685d")
 	)
+	restart_button.visible = true
+	menu_button.visible = true
 	game_over_panel.visible = true
 
 

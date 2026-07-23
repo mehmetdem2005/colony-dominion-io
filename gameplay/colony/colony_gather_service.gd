@@ -114,6 +114,17 @@ func get_active_target() -> WorldResourceNode:
 	return _active_target if should_gather() else null
 
 
+func get_presentation_state() -> Dictionary:
+	var resource_id: StringName = &""
+	if is_instance_valid(_active_target):
+		resource_id = _active_target.resource_type
+	return {
+		"active": should_gather(),
+		"seconds_left": ceili(_command_left),
+		"resource_id": resource_id,
+	}
+
+
 func can_worker_reach(worker: ColonyUnit, resource: WorldResourceNode) -> bool:
 	var commander: ColonyUnit = _get_commander()
 	if (

@@ -80,18 +80,6 @@ const COLONY_NAMES: Array[String] = [
 	"Stone Colony",
 	"River Brood",
 ]
-const TEAM_COLORS: Array[Color] = [
-	Color("2a9cff"),
-	Color("ff3d49"),
-	Color("35e06f"),
-	Color("c252ff"),
-	Color("ff9f1a"),
-	Color("18d9e8"),
-	Color("ffd23f"),
-	Color("f15bb5"),
-	Color("8ac926"),
-	Color("b08968"),
-]
 
 
 func _game_session():
@@ -168,7 +156,7 @@ func _ready() -> void:
 			self,
 			index,
 			colony_name,
-			TEAM_COLORS[index],
+			ColonyVisualCatalog.team_color(index),
 			local_human,
 			SPAWN_POSITIONS[index],
 			local_human,
