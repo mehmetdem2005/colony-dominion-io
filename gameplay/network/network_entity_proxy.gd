@@ -2,8 +2,7 @@ class_name NetworkEntityProxy
 extends CharacterBody2D
 
 const REMOTE_INTERPOLATION_SPEED: float = 18.0
-const SNAPSHOT_BUFFER_LIMIT: int = 6
-const MAX_REMOTE_EXTRAPOLATION_MSEC: int = 45
+const SNAPSHOT_BUFFER_LIMIT: int = 8
 const LOCAL_SOFT_CORRECTION_SPEED: float = 7.0
 const LOCAL_IDLE_CORRECTION_SPEED: float = 12.0
 const LOCAL_HARD_SNAP_DISTANCE: float = 320.0
@@ -200,11 +199,13 @@ func _sample_remote_position() -> Vector2:
 		var weight: float = clampf(float(target_msec - older_time) / float(span_msec), 0.0, 1.0)
 		return older_position.lerp(newer_position, weight)
 
-	var extrapolation_msec: int = mini(target_msec - newer_time, MAX_REMOTE_EXTRAPOLATION_MSEC)
-	var observed_velocity: Vector2 = (newer_position - older_position) / (float(span_msec) * 0.001)
-	var maximum_speed: float = maxf(_move_speed * 2.2, 320.0)
-	observed_velocity = observed_velocity.limit_length(maximum_speed)
-	return newer_position + observed_velocity * (float(extrapolation_msec) * 0.001)
+	# No newer snapshot has arrived yet. Hold at the latest known position rather
+	# than extrapolating ahead: extrapolation guesses a future position and then
+	# snaps back when the real snapshot lands a few milliseconds later, which is
+	# exactly what reads on screen as the ants "titriyor" (jittering). Holding is
+	# softened by the residual smoothing in _advance_remote_interpolation, so a
+	# late packet shows as a momentary slow-down instead of a visible snap.
+	return newer_position
 
 
 func _refresh_world_presentation() -> void:
