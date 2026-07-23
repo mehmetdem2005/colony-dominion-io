@@ -226,29 +226,48 @@ func _on_player_state_received(state: Dictionary) -> void:
 
 
 func get_minimap_snapshot() -> Dictionary:
-	var summaries_by_team: Dictionary = {}
-	for summary in _latest_colony_summaries:
-		summaries_by_team[int(summary.get("team", -1))] = summary
-
+	var local_team: int = GameTransport.get_local_team_id()
 	var colony_entries_by_team: Dictionary = {}
+
+	# 1. Seed an entry for EVERY colony from its authoritative summary, so distant
+	#    colonies (which have no nearby, relevance-culled proxy) still show their
+	#    nest on the minimap instead of vanishing.
+	for summary in _latest_colony_summaries:
+		var summary_team: int = int(summary.get("team", -1))
+		if summary_team < 0:
+			continue
+		var nest_variant: Variant = summary.get("nest", Vector2.INF)
+		colony_entries_by_team[summary_team] = {
+			"team_id": summary_team,
+			"color": ColonyVisualCatalog.team_color(summary_team),
+			"commander": Vector2.INF,
+			"facing": Vector2.UP,
+			"nest": nest_variant if nest_variant is Vector2 else Vector2.INF,
+			"army_size": int(summary.get("army", 0)),
+			"active": bool(summary.get("active", true)),
+			"is_player": summary_team == local_team,
+		}
+
+	# 2. Overlay live proxy positions where we have them: the moving commander,
+	#    and the nest if the summary did not carry one yet.
 	for proxy_variant in _proxies.values():
 		var proxy := proxy_variant as NetworkEntityProxy
 		if not is_instance_valid(proxy):
 			continue
-		var team_id: int = proxy.team_id
+		var proxy_team: int = proxy.team_id
 		var entry: Dictionary = (
 			colony_entries_by_team
 			. get(
-				team_id,
+				proxy_team,
 				{
-					"team_id": team_id,
-					"color": ColonyVisualCatalog.team_color(team_id),
+					"team_id": proxy_team,
+					"color": ColonyVisualCatalog.team_color(proxy_team),
 					"commander": Vector2.INF,
 					"facing": Vector2.UP,
 					"nest": Vector2.INF,
 					"army_size": 0,
 					"active": true,
-					"is_player": team_id == GameTransport.get_local_team_id(),
+					"is_player": proxy_team == local_team,
 				}
 			)
 		)
@@ -257,11 +276,7 @@ func get_minimap_snapshot() -> Dictionary:
 			entry["facing"] = proxy.facing_direction
 		elif proxy.kind == &"nest":
 			entry["nest"] = proxy.global_position
-		var summary: Dictionary = summaries_by_team.get(team_id, {})
-		if not summary.is_empty():
-			entry["army_size"] = int(summary.get("army", 0))
-			entry["active"] = bool(summary.get("active", true))
-		colony_entries_by_team[team_id] = entry
+		colony_entries_by_team[proxy_team] = entry
 
 	var chunk_entries: Array[Dictionary] = []
 	var resource_points: Array[Dictionary] = []
