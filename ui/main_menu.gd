@@ -23,6 +23,8 @@ var _auth_panel: AuthPanel
 var _legal_panel: LegalGatePanel
 var _profile_panel: OnlineProfilePanel
 var _settings_panel: SettingsPanel
+var _sidebar: PanelContainer
+var _pulse_tween: Tween
 var _starting: bool = false
 var _matchmaking: bool = false
 var _matchmaking_generation: int = 0
@@ -37,7 +39,39 @@ func _ready() -> void:
 	_connect_services()
 	_refresh_status()
 	OnlineServices.probe_regions()
+	_play_entrance()
+	_pulse_primary()
 	call_deferred("_try_resume_previous_match")
+
+
+## Fade the whole menu in — a confident, quick reveal like an AAA front-end
+## opens with. Positioning is owned by MainMenuLayoutGuard (it centres every
+## PanelContainer each layout pass), so we only animate `modulate`, which the
+## guard never touches, to avoid fighting it over the sidebar's transform.
+func _play_entrance() -> void:
+	modulate = Color(1.0, 1.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.tween_property(self, "modulate", Color.WHITE, 0.45).set_trans(Tween.TRANS_SINE).set_ease(
+		Tween.EASE_OUT
+	)
+
+
+## A slow, subtle amber breathing glow on the hero button so the eye is drawn to
+## the primary action without any distracting motion.
+func _pulse_primary() -> void:
+	if not is_instance_valid(_online_button):
+		return
+	if _pulse_tween != null and _pulse_tween.is_valid():
+		_pulse_tween.kill()
+	_pulse_tween = create_tween().set_loops()
+	(
+		_pulse_tween
+		. tween_property(_online_button, "modulate", Color(1.12, 1.12, 1.12, 1.0), 1.1)
+		. set_trans(Tween.TRANS_SINE)
+	)
+	_pulse_tween.tween_property(_online_button, "modulate", Color.WHITE, 1.1).set_trans(
+		Tween.TRANS_SINE
+	)
 
 
 func _build_menu() -> void:
@@ -68,34 +102,65 @@ func _build_menu() -> void:
 	commander.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(commander)
 
+	# Radial vignette layered over the ground art: focuses the eye toward the
+	# sidebar and gives the flat background cinematic depth (no new art needed).
+	var vignette := TextureRect.new()
+	vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vignette.texture = ColonyUiKit.make_vignette(0.66)
+	vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(vignette)
+
 	# Left navigation sidebar (full height).
-	var sidebar := PanelContainer.new()
-	sidebar.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
-	sidebar.offset_right = 540.0
+	_sidebar = PanelContainer.new()
+	_sidebar.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	_sidebar.offset_right = 552.0
 	var sidebar_style := ColonyUiKit.rounded_style(
-		Color(ColonyUiKit.SURFACE, 0.97),
+		Color(ColonyUiKit.SURFACE, 0.975),
 		Color(ColonyUiKit.ACCENT, 0.5),
 		0,
 		0,
-		Vector4(38.0, 30.0, 34.0, 26.0)
+		Vector4(40.0, 34.0, 36.0, 28.0)
 	)
 	sidebar_style.border_width_right = 2
-	sidebar.add_theme_stylebox_override("panel", sidebar_style)
-	add_child(sidebar)
+	# Cast a soft shadow onto the battlefield so the panel feels like a
+	# physical layer above the world rather than a flat overlay.
+	sidebar_style.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+	sidebar_style.shadow_size = 24
+	sidebar_style.shadow_offset = Vector2(10.0, 0.0)
+	_sidebar.add_theme_stylebox_override("panel", sidebar_style)
+	add_child(_sidebar)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	sidebar.add_child(scroll)
+	_sidebar.add_child(scroll)
 
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 10)
+	box.add_theme_constant_override("separation", 9)
 	scroll.add_child(box)
 
+	# --- Brand block: accent mark, wordmark, underline, tagline. ---
+	var brand := HBoxContainer.new()
+	brand.add_theme_constant_override("separation", 14)
+	box.add_child(brand)
+	var brand_mark := ColonyUiKit.accent_bar(6.0, 46.0)
+	brand_mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	brand.add_child(brand_mark)
+	var brand_text := VBoxContainer.new()
+	brand_text.add_theme_constant_override("separation", 2)
+	brand.add_child(brand_text)
 	var title := Label.new()
-	title.text = "COLONY DOMINION.IO"
-	ColonyUiKit.apply_label(title, 33, 800, ColonyUiKit.ACCENT)
-	box.add_child(title)
+	title.text = "COLONY DOMINION"
+	ColonyUiKit.apply_label(title, 32, 800, ColonyUiKit.ACCENT)
+	brand_text.add_child(title)
+	var wordmark_sub := Label.new()
+	wordmark_sub.text = ".IO  •  GERÇEK ZAMANLI STRATEJİ"
+	ColonyUiKit.apply_label(wordmark_sub, 12, 700, Color(ColonyUiKit.TEXT_MUTED, 0.95))
+	brand_text.add_child(wordmark_sub)
+
+	box.add_child(ColonyUiKit.accent_bar(120.0, 3.0, Color(ColonyUiKit.ACCENT, 0.85)))
 
 	var subtitle := Label.new()
 	subtitle.text = "Kolonini büyüt • Bölgeni seç • Rakip yuvaları yık"
@@ -103,8 +168,9 @@ func _build_menu() -> void:
 	ColonyUiKit.apply_label(subtitle, 15, 400, ColonyUiKit.TEXT_SECONDARY)
 	box.add_child(subtitle)
 
-	box.add_child(_menu_spacer(4.0))
+	box.add_child(_menu_spacer(6.0))
 
+	box.add_child(ColonyUiKit.section_label("Komutan Adı"))
 	_name_input = LineEdit.new()
 	_name_input.text = GameSession.player_name
 	_name_input.placeholder_text = "Oyuncu adı"
@@ -113,7 +179,9 @@ func _build_menu() -> void:
 	ColonyUiKit.apply_input(_name_input)
 	box.add_child(_name_input)
 
-	_online_button = _nav_button("ÇOK OYUNCULU OYNA", &"primary", 60.0)
+	box.add_child(_section_header("Oyun Modu"))
+
+	_online_button = _nav_button("ÇOK OYUNCULU OYNA", &"primary", 62.0)
 	_online_button.pressed.connect(_request_online_play)
 	box.add_child(_online_button)
 
@@ -126,7 +194,7 @@ func _build_menu() -> void:
 	_resume_button.visible = false
 	box.add_child(_resume_button)
 
-	box.add_child(_menu_divider())
+	box.add_child(_section_header("Sunucu & Hesap"))
 
 	_region_button = _nav_button("BÖLGE SEÇ", &"ghost", 46.0)
 	_region_button.pressed.connect(_open_region_selector)
@@ -154,11 +222,14 @@ func _build_menu() -> void:
 	_legal_button.pressed.connect(_open_legal_gate)
 	secondary_row.add_child(_legal_button)
 
+	box.add_child(_section_header("Tercihler"))
+
 	_settings_button = _nav_button("⚙  AYARLAR", &"ghost", 46.0)
 	_settings_button.pressed.connect(_open_settings)
 	box.add_child(_settings_button)
 
-	box.add_child(_menu_spacer(10.0))
+	box.add_child(_menu_spacer(12.0))
+	box.add_child(_menu_divider())
 
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -180,7 +251,30 @@ func _nav_button(text: String, variant: StringName, height: float) -> Button:
 	button.text = text
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ColonyUiKit.apply_button(button, variant, height)
+	# The primary CTA gets a looping glow instead of hover-brighten so the two
+	# animations never fight over the same `modulate` property.
+	if variant != &"primary":
+		button.mouse_entered.connect(_on_nav_button_hover.bind(button, true))
+		button.mouse_exited.connect(_on_nav_button_hover.bind(button, false))
 	return button
+
+
+func _on_nav_button_hover(button: Button, hovering: bool) -> void:
+	if not is_instance_valid(button) or button.disabled:
+		return
+	var target := Color(1.14, 1.14, 1.14, 1.0) if hovering else Color.WHITE
+	var tween := create_tween()
+	tween.tween_property(button, "modulate", target, 0.12).set_trans(Tween.TRANS_SINE)
+
+
+## A section header (small caps label) with a little breathing room above it, so
+## the navigation groups read as distinct blocks.
+func _section_header(text: String) -> Control:
+	var wrapper := VBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 4)
+	wrapper.add_child(_menu_spacer(8.0))
+	wrapper.add_child(ColonyUiKit.section_label(text))
+	return wrapper
 
 
 func _menu_spacer(height: float, expand: bool = false) -> Control:
