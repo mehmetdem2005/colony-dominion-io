@@ -35,25 +35,20 @@ type RegionTarget = {
 
 // Manual targets are deliberately resolved server-side. The client may select
 // an id, but it cannot inject arbitrary coordinates into the Edgegap request.
+// The real Edgegap edge locations. Each id maps to that city's coordinates;
+// Edgegap places the server on the node nearest those coordinates, so selecting
+// an id pins the match to that actual city (real, measurably different ping).
 const REGION_TARGETS: Record<string, RegionTarget> = {
-  "tr": {
-    latitude: 41.0082,
-    longitude: 28.9784,
-    displayName: "Türkiye",
-    shortName: "TR",
-  },
-  "eu-se": {
-    latitude: 42.6977,
-    longitude: 23.3219,
-    displayName: "Güneydoğu Avrupa",
-    shortName: "EU-SE",
-  },
-  "eu-central": {
-    latitude: 50.1109,
-    longitude: 8.6821,
-    displayName: "Orta Avrupa",
-    shortName: "EU-C",
-  },
+  "frankfurt": { latitude: 50.1109, longitude: 8.6821, displayName: "Frankfurt", shortName: "FRA" },
+  "paris": { latitude: 48.8566, longitude: 2.3522, displayName: "Paris", shortName: "PAR" },
+  "newark": { latitude: 40.7357, longitude: -74.1724, displayName: "New York", shortName: "NYC" },
+  "chicago": { latitude: 41.8781, longitude: -87.6298, displayName: "Chicago", shortName: "CHI" },
+  "dallas": { latitude: 32.7767, longitude: -96.7970, displayName: "Dallas", shortName: "DAL" },
+  "seattle": { latitude: 47.6062, longitude: -122.3321, displayName: "Seattle", shortName: "SEA" },
+  "fremont": { latitude: 37.5485, longitude: -121.9886, displayName: "Kaliforniya", shortName: "SFO" },
+  "saopaulo": { latitude: -23.5505, longitude: -46.6333, displayName: "São Paulo", shortName: "SAO" },
+  "mumbai": { latitude: 19.0760, longitude: 72.8777, displayName: "Mumbai", shortName: "BOM" },
+  "singapore": { latitude: 1.3521, longitude: 103.8198, displayName: "Singapur", shortName: "SIN" },
 };
 
 function json(value: unknown, status = 200): Response {

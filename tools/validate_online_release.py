@@ -9,7 +9,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_BUILD = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 EXPECTED_PROTOCOL = 4
-EXPECTED_PLACEMENT_TARGETS = {"auto", "tr", "eu-se", "eu-central"}
+EXPECTED_PLACEMENT_TARGETS = {
+    "auto",
+    "frankfurt",
+    "paris",
+    "newark",
+    "chicago",
+    "dallas",
+    "seattle",
+    "fremont",
+    "saopaulo",
+    "mumbai",
+    "singapore",
+}
 
 
 class ValidationFailure(RuntimeError):

@@ -19,25 +19,81 @@
       "enabled": true
     },
     {
-      "id": "tr",
-      "display_name": "Türkiye",
-      "short_name": "TR",
+      "id": "frankfurt",
+      "display_name": "Frankfurt",
+      "short_name": "FRA",
       "probe_url": "",
       "placement_only": true,
       "enabled": true
     },
     {
-      "id": "eu-se",
-      "display_name": "Güneydoğu Avrupa",
-      "short_name": "EU-SE",
+      "id": "paris",
+      "display_name": "Paris",
+      "short_name": "PAR",
       "probe_url": "",
       "placement_only": true,
       "enabled": true
     },
     {
-      "id": "eu-central",
-      "display_name": "Orta Avrupa",
-      "short_name": "EU-C",
+      "id": "newark",
+      "display_name": "New York",
+      "short_name": "NYC",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "chicago",
+      "display_name": "Chicago",
+      "short_name": "CHI",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "dallas",
+      "display_name": "Dallas",
+      "short_name": "DAL",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "seattle",
+      "display_name": "Seattle",
+      "short_name": "SEA",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "fremont",
+      "display_name": "Kaliforniya",
+      "short_name": "SFO",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "saopaulo",
+      "display_name": "São Paulo",
+      "short_name": "SAO",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "mumbai",
+      "display_name": "Mumbai",
+      "short_name": "BOM",
+      "probe_url": "",
+      "placement_only": true,
+      "enabled": true
+    },
+    {
+      "id": "singapore",
+      "display_name": "Singapur",
+      "short_name": "SIN",
       "probe_url": "",
       "placement_only": true,
       "enabled": true

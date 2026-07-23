@@ -1,2 +1,2 @@
-Reduce online unit jitter: hold-at-latest instead of extrapolating; larger snapshot buffer.
-bump: 2026-07-23T1210Z
+Open all 10 Edgegap regions + AAA region picker.
+bump: 2026-07-23T1245Z
