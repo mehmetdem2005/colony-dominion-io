@@ -1,2 +1,2 @@
-Fix online matchmaking: assignment now passes validate_assignment (human/bot split + expires_at). Direct Edgegap ENet connection.
-bump: 2026-07-23T0930Z
+Reduce online unit jitter: hold-at-latest instead of extrapolating; larger snapshot buffer.
+bump: 2026-07-23T1210Z
