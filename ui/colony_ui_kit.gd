@@ -36,8 +36,8 @@ static func apply_button(button: Button, variant: StringName, height: float = 52
 	button.custom_minimum_size.y = height
 	button.focus_mode = Control.FOCUS_ALL
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.add_theme_font_override("font", make_font(650))
-	button.add_theme_font_size_override("font_size", 16)
+	button.add_theme_font_override("font", make_font(650 if variant == &"primary" else 600))
+	button.add_theme_font_size_override("font_size", 17 if variant == &"primary" else 16)
 
 	var palette: Dictionary = _button_palette(variant)
 	var background: Color = palette.get("background", SURFACE_RAISED)
@@ -47,17 +47,28 @@ static func apply_button(button: Button, variant: StringName, height: float = 52
 	var border_hover_color: Color = palette.get("border_hover", BORDER_STRONG)
 	var text_color: Color = palette.get("text", TEXT_PRIMARY)
 	var text_hover_color: Color = palette.get("text_hover", TEXT_PRIMARY)
-	var normal := rounded_style(background, border_color, 1, 14, Vector4(16.0, 12.0, 16.0, 12.0))
+	var normal := rounded_style(background, border_color, 1, 14, Vector4(18.0, 12.0, 18.0, 12.0))
+	# The primary call-to-action gets a soft amber glow so it reads as the hero
+	# action the moment the menu appears — the AAA "there is one button you want".
+	if variant == &"primary":
+		normal.shadow_color = Color(ACCENT, 0.34)
+		normal.shadow_size = 10
+		normal.shadow_offset = Vector2(0.0, 3.0)
 	var hover := normal.duplicate() as StyleBoxFlat
 	hover.bg_color = hover_color
 	hover.border_color = border_hover_color
+	if variant == &"primary":
+		hover.shadow_color = Color(ACCENT_HOVER, 0.52)
+		hover.shadow_size = 16
 	var pressed := normal.duplicate() as StyleBoxFlat
 	pressed.bg_color = pressed_color
+	pressed.shadow_size = 0
 	pressed.content_margin_top += 2.0
 	pressed.content_margin_bottom = maxf(pressed.content_margin_bottom - 2.0, 0.0)
 	var disabled := normal.duplicate() as StyleBoxFlat
 	disabled.bg_color = Color(background, 0.42)
 	disabled.border_color = Color(border_color, 0.34)
+	disabled.shadow_size = 0
 	var focus := normal.duplicate() as StyleBoxFlat
 	focus.border_color = ACCENT
 	focus.set_border_width_all(2)
@@ -92,19 +103,28 @@ static func apply_input(input: LineEdit) -> void:
 
 
 static func panel_style() -> StyleBoxFlat:
-	return rounded_style(
+	var style := rounded_style(
 		Color(SURFACE, 0.985), Color(ACCENT, 0.92), 2, 24, Vector4(26.0, 24.0, 26.0, 24.0)
 	)
+	# Lift modals off the backdrop with a deep soft shadow (AAA depth cue).
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
+	style.shadow_size = 26
+	style.shadow_offset = Vector2(0.0, 12.0)
+	return style
 
 
 static func card_style(selected: bool = false) -> StyleBoxFlat:
-	return rounded_style(
+	var style := rounded_style(
 		SURFACE_SELECTED if selected else SURFACE_RAISED,
 		Color(ACCENT, 0.88) if selected else BORDER,
 		2 if selected else 1,
 		16,
 		Vector4(10.0, 10.0, 10.0, 10.0)
 	)
+	if selected:
+		style.shadow_color = Color(ACCENT, 0.30)
+		style.shadow_size = 10
+	return style
 
 
 static func status_style(tone: StringName = &"neutral") -> StyleBoxFlat:
@@ -135,11 +155,68 @@ static func rounded_style(
 	style.border_color = border
 	style.set_border_width_all(border_width)
 	style.set_corner_radius_all(radius)
+	# Smooth edges keep rounded corners crisp on high-DPI phone screens.
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.0
 	style.content_margin_left = margins.x
 	style.content_margin_top = margins.y
 	style.content_margin_right = margins.z
 	style.content_margin_bottom = margins.w
 	return style
+
+
+## Small uppercase, letter-spaced section header used to group menu rows so the
+## navigation reads as deliberate sections instead of a flat button stack.
+static func section_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = _spaced_caps(text)
+	apply_label(label, 12, 700, Color(TEXT_MUTED, 0.95))
+	return label
+
+
+## A thin accent bar — used as a brand/logo mark and to underline the title.
+static func accent_bar(width: float, height: float = 4.0, color: Color = ACCENT) -> ColorRect:
+	var bar := ColorRect.new()
+	bar.color = color
+	bar.custom_minimum_size = Vector2(width, height)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return bar
+
+
+## A radial vignette texture: transparent at the centre, darkening toward the
+## edges. Layered over the menu background it focuses the eye and adds depth
+## without any new art asset.
+static func make_vignette(edge_alpha: float = 0.62) -> GradientTexture2D:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	gradient.colors = PackedColorArray(
+		[
+			Color(0.0, 0.0, 0.0, 0.0),
+			Color(0.02, 0.015, 0.008, edge_alpha * 0.4),
+			Color(0.01, 0.008, 0.004, edge_alpha),
+		]
+	)
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 256
+	texture.height = 256
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.0, 1.0)
+	return texture
+
+
+## Insert thin spaces between characters to fake letter-spacing (Godot Labels
+## have no tracking property), giving headers an engraved, premium feel.
+static func _spaced_caps(text: String) -> String:
+	var thin_space := String.chr(0x2009)  # U+2009 THIN SPACE
+	var upper := text.to_upper()
+	var spaced := ""
+	for index in upper.length():
+		if index > 0:
+			spaced += thin_space
+		spaced += upper[index]
+	return spaced
 
 
 static func make_font(weight: int = 400) -> SystemFont:
