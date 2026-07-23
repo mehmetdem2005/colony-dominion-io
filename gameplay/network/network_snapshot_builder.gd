@@ -58,6 +58,11 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 			var controller: ColonyController = controller_variant as ColonyController
 			if not is_instance_valid(controller):
 				continue
+			# The nest position lets the client mark every colony on the minimap,
+			# even distant ones that have no nearby (relevance-culled) proxy.
+			var nest_position: Vector2 = Vector2.INF
+			if is_instance_valid(controller.nest) and controller.nest.global_position.is_finite():
+				nest_position = controller.nest.global_position
 			(
 				colony_summaries
 				. append(
@@ -67,6 +72,7 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 						"army": controller.get_army_size(),
 						"active": controller.is_active(),
 						"score": controller.get_score(),
+						"nest": nest_position,
 					}
 				)
 			)
