@@ -12,6 +12,10 @@ extends Node
 signal queue_status_changed(status: Dictionary)
 
 const FUNCTION_PATH: String = "/functions/v1/matchmaking"
+# How long the client treats an assignment as valid. Comfortably longer than a
+# match so validate_assignment never rejects a fresh server as "expired"; the
+# Edgegap deployment enforces its own max duration server-side.
+const ASSIGNMENT_TTL_MS: int = 3 * 60 * 60 * 1000  # 3 hours
 
 var _base_url: String = ""
 var _publishable_key: String = ""
@@ -89,7 +93,9 @@ func get_queue_status(access_token: String) -> Dictionary:
 	var body: Dictionary = body_variant
 	if not bool(body.get("ok", false)):
 		# Deployment failed/terminated — surface as a terminal matchmaking failure.
-		var failed := {"status": "failed", "message": String(body.get("error", "Sunucu hazırlanamadı"))}
+		var failed := {
+			"status": "failed", "message": String(body.get("error", "Sunucu hazırlanamadı"))
+		}
 		queue_status_changed.emit(failed)
 		return {"ok": true, "body": failed}
 	if not (bool(body.get("ready", false)) and body.has("assignment")):
@@ -106,6 +112,15 @@ func get_queue_status(access_token: String) -> Dictionary:
 	assignment["server_id"] = _server_id
 	assignment["build_id"] = _build_id
 	assignment["protocol_version"] = _protocol_version
+	# NetworkProtocol.validate_assignment requires the human/bot split to fill the
+	# match and a future expiry. Each Edgegap /join deploys a fresh dedicated
+	# server for this one player, and the server is launched with HUMAN_PLAYERS=1
+	# / BOT_PLAYERS=(max-1) backfill, so mirror that split here. Without these the
+	# assignment is rejected as "güvenlik denetiminden geçemedi".
+	assignment["human_players"] = 1
+	assignment["bot_players"] = maxi(NetworkProtocol.DEFAULT_MAX_PLAYERS - 1, 0)
+	assignment["ranked"] = false
+	assignment["expires_at"] = (int(Time.get_unix_time_from_system() * 1000.0) + ASSIGNMENT_TTL_MS)
 	var assigned := {"status": "assigned", "assignment": assignment}
 	queue_status_changed.emit(assigned.duplicate(true))
 	return {"ok": true, "body": assigned}

@@ -1,2 +1,2 @@
-Rebuild in-app APK: AAA main-menu redesign (brand block, sections, depth shadows, vignette, entrance + hover + hero-glow animations).
-bump: 2026-07-23T0910Z
+Fix online matchmaking: assignment now passes validate_assignment (human/bot split + expires_at). Direct Edgegap ENet connection.
+bump: 2026-07-23T0930Z
