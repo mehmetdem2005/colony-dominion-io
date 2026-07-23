@@ -2,26 +2,14 @@ extends "res://autoload/online_services.gd"
 
 
 func refresh_region_catalog() -> void:
+	# Edgegap deploys the game server on the edge node nearest the player
+	# automatically, so there is no region catalog to fetch and no manual region
+	# selection. Just refresh the local probe (best-effort, cosmetic).
 	if _catalog_refresh_in_progress:
 		return
 	_catalog_refresh_in_progress = true
-	if matchmaking.is_configured():
-		var response: Dictionary = await _control_http.request_json(
-			HTTPClient.METHOD_GET,
-			QuerySafeUrl.append_path(config.rivet_control_base_url, "/v1/regions"),
-			PackedStringArray(["Accept: application/json", "Cache-Control: no-cache"])
-		)
-		if bool(response.get("ok", false)):
-			var body_variant: Variant = response.get("body", {})
-			if body_variant is Dictionary:
-				var regions_variant: Variant = (body_variant as Dictionary).get("regions", [])
-				var normalized: Array[Dictionary] = _normalize_regions(regions_variant)
-				if not normalized.is_empty():
-					config.regions = normalized
-					region_probe.configure(config.regions, config.region_probe_timeout_seconds)
-					regions_changed.emit()
-	_catalog_refresh_in_progress = false
 	probe_regions()
+	_catalog_refresh_in_progress = false
 
 
 func _normalize_regions(value: Variant) -> Array[Dictionary]:
