@@ -38,17 +38,26 @@ type RegionTarget = {
 // The real Edgegap edge locations. Each id maps to that city's coordinates;
 // Edgegap places the server on the node nearest those coordinates, so selecting
 // an id pins the match to that actual city (real, measurably different ping).
+// Continent-level targets. Each id points at a representative coordinate on that
+// continent; Edgegap places the server on the nearest edge node to it. The free
+// tier only has edges on these four continents (Europe, North/South America,
+// Asia) — there is no Africa / Middle East / Oceania node, so those are not
+// offered rather than silently routing the player to Europe.
 const REGION_TARGETS: Record<string, RegionTarget> = {
-  "frankfurt": { latitude: 50.1109, longitude: 8.6821, displayName: "Frankfurt", shortName: "FRA" },
-  "paris": { latitude: 48.8566, longitude: 2.3522, displayName: "Paris", shortName: "PAR" },
-  "newark": { latitude: 40.7357, longitude: -74.1724, displayName: "New York", shortName: "NYC" },
-  "chicago": { latitude: 41.8781, longitude: -87.6298, displayName: "Chicago", shortName: "CHI" },
-  "dallas": { latitude: 32.7767, longitude: -96.7970, displayName: "Dallas", shortName: "DAL" },
-  "seattle": { latitude: 47.6062, longitude: -122.3321, displayName: "Seattle", shortName: "SEA" },
-  "fremont": { latitude: 37.5485, longitude: -121.9886, displayName: "Kaliforniya", shortName: "SFO" },
-  "saopaulo": { latitude: -23.5505, longitude: -46.6333, displayName: "São Paulo", shortName: "SAO" },
-  "mumbai": { latitude: 19.0760, longitude: 72.8777, displayName: "Mumbai", shortName: "BOM" },
-  "singapore": { latitude: 1.3521, longitude: 103.8198, displayName: "Singapur", shortName: "SIN" },
+  "avrupa": { latitude: 50.1109, longitude: 8.6821, displayName: "Avrupa", shortName: "AVR" },
+  "kuzey_amerika": {
+    latitude: 39.8283,
+    longitude: -98.5795,
+    displayName: "Kuzey Amerika",
+    shortName: "K.AM",
+  },
+  "asya": { latitude: 1.3521, longitude: 103.8198, displayName: "Asya", shortName: "ASYA" },
+  "guney_amerika": {
+    latitude: -23.5505,
+    longitude: -46.6333,
+    displayName: "Güney Amerika",
+    shortName: "G.AM",
+  },
 };
 
 function json(value: unknown, status = 200): Response {

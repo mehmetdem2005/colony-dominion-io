@@ -68,7 +68,7 @@ func _validate_client_config() -> void:
 		region_ids[String(region.get("id", ""))] = true
 		if not bool(region.get("placement_only", false)):
 			_failures.append("Edgegap target must be placement-only: %s" % region.get("id", ""))
-	for required_id in ["auto", "frankfurt", "paris", "singapore"]:
+	for required_id in ["auto", "avrupa", "asya", "guney_amerika"]:
 		if not region_ids.has(required_id):
 			_failures.append("Missing Edgegap placement target: %s" % required_id)
 	var config_lower: String = config_text.to_lower()

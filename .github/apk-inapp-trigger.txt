@@ -1,2 +1,2 @@
-Open all 10 Edgegap regions + AAA region picker.
-bump: 2026-07-23T1245Z
+Continent-level region picker (Avrupa / Kuzey Amerika / Asya / Güney Amerika).
+bump: 2026-07-23T1320Z
