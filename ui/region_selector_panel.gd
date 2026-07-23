@@ -9,22 +9,16 @@ extends PanelContainer
 signal region_selected(region_id: String)
 signal closed
 
-# Continent grouping + a coarse, honest proximity band for a Türkiye/EU player.
-# (No live probe exists for Edgegap edges, so we never show a fake millisecond
-# number — the real ping is measured once the match connects.)
+# A coarse, honest proximity band for a Türkiye/EU player. (No live probe exists
+# for Edgegap edges, so we never show a fake millisecond number — the real ping
+# is measured once the match connects.) The free tier only has edges on these
+# continents; Africa / Middle East / Oceania have no server and are not listed.
 const REGION_META: Dictionary = {
-	"frankfurt": {"group": "Avrupa", "proximity": "near"},
-	"paris": {"group": "Avrupa", "proximity": "near"},
-	"newark": {"group": "Kuzey Amerika", "proximity": "far"},
-	"chicago": {"group": "Kuzey Amerika", "proximity": "far"},
-	"dallas": {"group": "Kuzey Amerika", "proximity": "far"},
-	"seattle": {"group": "Kuzey Amerika", "proximity": "far"},
-	"fremont": {"group": "Kuzey Amerika", "proximity": "far"},
-	"saopaulo": {"group": "Güney Amerika", "proximity": "farthest"},
-	"mumbai": {"group": "Asya", "proximity": "far"},
-	"singapore": {"group": "Asya", "proximity": "farthest"},
+	"avrupa": {"proximity": "near"},
+	"kuzey_amerika": {"proximity": "far"},
+	"asya": {"proximity": "far"},
+	"guney_amerika": {"proximity": "farthest"},
 }
-const GROUP_ORDER: Array[String] = ["Avrupa", "Kuzey Amerika", "Asya", "Güney Amerika"]
 
 var _list: VBoxContainer
 var _buttons: Dictionary = {}
@@ -58,31 +52,17 @@ func refresh() -> void:
 	# Hero row: automatic nearest-edge placement (the recommended default).
 	_add_region_card("auto", "Otomatik — En Yakın Sunucu", "AUTO", "auto", true)
 
-	# Group the real locations by continent in a deliberate order.
-	var by_group: Dictionary = {}
+	_list.add_child(ColonyUiKit.section_label("Kıtalar"))
 	for region in OnlineServices.get_regions():
 		var region_id: String = String(region.get("id", ""))
 		var meta: Dictionary = REGION_META.get(region_id, {})
-		var group: String = String(meta.get("group", "Diğer"))
-		if not by_group.has(group):
-			by_group[group] = []
-		(by_group[group] as Array).append(region)
-
-	for group_name in GROUP_ORDER:
-		if not by_group.has(group_name):
-			continue
-		var suffix: String = "  •  en yakın" if group_name == "Avrupa" else ""
-		_list.add_child(ColonyUiKit.section_label(group_name + suffix))
-		for region in by_group[group_name]:
-			var region_id: String = String(region.get("id", ""))
-			var meta: Dictionary = REGION_META.get(region_id, {})
-			_add_region_card(
-				region_id,
-				String(region.get("display_name", region_id)),
-				String(region.get("short_name", "")),
-				String(meta.get("proximity", "far")),
-				bool(region.get("enabled", true))
-			)
+		_add_region_card(
+			region_id,
+			String(region.get("display_name", region_id)),
+			String(region.get("short_name", "")),
+			String(meta.get("proximity", "far")),
+			bool(region.get("enabled", true))
+		)
 
 
 func _build() -> void:
@@ -106,7 +86,7 @@ func _build() -> void:
 	var hint := Label.new()
 	hint.text = (
 		"Otomatik, IP'ne en yakın Edgegap noktasını seçer (önerilen). "
-		+ "İstersen belirli bir şehri sabitleyebilirsin — gerçek ping maçta ölçülür."
+		+ "İstersen bir kıta sabitleyebilirsin — gerçek ping maçta ölçülür."
 	)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ColonyUiKit.apply_label(hint, 14, 400, ColonyUiKit.TEXT_SECONDARY)
