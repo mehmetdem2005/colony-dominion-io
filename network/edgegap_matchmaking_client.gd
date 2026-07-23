@@ -19,6 +19,9 @@ var _build_id: String = ""
 var _protocol_version: int = 1
 var _http: HttpJsonClient
 var _request_id: String = ""
+var _join_ticket: String = ""
+var _match_id: String = ""
+var _server_id: String = ""
 
 
 func _ready() -> void:
@@ -61,7 +64,10 @@ func join_queue(
 		return {"ok": false, "error": _extract_error(response)}
 	var body: Dictionary = body_variant
 	_request_id = String(body.get("request_id", ""))
-	if _request_id.is_empty():
+	_join_ticket = String(body.get("join_ticket", ""))
+	_match_id = String(body.get("match_id", ""))
+	_server_id = String(body.get("server_id", ""))
+	if _request_id.is_empty() or _join_ticket.is_empty():
 		return {"ok": false, "error": "Sunucu isteği başlatılamadı"}
 	queue_status_changed.emit({"status": "deploying", "request_id": _request_id})
 	return {"ok": true, "body": {"queue_ticket_id": _request_id}}
@@ -82,9 +88,27 @@ func get_queue_status(access_token: String) -> Dictionary:
 		return {"ok": false, "error": "Eşleştirme yanıtı geçersiz"}
 	var body: Dictionary = body_variant
 	if not bool(body.get("ok", false)):
-		return {"ok": false, "error": String(body.get("error", "Sunucu hazırlanamadı"))}
-	queue_status_changed.emit(body.duplicate(true))
-	return {"ok": true, "body": body}
+		# Deployment failed/terminated — surface as a terminal matchmaking failure.
+		var failed := {"status": "failed", "message": String(body.get("error", "Sunucu hazırlanamadı"))}
+		queue_status_changed.emit(failed)
+		return {"ok": true, "body": failed}
+	if not (bool(body.get("ready", false)) and body.has("assignment")):
+		# Still provisioning — report as queued so OnlineServices keeps polling.
+		var pending := {"status": "deploying"}
+		queue_status_changed.emit(pending)
+		return {"ok": true, "body": pending}
+	# Ready: fold in the client-agreed identity so the assignment passes
+	# NetworkProtocol.validate_assignment and the server's join handshake, and
+	# shape it as OnlineServices._consume_queue_status expects.
+	var assignment: Dictionary = (body.get("assignment", {}) as Dictionary).duplicate(true)
+	assignment["join_ticket"] = _join_ticket
+	assignment["match_id"] = _match_id
+	assignment["server_id"] = _server_id
+	assignment["build_id"] = _build_id
+	assignment["protocol_version"] = _protocol_version
+	var assigned := {"status": "assigned", "assignment": assignment}
+	queue_status_changed.emit(assigned.duplicate(true))
+	return {"ok": true, "body": assigned}
 
 
 func cancel_queue(access_token: String) -> void:
@@ -101,6 +125,9 @@ func cancel_queue(access_token: String) -> void:
 
 func clear_ticket() -> void:
 	_request_id = ""
+	_join_ticket = ""
+	_match_id = ""
+	_server_id = ""
 
 
 func _endpoint(path: String) -> String:

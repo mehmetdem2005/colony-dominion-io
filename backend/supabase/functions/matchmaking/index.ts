@@ -34,6 +34,11 @@ function env(name: string): string {
   return (Deno.env.get(name) ?? "").trim();
 }
 
+function randomHex(byteCount: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(byteCount)), (b) =>
+    b.toString(16).padStart(2, "0")).join("");
+}
+
 function edgegapHeaders(): HeadersInit {
   // Edgegap expects "token <api-token>" in the Authorization header.
   const raw = env("EDGEGAP_API_TOKEN");
@@ -82,14 +87,31 @@ async function join(request: Request): Promise<Response> {
   const ip = clientIp(request);
   if (!ip) return json({ ok: false, error: "client_ip_unavailable" }, 400);
 
+  // The game server authenticates each client with a join ticket + match/server
+  // identity. Generate them here, hand them to the server via env, and return
+  // them to the client so the two sides agree. The server accepts the ticket
+  // directly (DEV_ACCEPT_JOIN_TICKETS) instead of calling a control plane.
+  const matchId = crypto.randomUUID();
+  const serverId = crypto.randomUUID();
+  const joinTicket = randomHex(24);
+  const maxPlayers = env("GAME_MAX_PLAYERS") || "10";
+  const buildId = env("GAME_BUILD_ID") || "colony";
+
   const body = {
     app_name: appName,
     version_name: versionName,
     ip_list: [ip],
     env_vars: [
-      { key: "BUILD_ID", value: env("GAME_BUILD_ID") || "colony" },
-      { key: "MAX_PLAYERS", value: env("GAME_MAX_PLAYERS") || "10" },
+      { key: "MATCH_ID", value: matchId },
+      { key: "SERVER_ID", value: serverId },
+      { key: "BUILD_ID", value: buildId },
+      { key: "MAX_PLAYERS", value: maxPlayers },
+      { key: "EXPECTED_PLAYERS", value: "1" },
+      { key: "HUMAN_PLAYERS", value: "1" },
+      { key: "BOT_PLAYERS", value: String(Math.max(0, Number(maxPlayers) - 1)) },
       { key: "NETWORK_TRANSPORT", value: "enet" },
+      { key: "GAME_PORT", value: "20000" },
+      { key: "DEV_ACCEPT_JOIN_TICKETS", value: "1" },
     ],
   };
   const response = await fetch(`${EDGEGAP_API}/deploy`, {
@@ -104,7 +126,15 @@ async function join(request: Request): Promise<Response> {
   }
   const requestId = String(payload.request_id ?? "").trim();
   if (!requestId) return json({ ok: false, error: "deploy_no_request_id" }, 502);
-  return json({ ok: true, request_id: requestId, poll_interval_ms: 1500 });
+  return json({
+    ok: true,
+    request_id: requestId,
+    join_ticket: joinTicket,
+    match_id: matchId,
+    server_id: serverId,
+    build_id: buildId,
+    poll_interval_ms: 1500,
+  });
 }
 
 // GET /status/{request_id} — poll Edgegap; when READY return the direct ip:port.

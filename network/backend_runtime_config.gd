@@ -52,8 +52,8 @@ func get_missing_client_settings() -> PackedStringArray:
 		missing.append("SUPABASE_PUBLISHABLE_KEY")
 	if OS.get_name() == "Android" and google_web_client_id.strip_edges().is_empty():
 		missing.append("GOOGLE_WEB_CLIENT_ID")
-	if not _is_http_url(rivet_control_base_url):
-		missing.append("RIVET_CONTROL_BASE_URL")
+	# Matchmaking now runs through the Supabase-hosted Edgegap function, so the
+	# Supabase settings above cover it; no separate control-plane URL is needed.
 	return missing
 
 

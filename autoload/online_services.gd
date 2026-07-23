@@ -11,7 +11,7 @@ var oauth: SupabaseOAuthHandoff
 var android_identity: AndroidGoogleIdentity
 var data: SupabaseDataClient
 var region_probe: RegionProbeService
-var matchmaking: RivetMatchmakingClient
+var matchmaking: EdgegapMatchmakingClient
 var legal_store := LegalAcceptanceStore.new()
 var _control_http: HttpJsonClient
 var _probe_timer: Timer
@@ -58,10 +58,12 @@ func _ready() -> void:
 	region_probe.region_updated.connect(_on_region_updated)
 	region_probe.cycle_completed.connect(_on_probe_cycle_completed)
 
-	matchmaking = RivetMatchmakingClient.new()
-	matchmaking.name = "RivetMatchmaking"
+	matchmaking = EdgegapMatchmakingClient.new()
+	matchmaking.name = "EdgegapMatchmaking"
 	add_child(matchmaking)
-	matchmaking.configure(config.rivet_control_base_url, config.build_id, config.protocol_version)
+	matchmaking.configure(
+		config.supabase_url, config.supabase_publishable_key, config.build_id, config.protocol_version
+	)
 	matchmaking.queue_status_changed.connect(matchmaking_status_changed.emit)
 
 	_probe_timer = Timer.new()
