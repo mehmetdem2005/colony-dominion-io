@@ -111,23 +111,11 @@ func _draw() -> void:
 
 
 func _draw_terrain_base(content_rect: Rect2) -> void:
-	draw_rect(content_rect, Color(0.24, 0.20, 0.11, 1.0), true)
-	var center: Vector2 = content_rect.get_center()
-	draw_circle(
-		center + Vector2(-content_rect.size.x * 0.26, content_rect.size.y * 0.18),
-		content_rect.size.y * 0.54,
-		Color(0.17, 0.26, 0.11, 0.82)
-	)
-	draw_circle(
-		center + Vector2(content_rect.size.x * 0.34, -content_rect.size.y * 0.22),
-		content_rect.size.y * 0.46,
-		Color(0.36, 0.25, 0.12, 0.74)
-	)
-	draw_circle(
-		center + Vector2(content_rect.size.x * 0.12, content_rect.size.y * 0.34),
-		content_rect.size.y * 0.28,
-		Color(0.30, 0.29, 0.23, 0.58)
-	)
+	# A single calm, dark base. The previous version stacked three big
+	# semi-transparent coloured circles (green/brown/grey) under the biome tiles,
+	# grid and borders, which read as a muddy "colour mess". A flat base lets the
+	# meaningful markers (chunks, resources, colonies, the player) stand out.
+	draw_rect(content_rect, Color(0.09, 0.10, 0.07, 1.0), true)
 
 
 func _draw_grid(content_rect: Rect2) -> void:
@@ -171,9 +159,10 @@ func _draw_loaded_chunks(content_rect: Rect2, world_bounds: Rect2) -> void:
 			continue
 		var biome: StringName = entry.get("biome", &"forest")
 		var biome_color: Color = BIOME_COLORS.get(biome, BIOME_COLORS[&"forest"])
-		# Loaded/warm state is represented by a border instead of large alpha
-		# jumps. Previously whole chunk tiles flashed between 0.34 and 0.72.
-		biome_color.a = 0.58
+		# Keep explored biome tiles as a subtle tint over the calm base so they
+		# read as terrain, not a wall of colour. (Loaded/warm state is shown by
+		# the border below, not a large alpha jump.)
+		biome_color.a = 0.34
 		draw_rect(local_rect, biome_color, true)
 		var is_active: bool = bool(entry.get("active", false))
 		var border_color := (
