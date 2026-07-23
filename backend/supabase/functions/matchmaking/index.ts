@@ -35,8 +35,10 @@ function env(name: string): string {
 }
 
 function edgegapHeaders(): HeadersInit {
-  // Edgegap expects the raw token in the Authorization header (no "Bearer").
-  return { authorization: env("EDGEGAP_API_TOKEN"), "content-type": "application/json" };
+  // Edgegap expects "token <api-token>" in the Authorization header.
+  const raw = env("EDGEGAP_API_TOKEN");
+  const value = raw.toLowerCase().startsWith("token ") ? raw : `token ${raw}`;
+  return { authorization: value, "content-type": "application/json" };
 }
 
 function clientIp(request: Request): string {
@@ -53,12 +55,29 @@ function routeParts(request: Request): string[] {
   return path.slice(index + marker.length).split("/").map((p) => p.trim()).filter(Boolean);
 }
 
+// Verify the caller is a signed-in Supabase user (the function is deployed with
+// --no-verify-jwt so /health stays public, so /join must check auth itself).
+async function requireUser(request: Request): Promise<boolean> {
+  const auth = request.headers.get("authorization") ?? "";
+  if (!/^Bearer\s+.+/i.test(auth)) return false;
+  const base = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  if (!base || !anon) return false;
+  const response = await fetch(`${base}/auth/v1/user`, {
+    headers: { apikey: anon, authorization: auth },
+  }).catch(() => null);
+  return Boolean(response && response.ok);
+}
+
 // POST /join — deploy a server near the player and return a request handle.
 async function join(request: Request): Promise<Response> {
   const appName = env("EDGEGAP_APP_NAME");
   const versionName = env("EDGEGAP_APP_VERSION");
   if (!env("EDGEGAP_API_TOKEN") || !appName || !versionName) {
     return json({ ok: false, error: "matchmaking_not_configured" }, 503);
+  }
+  if (!(await requireUser(request))) {
+    return json({ ok: false, error: "authentication_required" }, 401);
   }
   const ip = clientIp(request);
   if (!ip) return json({ ok: false, error: "client_ip_unavailable" }, 400);
