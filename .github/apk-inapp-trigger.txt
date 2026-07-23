@@ -1,2 +1,2 @@
-Re-trigger in-app APK build (previous run hit a transient Gradle-distribution download failure).
-bump: 2026-07-23T1325Z
+Minimap cleanup + server-tick interpolation (jitter).
+bump: 2026-07-23T1345Z

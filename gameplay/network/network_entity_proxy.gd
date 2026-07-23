@@ -1,8 +1,12 @@
 class_name NetworkEntityProxy
 extends CharacterBody2D
 
-const REMOTE_INTERPOLATION_SPEED: float = 18.0
 const SNAPSHOT_BUFFER_LIMIT: int = 8
+# Milliseconds between authoritative snapshots (server tick spacing). Remote
+# interpolation runs on this even clock rather than on jittery packet-arrival
+# times, which is what previously made the units shimmer/"titriyor".
+const TICK_MS: float = 1000.0 / NetworkProtocol.SNAPSHOT_HZ
+const RENDER_CLOCK_MAX_LAG_MS: float = 250.0
 const LOCAL_SOFT_CORRECTION_SPEED: float = 7.0
 const LOCAL_IDLE_CORRECTION_SPEED: float = 12.0
 const LOCAL_HARD_SNAP_DISTANCE: float = 320.0
@@ -22,6 +26,8 @@ var _prediction_input := Vector2.ZERO
 var _move_speed: float = 280.0
 var _last_snapshot_tick: int = -1
 var _snapshot_buffer: Array[Dictionary] = []
+var _newest_server_ms: float = 0.0
+var _render_ms: float = -1.0
 var _last_visual_team_id: int = -2
 var _last_visual_kind: StringName = &""
 var _display_name: String = ""
@@ -102,15 +108,11 @@ func apply_snapshot(data: Dictionary, server_tick: int) -> void:
 	if is_local_commander:
 		_snapshot_buffer.clear()
 		return
-	(
-		_snapshot_buffer
-		. append(
-			{
-				"received_msec": Time.get_ticks_msec(),
-				"position": decoded,
-			}
-		)
-	)
+	# Timestamp each sample by the SERVER tick (evenly spaced), not local arrival
+	# time, so interpolation speed is constant regardless of network jitter.
+	var server_ms: float = float(server_tick) * TICK_MS
+	_newest_server_ms = maxf(_newest_server_ms, server_ms)
+	_snapshot_buffer.append({"server_ms": server_ms, "position": decoded})
 	while _snapshot_buffer.size() > SNAPSHOT_BUFFER_LIMIT:
 		_snapshot_buffer.pop_front()
 
@@ -120,6 +122,8 @@ func set_local_commander(value: bool) -> void:
 		return
 	is_local_commander = value
 	_snapshot_buffer.clear()
+	_render_ms = -1.0
+	_newest_server_ms = 0.0
 	queue_redraw()
 
 
@@ -166,46 +170,54 @@ func _advance_local_prediction(delta: float) -> void:
 
 
 func _advance_remote_interpolation(delta: float) -> void:
-	var render_target: Vector2 = _sample_remote_position()
-	velocity = (render_target - global_position) / maxf(delta, 0.001)
-	var interpolation_weight: float = 1.0 - exp(-REMOTE_INTERPOLATION_SPEED * delta)
-	global_position = global_position.lerp(render_target, interpolation_weight)
+	var previous: Vector2 = global_position
+	var render_target: Vector2 = _sample_remote_position(delta)
+	# The render clock already produces smooth, evenly-paced positions, so we set
+	# the position directly — no second smoothing pass that would add latency or
+	# re-introduce chase jitter.
+	global_position = render_target
+	velocity = (render_target - previous) / maxf(delta, 0.001)
 
 
-func _sample_remote_position() -> Vector2:
+func _sample_remote_position(delta: float) -> Vector2:
 	if _snapshot_buffer.is_empty():
 		return authoritative_position
+	var newest: Dictionary = _snapshot_buffer[_snapshot_buffer.size() - 1]
 	if _snapshot_buffer.size() == 1:
-		return _snapshot_buffer[0].get("position", authoritative_position) as Vector2
+		return newest.get("position", authoritative_position) as Vector2
 
-	var target_msec: int = (
-		Time.get_ticks_msec()
-		- NetworkProtocol.get_interpolation_delay_msec(_get_network_metric("jitter_ms"))
+	# Render slightly in the past so there is always a "future" sample to
+	# interpolate toward. Advance a local clock by real time and keep it inside
+	# the buffered window: never ahead of the newest sample (no extrapolation),
+	# and re-synced if it drifts too far behind after a stall.
+	var delay_ms: float = float(
+		NetworkProtocol.get_interpolation_delay_msec(_get_network_metric("jitter_ms"))
 	)
-	while (
-		_snapshot_buffer.size() > 2
-		and int(_snapshot_buffer[1].get("received_msec", 0)) <= target_msec
-	):
-		_snapshot_buffer.pop_front()
+	var target_ms: float = _newest_server_ms - delay_ms
+	if _render_ms < 0.0:
+		_render_ms = target_ms
+	else:
+		_render_ms += delta * 1000.0
+		_render_ms = clampf(_render_ms, target_ms - RENDER_CLOCK_MAX_LAG_MS, _newest_server_ms)
 
-	var older: Dictionary = _snapshot_buffer[0]
-	var newer: Dictionary = _snapshot_buffer[1]
-	var older_time: int = int(older.get("received_msec", target_msec))
-	var newer_time: int = int(newer.get("received_msec", older_time + 1))
-	var older_position: Vector2 = older.get("position", authoritative_position) as Vector2
-	var newer_position: Vector2 = newer.get("position", authoritative_position) as Vector2
-	var span_msec: int = maxi(newer_time - older_time, 1)
-	if target_msec <= newer_time:
-		var weight: float = clampf(float(target_msec - older_time) / float(span_msec), 0.0, 1.0)
-		return older_position.lerp(newer_position, weight)
-
-	# No newer snapshot has arrived yet. Hold at the latest known position rather
-	# than extrapolating ahead: extrapolation guesses a future position and then
-	# snaps back when the real snapshot lands a few milliseconds later, which is
-	# exactly what reads on screen as the ants "titriyor" (jittering). Holding is
-	# softened by the residual smoothing in _advance_remote_interpolation, so a
-	# late packet shows as a momentary slow-down instead of a visible snap.
-	return newer_position
+	var oldest: Dictionary = _snapshot_buffer[0]
+	if _render_ms <= float(oldest.get("server_ms", 0.0)):
+		return oldest.get("position", authoritative_position) as Vector2
+	if _render_ms >= float(newest.get("server_ms", 0.0)):
+		return newest.get("position", authoritative_position) as Vector2
+	for index in range(_snapshot_buffer.size() - 1):
+		var older: Dictionary = _snapshot_buffer[index]
+		var newer: Dictionary = _snapshot_buffer[index + 1]
+		var older_ms: float = float(older.get("server_ms", 0.0))
+		var newer_ms: float = float(newer.get("server_ms", older_ms + 1.0))
+		if _render_ms >= older_ms and _render_ms <= newer_ms:
+			var older_position: Vector2 = older.get("position", authoritative_position) as Vector2
+			var newer_position: Vector2 = newer.get("position", authoritative_position) as Vector2
+			var span: float = maxf(newer_ms - older_ms, 1.0)
+			return older_position.lerp(
+				newer_position, clampf((_render_ms - older_ms) / span, 0.0, 1.0)
+			)
+	return newest.get("position", authoritative_position) as Vector2
 
 
 func _refresh_world_presentation() -> void:
