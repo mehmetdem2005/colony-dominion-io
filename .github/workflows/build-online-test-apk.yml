@@ -95,7 +95,8 @@ jobs:
             -dname "CN=Android Debug,O=Colony Dominion,C=TR" \
             -validity 10000 \
             -deststoretype PKCS12
-          "$GODOT_BIN" --headless --editor --path . \
+          timeout 60 "$GODOT_BIN" --headless --editor --path . \
+            --quit-after 10 \
             --script res://tools/configure_android_ci.gd
 
       - name: Import and compile Godot project
