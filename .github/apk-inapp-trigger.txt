@@ -1,2 +1,2 @@
-Continent-level region picker (Avrupa / Kuzey Amerika / Asya / Güney Amerika).
-bump: 2026-07-23T1320Z
+Re-trigger in-app APK build (previous run hit a transient Gradle-distribution download failure).
+bump: 2026-07-23T1325Z
