@@ -10,9 +10,12 @@ on:
       - "gameplay/**"
       - "network/**"
       - "scenes/**"
+      - "ui/**"
+      - "config/**"
       - "tests/**"
       - "tools/**"
-      - "backend/rivet-control/**"
+      - "backend/supabase/functions/matchmaking/**"
+      - "deploy/edgegap/**"
       - "export_presets.cfg"
   workflow_dispatch:
 
@@ -28,15 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
       - name: Install Godot editor and export templates
         timeout-minutes: 8
         run: tools/install_godot_ci.sh
 
-      - name: Validate Godot, Rivet control, and dedicated server export
+      - name: Validate Godot, Edgegap contract, and dedicated server export
         shell: bash
         run: |
           set -uo pipefail
@@ -104,6 +103,7 @@ jobs:
             tests/online_foundation_regression_test.gd
             tests/online_security_contract_test.gd
             tests/online_transport_regression_test.gd
+            tests/online_presentation_parity_regression_test.gd
             tests/online_production_completion_test.gd
             tests/north_world_depth_regression_test.gd
           )
@@ -117,12 +117,6 @@ jobs:
               --path "$GITHUB_WORKSPACE" \
               --script "res://$test_path"
           done
-
-          run_case "rivet-control-install" 240 \
-            npm --prefix backend/rivet-control install --no-audit --no-fund
-
-          run_case "rivet-control-typecheck" 180 \
-            npm --prefix backend/rivet-control run typecheck
 
           if [[ $FAILURES -eq 0 ]]; then
             run_case "dedicated-server-export" 600 \
@@ -155,7 +149,7 @@ jobs:
             exit 1
           fi
 
-          echo "GODOT_RIVET_SOURCE_AND_SERVER_EXPORT_OK"
+          echo "GODOT_EDGEGAP_SOURCE_AND_SERVER_EXPORT_OK"
 
       - name: Upload diagnostic logs
         if: always()

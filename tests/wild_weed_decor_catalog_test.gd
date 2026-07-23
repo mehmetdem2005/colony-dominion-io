@@ -128,15 +128,13 @@ func _validate_biome_coverage(failures: PackedStringArray) -> void:
 func _validate_placement_contract(failures: PackedStringArray) -> void:
 	var source := FileAccess.get_file_as_string("res://gameplay/world/world_stream_manager.gd")
 	for marker in [
-		"var is_solid: bool = bool(prop_config.get(\"solid\", false))",
+		'var is_solid: bool = bool(prop_config.get("solid", false))',
 		"job.occupied_positions.append(position)",
 		"job.occupied_radii.append(radius)",
 	]:
 		if not source.contains(marker):
 			failures.append("Deterministic prop spacing contract is missing: %s" % marker)
-	var prop_source := FileAccess.get_file_as_string(
-		"res://gameplay/world/streamed_world_prop.gd"
-	)
+	var prop_source := FileAccess.get_file_as_string("res://gameplay/world/streamed_world_prop.gd")
 	if prop_source.contains("get_nodes_in_group"):
 		failures.append("Wild weed overlap must not use runtime O(n²) group scans")
 	for marker in [

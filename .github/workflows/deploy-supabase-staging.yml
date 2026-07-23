@@ -174,7 +174,7 @@ jobs:
               raise SystemExit("OAuth handoff may expose tokens to the browser")
           PY
 
-      - name: Verify OAuth callback renders as secure UTF-8 HTML
+      - name: Verify OAuth callback renders as secure UTF-8 plain text
         timeout-minutes: 3
         run: |
           set -euo pipefail
@@ -182,7 +182,7 @@ jobs:
           CALLBACK_NONCE="0000000000000000000000000000000000000000000000000000000000000000"
           CALLBACK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/oauth-google-handoff/callback/${CALLBACK_ID}/${CALLBACK_NONCE}"
           HEADER_FILE="$RUNNER_TEMP/google-oauth-callback.headers"
-          BODY_FILE="$RUNNER_TEMP/google-oauth-callback.html"
+          BODY_FILE="$RUNNER_TEMP/google-oauth-callback.txt"
           STATUS_CODE="$(curl --location --silent --show-error \
             --retry 12 \
             --retry-delay 5 \
@@ -275,7 +275,7 @@ jobs:
               "utf8": True,
               "nosniff": True,
               "no_store": True,
-              "csp_nonce": True,
+              "sandboxed": True,
               "secret_markers_absent": True,
           }
           Path("build/diagnostics/google-oauth-callback-verification.json").write_text(

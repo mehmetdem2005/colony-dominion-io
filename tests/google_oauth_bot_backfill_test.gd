@@ -45,8 +45,8 @@ func _run() -> void:
 			"new Headers",
 			"UTF8_ENCODER.encode",
 			"Content-Disposition",
-			"Cross-Origin-Resource-Policy",
-			"randomNonce",
+			"Content-Security-Policy",
+			"randomHex",
 			"flow_type",
 			"pkce",
 			"callback_nonce_hash",
@@ -76,8 +76,8 @@ func _run() -> void:
 	_assert_contains(
 		"res://.github/workflows/deploy-supabase-staging.yml",
 		[
-			"Verify OAuth callback renders as secure UTF-8 HTML",
-			"text/html;charset=utf-8",
+			"Verify OAuth callback renders as secure UTF-8 plain text",
+			"text/plain;charset=utf-8",
 			"google-oauth-callback-verification.json",
 			"secret_markers_absent",
 			"tokens_in_browser",
@@ -101,30 +101,20 @@ func _run() -> void:
 		failures
 	)
 	_assert_contains(
-		"res://backend/rivet-control/src/matchmaking-policy.ts",
-		["minimumHumanPlayers", "bot_backfill", "full_human_lobby", "waitRemainingMs"],
-		failures,
-		false
-	)
-	_assert_contains(
-		"res://backend/rivet-control/src/server-full-online.ts",
+		"res://backend/supabase/functions/matchmaking/index.ts",
 		[
-			"BOT_BACKFILL_WAIT_SECONDS",
-			"evaluateMatchmakingWindow",
-			"bot_backfill_seconds_remaining",
+			"GAME_MAX_PLAYERS",
+			"HUMAN_PLAYER_COUNT",
+			"BOT_COUNT",
+			"RANKED_MATCH",
+			"EXPECTED_JOIN_TICKET",
 		],
 		failures
 	)
 	_assert_contains(
-		"res://backend/rivet-control/src/game-server-actor.ts",
-		["BOT_COUNT", "HUMAN_PLAYER_COUNT", 'state.ranked ? "1" : "0"'],
+		"res://network/rivet_game_transport.gd",
+		["_configure_server_population", "ENetMultiplayerPeer", "NETWORK_TRANSPORT"],
 		failures
-	)
-	_assert_contains(
-		"res://backend/rivet-control/src/rivet-native-allocator.ts",
-		["createInRegion", "region.providerRegion", "EU"],
-		failures,
-		false
 	)
 	_assert_contains(
 		"res://network/region_probe_service.gd",
@@ -169,18 +159,17 @@ func _run() -> void:
 	else:
 		var config: Dictionary = config_variant
 		var regions_variant: Variant = config.get("regions", [])
-		if not regions_variant is Array or (regions_variant as Array).size() != 1:
-			failures.append("Client must expose only actually deployed regions")
+		if not regions_variant is Array:
+			failures.append("Edgegap placement targets are missing")
 		else:
-			var region_variant: Variant = (regions_variant as Array)[0]
-			if not region_variant is Dictionary:
-				failures.append("Deployed region definition is invalid")
-			else:
-				var region: Dictionary = region_variant
-				if String(region.get("id", "")) != "eu":
-					failures.append("The deployed client region must be Europe")
-				if not String(region.get("probe_url", "")).contains("/request/v1/health/ping?"):
-					failures.append("EU probe URL is not query-safe")
+			var region_ids: Dictionary = {}
+			for region_variant in regions_variant:
+				if region_variant is Dictionary:
+					var region: Dictionary = region_variant
+					region_ids[String(region.get("id", ""))] = true
+			for required_id in ["auto", "tr", "eu-se", "eu-central"]:
+				if not region_ids.has(required_id):
+					failures.append("Missing Edgegap placement target: %s" % required_id)
 
 	var full_human := NetworkProtocol.normalize_assignment(
 		{"human_players": 10, "bot_players": 0, "ranked": true}

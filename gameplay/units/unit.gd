@@ -117,12 +117,10 @@ func configure(
 	_presentation_enabled = true
 	if is_instance_valid(controller) and controller.has_method("is_presentation_enabled"):
 		_presentation_enabled = bool(controller.is_presentation_enabled())
-	sprite.texture = definition.texture if _presentation_enabled else null
-	if _presentation_enabled and definition.texture != null:
-		var longest: float = float(
-			max(definition.texture.get_width(), definition.texture.get_height())
-		)
-		sprite.scale = Vector2.ONE * (definition.sprite_world_size / maxf(longest, 1.0))
+	if _presentation_enabled:
+		ColonyVisualCatalog.configure_unit_sprite(sprite, definition)
+	else:
+		sprite.texture = null
 	visual_root.configure(
 		definition.body_radius,
 		definition.role == &"commander",

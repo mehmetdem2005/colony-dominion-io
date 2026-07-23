@@ -67,6 +67,7 @@ var _reservations_by_player: Dictionary = {}
 var _participant_history: Dictionary = {}
 var _auth_deadlines: Dictionary = {}
 var _auth_in_progress: Dictionary = {}
+var _consumed_join_ticket_hashes: Dictionary = {}
 var _health_server: DedicatedServerHealth = null
 var _server_started_unix_msec: int = 0
 var _match_result_reporting: bool = false
@@ -130,23 +131,11 @@ func start_dedicated_server() -> Dictionary:
 	var expected_players: int = DedicatedMatchStartGate.read_int_environment(
 		"EXPECTED_PLAYERS", _max_players, 1, _max_players
 	)
-	_human_player_count = DedicatedMatchStartGate.read_int_environment(
-		"HUMAN_PLAYER_COUNT", expected_players, expected_players, _max_players
-	)
-	_bot_count = DedicatedMatchStartGate.read_int_environment(
-		"BOT_COUNT", _max_players - _human_player_count, 0, _max_players
-	)
-	_ranked_match = OS.get_environment("RANKED_MATCH") == "1"
-	if _human_player_count + _bot_count != _max_players:
-		var population_error := "Dedicated server human and bot counts must equal MAX_PLAYERS"
+	var population_error: String = _configure_server_population(expected_players)
+	if not population_error.is_empty():
 		server_start_failed.emit(population_error)
 		push_error(population_error)
 		return {"ok": false, "error": population_error}
-	if _ranked_match and _bot_count > 0:
-		var ranked_error := "Bot-backfilled matches cannot start as ranked"
-		server_start_failed.emit(ranked_error)
-		push_error(ranked_error)
-		return {"ok": false, "error": ranked_error}
 	if _match_start_gate != null:
 		_match_start_gate.set_expected_players(expected_players)
 	_server_match_id = OS.get_environment("MATCH_ID").strip_edges()
@@ -186,6 +175,21 @@ func start_dedicated_server() -> Dictionary:
 		)
 	)
 	return {"ok": true, "port": _server_port}
+
+
+func _configure_server_population(expected_players: int) -> String:
+	_human_player_count = DedicatedMatchStartGate.read_int_environment(
+		"HUMAN_PLAYER_COUNT", expected_players, expected_players, _max_players
+	)
+	_bot_count = DedicatedMatchStartGate.read_int_environment(
+		"BOT_COUNT", _max_players - _human_player_count, 0, _max_players
+	)
+	_ranked_match = OS.get_environment("RANKED_MATCH") == "1"
+	if _human_player_count + _bot_count != _max_players:
+		return "Dedicated server human and bot counts must equal MAX_PLAYERS"
+	if _ranked_match and _bot_count > 0:
+		return "Bot-backfilled matches cannot start as ranked"
+	return ""
 
 
 func connect_to_assignment(
@@ -795,19 +799,28 @@ func _update_network_metrics() -> void:
 	var ping_value: int = -1
 	var jitter_value: int = -1
 	if not _ping_samples.is_empty():
-		var sum: float = 0.0
-		for sample in _ping_samples:
-			sum += sample
-		var mean: float = sum / float(_ping_samples.size())
-		ping_value = roundi(mean)
+		var sorted_samples: Array[float] = _ping_samples.duplicate()
+		sorted_samples.sort()
+		var median: float = _median_sample(sorted_samples)
+		ping_value = roundi(median)
 		if _ping_samples.size() > 1:
-			var variance_sum: float = 0.0
+			var deviations: Array[float] = []
 			for sample in _ping_samples:
-				variance_sum += pow(sample - mean, 2.0)
-			jitter_value = roundi(sqrt(variance_sum / float(_ping_samples.size())))
+				deviations.append(absf(sample - median))
+			deviations.sort()
+			jitter_value = roundi(_median_sample(deviations))
 	var total: int = maxi(_sent_ping_count, 1)
 	var loss: float = clampf(float(_lost_ping_count) / float(total), 0.0, 1.0)
 	NetworkSession.apply_live_metrics(ping_value, jitter_value, loss)
+
+
+func _median_sample(sorted_samples: Array[float]) -> float:
+	if sorted_samples.is_empty():
+		return 0.0
+	var middle: int = sorted_samples.size() / 2
+	if sorted_samples.size() % 2 == 1:
+		return sorted_samples[middle]
+	return (sorted_samples[middle - 1] + sorted_samples[middle]) * 0.5
 
 
 func _on_server_match_ended(winner_name: String, _player_won: bool) -> void:
@@ -972,6 +985,23 @@ func _validate_join_ticket(
 ) -> Dictionary:
 	if join_ticket.is_empty() or player_id.is_empty():
 		return {"ok": false, "error": "Eksik bağlantı bileti"}
+	var expected_ticket: String = OS.get_environment("EXPECTED_JOIN_TICKET")
+	var expected_player_id: String = OS.get_environment("EXPECTED_PLAYER_ID")
+	if not expected_ticket.is_empty() or not expected_player_id.is_empty():
+		if expected_ticket.is_empty() or expected_player_id.is_empty():
+			return {"ok": false, "error": "Sunucu bilet kimliği eksik yapılandırıldı"}
+		if not _constant_time_equal(join_ticket, expected_ticket):
+			return {"ok": false, "error": "Bağlantı bileti eşleşmiyor"}
+		if not _constant_time_equal(player_id, expected_player_id):
+			return {"ok": false, "error": "Oyuncu kimliği biletle eşleşmiyor"}
+		var ticket_hash: String = join_ticket.sha256_text()
+		if _consumed_join_ticket_hashes.has(ticket_hash):
+			return {"ok": false, "error": "Bağlantı bileti daha önce kullanıldı"}
+		_consumed_join_ticket_hashes[ticket_hash] = true
+		return {
+			"ok": true,
+			"display_name": OS.get_environment("EXPECTED_DISPLAY_NAME").strip_edges().left(24),
+		}
 	var control_url: String = OS.get_environment("CONTROL_BASE_URL").trim_suffix("/")
 	var server_token: String = OS.get_environment("GAME_SERVER_AUTH_TOKEN")
 	if not control_url.is_empty() and not server_token.is_empty():
@@ -1014,9 +1044,21 @@ func _validate_join_ticket(
 			"error": String(body.get("error", "Bilet reddedildi")),
 			"display_name": String(body.get("displayName", "")),
 		}
-	if OS.is_debug_build() or OS.get_environment("DEV_ACCEPT_JOIN_TICKETS") == "1":
+	if OS.is_debug_build():
 		return {"ok": true, "dev": true}
 	return {"ok": false, "error": "Sunucu bilet doğrulayıcısı yapılandırılmadı"}
+
+
+func _constant_time_equal(left: String, right: String) -> bool:
+	var left_bytes: PackedByteArray = left.to_utf8_buffer()
+	var right_bytes: PackedByteArray = right.to_utf8_buffer()
+	var maximum_size: int = maxi(left_bytes.size(), right_bytes.size())
+	var difference: int = left_bytes.size() ^ right_bytes.size()
+	for index in maximum_size:
+		var left_byte: int = left_bytes[index] if index < left_bytes.size() else 0
+		var right_byte: int = right_bytes[index] if index < right_bytes.size() else 0
+		difference |= left_byte ^ right_byte
+	return difference == 0
 
 
 func _validate_server_identity_claims(
@@ -1135,8 +1177,10 @@ func _rpc_receive_snapshot(snapshot: Dictionary) -> void:
 		command_acknowledged.emit(ack_sequence)
 	var player_variant: Variant = snapshot.get("player", {})
 	if player_variant is Dictionary:
-		player_state_received.emit((player_variant as Dictionary).duplicate(true))
-	snapshot_received.emit(snapshot.duplicate(true))
+		player_state_received.emit(player_variant as Dictionary)
+	# Signals are synchronous and consumers treat the snapshot as read-only.
+	# Avoid two deep copies of the full entity array every 50 ms on mobile.
+	snapshot_received.emit(snapshot)
 
 
 @rpc("authority", "call_remote", "reliable", 0)

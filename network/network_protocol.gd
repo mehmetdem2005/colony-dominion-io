@@ -16,7 +16,9 @@ const RECONNECT_GRACE_SECONDS: float = 60.0
 const RECONNECT_RETRY_SECONDS: float = 1.25
 const RECONNECT_PERSIST_REFRESH_SECONDS: float = 4.0
 const RECONNECT_PERSIST_TTL_SECONDS: float = 75.0
-const INTERPOLATION_DELAY_MSEC: int = 110
+const INTERPOLATION_DELAY_MSEC: int = 55
+const MIN_INTERPOLATION_DELAY_MSEC: int = 45
+const MAX_INTERPOLATION_DELAY_MSEC: int = 85
 const MAX_SNAPSHOT_ENTITIES: int = 128
 const SERVER_JOIN_TIMEOUT_SECONDS: float = 90.0
 const SERVER_START_WAIT_SECONDS: float = 5.0
@@ -30,6 +32,15 @@ const ENET_CHANNEL_COUNT: int = 4
 const TRANSPORT_ENET: String = "enet"
 const TRANSPORT_WEBSOCKET: String = "websocket"
 const SERVER_PEER_ID: int = 1
+
+
+static func get_interpolation_delay_msec(jitter_msec: int = 0) -> int:
+	jitter_msec = maxi(jitter_msec, 0)
+	return clampi(
+		INTERPOLATION_DELAY_MSEC + roundi(float(jitter_msec) * 1.5),
+		MIN_INTERPOLATION_DELAY_MSEC,
+		MAX_INTERPOLATION_DELAY_MSEC
+	)
 
 
 static func normalize_assignment(value: Dictionary) -> Dictionary:

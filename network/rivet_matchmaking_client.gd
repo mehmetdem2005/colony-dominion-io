@@ -77,9 +77,11 @@ func join_queue(
 		if bool(response.get("ok", false)) or not _is_transient(response):
 			break
 		if attempt < JOIN_MAX_ATTEMPTS - 1:
-			await get_tree().create_timer(
-				JOIN_RETRY_BACKOFF_SECONDS * float(attempt + 1), true, false, true
-			).timeout
+			await (
+				get_tree()
+				. create_timer(JOIN_RETRY_BACKOFF_SECONDS * float(attempt + 1), true, false, true)
+				. timeout
+			)
 	if not bool(response.get("ok", false)):
 		return {"ok": false, "error": _extract_error(response)}
 	var body_variant: Variant = response.get("body", {})

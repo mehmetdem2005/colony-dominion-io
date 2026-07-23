@@ -4,7 +4,7 @@ const FIXED_CLOCK_SCRIPT := preload("res://gameplay/core/fixed_step_clock.gd")
 const MATCH_RULES_RESOURCE := preload("res://data/match/default_match_rules.tres")
 const JOURNAL_SCRIPT := preload("res://gameplay/network/authoritative_command_journal.gd")
 const RESIDENCY_PLANNER_SCRIPT := preload("res://gameplay/world/world_residency_planner.gd")
-const SERVER_MATCH_SCENE := preload("res://scenes/server_game.tscn")
+const SERVER_MATCH_SCENE_PATH := "res://scenes/server_game.tscn"
 
 const REQUIRED_SERVICES: Array[String] = [
 	"res://gameplay/performance/unit_pool.gd",
@@ -88,16 +88,21 @@ func _run_test() -> void:
 		_fail("Residency planner exceeded its calculated resident budget")
 		return
 
-	var match := SERVER_MATCH_SCENE.instantiate() as MatchController
+	var server_match_scene := load(SERVER_MATCH_SCENE_PATH) as PackedScene
+	if server_match_scene == null:
+		_fail("Server match composition root scene could not be loaded")
+		return
+	var match := server_match_scene.instantiate()
 	if match == null:
 		_fail("Server match composition root could not be instantiated")
 		return
 	root.add_child(match)
 	await process_frame
-	if match.match_rules == null:
+	if match.get("match_rules") == null:
 		_fail("Match composition root did not own a MatchRules instance")
 		return
-	var stats: Dictionary = match.get_stream_stats()
+	var stats_variant: Variant = match.call("get_stream_stats")
+	var stats: Dictionary = stats_variant if stats_variant is Dictionary else {}
 	for required_key in [
 		"unit_pool",
 		"active_projectiles",
@@ -108,7 +113,8 @@ func _run_test() -> void:
 		if not stats.has(required_key):
 			_fail("Runtime observability is missing metric: %s" % required_key)
 			return
-	if not match.get_recent_authoritative_commands().is_empty():
+	var commands_variant: Variant = match.call("get_recent_authoritative_commands")
+	if commands_variant is Array and not commands_variant.is_empty():
 		_fail("A fresh match unexpectedly inherited authoritative command history")
 		return
 

@@ -69,7 +69,10 @@ func _build() -> void:
 	root_box.add_child(title)
 
 	var hint := Label.new()
-	hint.text = "Otomatik seçim ping, jitter, paket kaybı ve sunucu uygunluğunu karşılaştırır."
+	hint.text = (
+		"Otomatik seçim oyuncu IP'sine en yakın Edgegap noktasını kullanır; "
+		+ "gerekirse bir yakınlık hedefini elle seçebilirsin."
+	)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 15)
@@ -138,10 +141,18 @@ func _select(region_id: String) -> void:
 
 func _get_auto_metrics() -> Dictionary:
 	var best_id: String = OnlineServices.region_probe.get_best_region_id()
-	return OnlineServices.region_probe.get_metrics(best_id) if not best_id.is_empty() else {}
+	if not best_id.is_empty():
+		return OnlineServices.region_probe.get_metrics(best_id)
+	return {"placement_only": true, "automatic": true}
 
 
 func _format_metrics(metrics: Dictionary) -> String:
+	if bool(metrics.get("placement_only", false)):
+		return (
+			"Edgegap otomatik yakınlık"
+			if bool(metrics.get("automatic", false))
+			else "Edgegap yakınlık hedefi"
+		)
 	if metrics.is_empty() or not bool(metrics.get("configured", false)):
 		return "Yapılandırılmadı"
 	if not bool(metrics.get("available", false)):
@@ -153,6 +164,8 @@ func _format_metrics(metrics: Dictionary) -> String:
 
 
 func _metrics_tooltip(metrics: Dictionary) -> String:
+	if bool(metrics.get("placement_only", false)):
+		return "Edgegap bu hedefe en yakın müsait noktayı seçer; gerçek ping maçta ölçülür."
 	if not bool(metrics.get("configured", false)):
 		return "Bu bölgenin probe_url değeri backend_config.json içinde henüz tanımlanmadı."
 	return _format_metrics(metrics)

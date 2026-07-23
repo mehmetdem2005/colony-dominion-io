@@ -19,6 +19,11 @@ func start_dedicated_server() -> Dictionary:
 	var expected_players: int = DedicatedMatchStartGate.read_int_environment(
 		"EXPECTED_PLAYERS", _max_players, 1, _max_players
 	)
+	var population_error: String = _configure_server_population(expected_players)
+	if not population_error.is_empty():
+		server_start_failed.emit(population_error)
+		push_error(population_error)
+		return {"ok": false, "error": population_error}
 	if _match_start_gate != null:
 		_match_start_gate.set_expected_players(expected_players)
 	_server_match_id = OS.get_environment("MATCH_ID").strip_edges()

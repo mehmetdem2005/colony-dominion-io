@@ -19,7 +19,7 @@ const RESOURCE_COLORS := {
 	&"stone": Color(0.72, 0.76, 0.80, 1.0),
 }
 
-var match_controller: MatchController
+var _read_model: Node = null
 var _snapshot: Dictionary = {}
 var _known_chunks: Dictionary = {}
 var _refresh_left: float = 0.0
@@ -32,9 +32,14 @@ func _ready() -> void:
 
 
 func bind_match(match_node: Node) -> void:
-	match_controller = match_node as MatchController
-	if not is_instance_valid(match_controller):
-		push_error("ColonyMinimap received an invalid match read binding")
+	bind_source(match_node)
+
+
+func bind_source(read_model: Node) -> void:
+	_read_model = read_model
+	if not is_instance_valid(_read_model) or not _read_model.has_method("get_minimap_snapshot"):
+		push_error("ColonyMinimap received an invalid minimap read model")
+		_read_model = null
 		return
 	_known_chunks.clear()
 	_snapshot.clear()
@@ -42,7 +47,7 @@ func bind_match(match_node: Node) -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_instance_valid(match_controller):
+	if not is_instance_valid(_read_model):
 		return
 	_refresh_left -= delta
 	if _refresh_left <= 0.0:
@@ -51,9 +56,12 @@ func _process(delta: float) -> void:
 
 
 func _refresh_snapshot() -> void:
-	if not is_instance_valid(match_controller):
+	if not is_instance_valid(_read_model):
 		return
-	var next_snapshot: Dictionary = match_controller.get_minimap_snapshot()
+	var next_snapshot_variant: Variant = _read_model.call("get_minimap_snapshot")
+	if not next_snapshot_variant is Dictionary:
+		return
+	var next_snapshot: Dictionary = next_snapshot_variant
 	var known_chunk_coords: Array = _known_chunks.keys()
 	for chunk_coord in known_chunk_coords:
 		var cached_entry: Dictionary = _known_chunks[chunk_coord]
