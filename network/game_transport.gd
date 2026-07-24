@@ -980,11 +980,55 @@ func _try_reconnect(
 	return {"ok": true}
 
 
+## Verify a matchmaker-signed join ticket of the form "<payloadB64>.<sigB64>",
+## where sig = base64(HMAC-SHA256(payloadB64, MATCH_TICKET_SECRET)) and payload
+## is base64(JSON {u: user_id, e: expiry_ms, n: display_name}). Lets any player
+## the matchmaker vouched for join a shared match, without the server knowing
+## the tickets in advance. Single-use (replay-protected) and constant-time.
+func _validate_signed_join_ticket(
+	join_ticket: String, player_id: String, secret: String
+) -> Dictionary:
+	var parts: PackedStringArray = join_ticket.split(".")
+	if parts.size() != 2 or parts[0].is_empty() or parts[1].is_empty():
+		return {"ok": false, "error": "Bağlantı bileti biçimi geçersiz"}
+	var payload_b64: String = parts[0]
+	var provided_sig: String = parts[1]
+	var crypto := Crypto.new()
+	var digest: PackedByteArray = crypto.hmac_digest(
+		HashingContext.HASH_SHA256, secret.to_utf8_buffer(), payload_b64.to_utf8_buffer()
+	)
+	var expected_sig: String = Marshalls.raw_to_base64(digest)
+	if not _constant_time_equal(provided_sig, expected_sig):
+		return {"ok": false, "error": "Bağlantı bileti imzası geçersiz"}
+	var payload_json: String = Marshalls.base64_to_utf8(payload_b64)
+	var parsed: Variant = JSON.parse_string(payload_json)
+	if not parsed is Dictionary:
+		return {"ok": false, "error": "Bağlantı bileti içeriği geçersiz"}
+	var payload: Dictionary = parsed
+	if not _constant_time_equal(String(payload.get("u", "")), player_id):
+		return {"ok": false, "error": "Oyuncu kimliği biletle eşleşmiyor"}
+	if int(payload.get("e", 0)) <= int(Time.get_unix_time_from_system() * 1000.0):
+		return {"ok": false, "error": "Bağlantı biletinin süresi doldu"}
+	var ticket_hash: String = join_ticket.sha256_text()
+	if _consumed_join_ticket_hashes.has(ticket_hash):
+		return {"ok": false, "error": "Bağlantı bileti daha önce kullanıldı"}
+	_consumed_join_ticket_hashes[ticket_hash] = true
+	return {"ok": true, "display_name": String(payload.get("n", "")).strip_edges().left(24)}
+
+
 func _validate_join_ticket(
 	join_ticket: String, player_id: String, protocol_version: int
 ) -> Dictionary:
 	if join_ticket.is_empty() or player_id.is_empty():
 		return {"ok": false, "error": "Eksik bağlantı bileti"}
+	# Multiplayer mode: when a shared match secret is configured, every player
+	# arrives with their own HMAC-signed ticket that the matchmaker minted. The
+	# server verifies the signature with the shared secret — no per-ticket
+	# pre-registration — so many humans can join the same server. Falls back to
+	# the single-ticket / control-plane modes below when the secret is unset.
+	var match_secret: String = OS.get_environment("MATCH_TICKET_SECRET").strip_edges()
+	if not match_secret.is_empty():
+		return _validate_signed_join_ticket(join_ticket, player_id, match_secret)
 	var expected_ticket: String = OS.get_environment("EXPECTED_JOIN_TICKET")
 	var expected_player_id: String = OS.get_environment("EXPECTED_PLAYER_ID")
 	if not expected_ticket.is_empty() or not expected_player_id.is_empty():
