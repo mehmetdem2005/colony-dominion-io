@@ -7,6 +7,11 @@ var player_name: String = "Mehmet"
 var rng := RandomNumberGenerator.new()
 var match_seed: int = 738291
 var online_assignment: Dictionary = {}
+# A ranked match runs the EXACT same local simulation as offline (same
+# match_controller, bots, world) — the only difference is the player is signed
+# in and the result is meant to count. This is the "online uses the original
+# offline code" unification: no separate networked client, no proxies.
+var is_ranked: bool = false
 
 
 func _ready() -> void:
@@ -37,12 +42,22 @@ func set_player_name(value: String) -> void:
 
 func prepare_offline_match() -> int:
 	online_assignment.clear()
+	is_ranked = false
 	var network_session: Node = _get_network_session()
 	if network_session == null:
 		push_error("NetworkSession autoload is unavailable")
 	else:
 		network_session.call("set_offline")
 	return prepare_new_match()
+
+
+## Ranked/online match: identical local simulation to offline, just flagged so
+## the result can be reported for the signed-in player. Runs the original
+## offline code path — no networked client, no server proxies.
+func prepare_ranked_match() -> int:
+	var seed_value: int = prepare_offline_match()
+	is_ranked = true
+	return seed_value
 
 
 func prepare_online_match(assignment: Dictionary) -> void:
@@ -72,6 +87,7 @@ func clear() -> void:
 	current_match = null
 	player_controller = null
 	online_assignment.clear()
+	is_ranked = false
 
 
 func _get_network_session() -> Node:
