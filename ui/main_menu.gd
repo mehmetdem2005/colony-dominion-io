@@ -367,23 +367,7 @@ func _request_online_play() -> void:
 	if not OnlineServices.auth.has_session():
 		_open_auth_panel()
 		return
-	_start_ranked_match()
-
-
-## Online play now runs the exact same local match as offline (original code),
-## just gated behind sign-in — no separate networked client, so it looks and
-## plays identically to offline and has zero network latency.
-func _start_ranked_match() -> void:
-	_pending_online_request = false
-	if _starting or _matchmaking:
-		return
-	_save_player_name()
-	GameSession.prepare_ranked_match()
-	_starting = true
-	_set_buttons_enabled(false)
-	_show_status("Dereceli maç hazırlanıyor", false)
-	AudioSystem.play_ui(&"ui_select")
-	call_deferred("_change_to_offline_game")
+	_begin_matchmaking()
 
 
 func _try_resume_previous_match() -> void:
