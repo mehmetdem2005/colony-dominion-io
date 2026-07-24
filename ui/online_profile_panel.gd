@@ -3,10 +3,18 @@ extends PanelContainer
 
 signal closed
 
+enum ViewMode {
+	COMBINED,
+	PROFILE,
+	RANKING,
+}
+
+var _title: Label
 var _summary: Label
 var _history: Label
 var _leaderboard: Label
 var _refresh_button: Button
+var _view_mode: ViewMode = ViewMode.COMBINED
 
 
 func _ready() -> void:
@@ -24,26 +32,29 @@ func _ready() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	add_child(box)
-	var title := Label.new()
-	title.text = "ÇEVRİM İÇİ PROFİL"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 27)
-	box.add_child(title)
+	_title = Label.new()
+	_title.text = "ÇEVRİM İÇİ PROFİL"
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title.add_theme_font_size_override("font_size", 27)
+	box.add_child(_title)
 	_summary = Label.new()
 	_summary.add_theme_font_size_override("font_size", 20)
 	_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_summary)
 	var columns := HBoxContainer.new()
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	columns.alignment = BoxContainer.ALIGNMENT_CENTER
 	columns.add_theme_constant_override("separation", 18)
 	box.add_child(columns)
 	_history = Label.new()
 	_history.custom_minimum_size = Vector2(310.0, 390.0)
+	_history.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_history.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_history.add_theme_font_size_override("font_size", 15)
 	columns.add_child(_history)
 	_leaderboard = Label.new()
 	_leaderboard.custom_minimum_size = Vector2(320.0, 390.0)
+	_leaderboard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_leaderboard.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_leaderboard.add_theme_font_size_override("font_size", 15)
 	columns.add_child(_leaderboard)
@@ -62,21 +73,79 @@ func _ready() -> void:
 
 
 func open_panel() -> void:
+	_open_mode(ViewMode.COMBINED)
+
+
+func open_profile() -> void:
+	_open_mode(ViewMode.PROFILE)
+
+
+func open_ranking() -> void:
+	_open_mode(ViewMode.RANKING)
+
+
+func _open_mode(mode: ViewMode) -> void:
+	_view_mode = mode
+	_apply_mode_layout()
 	visible = true
 	_refresh()
 
 
+func _apply_mode_layout() -> void:
+	match _view_mode:
+		ViewMode.PROFILE:
+			_title.text = "OYUNCU PROFİLİ"
+			_summary.visible = true
+			_history.visible = true
+			_leaderboard.visible = false
+			_history.custom_minimum_size = Vector2(640.0, 390.0)
+		ViewMode.RANKING:
+			_title.text = "SEZON SIRALAMASI"
+			_summary.visible = false
+			_history.visible = false
+			_leaderboard.visible = true
+			_leaderboard.custom_minimum_size = Vector2(640.0, 430.0)
+		_:
+			_title.text = "ÇEVRİM İÇİ PROFİL"
+			_summary.visible = true
+			_history.visible = true
+			_leaderboard.visible = true
+			_history.custom_minimum_size = Vector2(310.0, 390.0)
+			_leaderboard.custom_minimum_size = Vector2(320.0, 390.0)
+
+
 func _refresh() -> void:
 	_refresh_button.disabled = true
-	_summary.text = "Profil yükleniyor..."
+	_summary.text = ""
 	_history.text = ""
 	_leaderboard.text = ""
-	var rating_result: Dictionary = await OnlineServices.data.fetch_current_rating()
-	var history_result: Dictionary = await OnlineServices.data.fetch_rating_history(8)
-	var leaderboard_result: Dictionary = await OnlineServices.data.fetch_leaderboard(12)
-	_summary.text = _format_rating(rating_result)
-	_history.text = _format_history(history_result)
-	_leaderboard.text = _format_leaderboard(leaderboard_result)
+	match _view_mode:
+		ViewMode.PROFILE:
+			_summary.text = "Profil yükleniyor..."
+			var profile_rating_result: Dictionary = await OnlineServices.data.fetch_current_rating()
+			var profile_history_result: Dictionary = await OnlineServices.data.fetch_rating_history(
+				8
+			)
+			_summary.text = _format_rating(profile_rating_result)
+			_history.text = _format_history(profile_history_result)
+		ViewMode.RANKING:
+			_leaderboard.text = "Sıralama yükleniyor..."
+			var ranking_result: Dictionary = await OnlineServices.data.fetch_leaderboard(20)
+			_leaderboard.text = _format_leaderboard(ranking_result)
+		_:
+			_summary.text = "Profil yükleniyor..."
+			var combined_rating_result: Dictionary = await (
+				OnlineServices.data.fetch_current_rating()
+			)
+			var combined_history_result: Dictionary = await (
+				OnlineServices.data.fetch_rating_history(8)
+			)
+			var combined_leaderboard_result: Dictionary = await (
+				OnlineServices.data.fetch_leaderboard(12)
+			)
+			_summary.text = _format_rating(combined_rating_result)
+			_history.text = _format_history(combined_history_result)
+			_leaderboard.text = _format_leaderboard(combined_leaderboard_result)
 	_refresh_button.disabled = false
 
 
