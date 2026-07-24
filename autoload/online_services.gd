@@ -312,6 +312,17 @@ func cancel_matchmaking() -> void:
 	NetworkSession.set_connection_state(NetworkSession.ConnectionState.IDLE, "")
 
 
+## Stop the dedicated server this player was using so its Edgegap deployment
+## slot frees immediately. Without this the server keeps running until the match
+## ends or the 60-minute cap, so on the free tier's single-deployment limit the
+## NEXT "play online" fails with deploy_failed — i.e. online looked broken after
+## the very first match. Safe to fire-and-forget: the matchmaking client lives
+## on this autoload and survives the scene change back to the menu.
+func release_online_server() -> void:
+	if is_instance_valid(matchmaking):
+		await matchmaking.cancel_queue(auth.get_access_token())
+
+
 func _consume_queue_status(status: Dictionary) -> Dictionary:
 	matchmaking_status_changed.emit(status.duplicate(true))
 	var state: String = String(status.get("status", "queued"))

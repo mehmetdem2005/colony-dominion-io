@@ -369,6 +369,13 @@ func _exit_to_menu() -> void:
 		return
 	_leaving = true
 	_input_enabled = false
+	# Free the Edgegap deployment slot immediately (fire-and-forget on the
+	# OnlineServices autoload, which survives this scene change). Otherwise the
+	# server lingers and the next match fails with deploy_failed on the free
+	# tier's single-deployment limit. Leaving is intentional, so also drop any
+	# reconnect session so the menu doesn't offer to resume a stopped server.
+	OnlineServices.release_online_server()
+	GameTransport.clear_persisted_reconnect_session()
 	GameTransport.disconnect_from_game("Maçtan çıkıldı")
 	GameSession.clear()
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
