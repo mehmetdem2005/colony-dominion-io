@@ -30,11 +30,14 @@ static func remove(path: String) -> void:
 
 
 static func _password() -> String:
+	# The key must be identical on every launch or the encrypted session can't be
+	# decrypted and the player is silently signed out each time they reopen the
+	# app. OS.get_unique_id() is read very early at startup and can come back
+	# empty/inconsistent on Android, so it is deliberately NOT part of the key.
+	# The file already lives in the app-private sandbox (user://), so a stable
+	# salt + app name is sufficient protection at rest.
 	var project_name: String = String(
 		ProjectSettings.get_setting("application/config/name", "Colony Dominion.io")
 	)
-	var device_id: String = OS.get_unique_id().strip_edges()
-	if device_id.is_empty():
-		device_id = "%s:%s" % [OS.get_name(), OS.get_processor_name()]
-	var context: String = "%s|%s|%s" % [PASSWORD_SALT, project_name, device_id]
+	var context: String = "%s|%s" % [PASSWORD_SALT, project_name]
 	return context.sha256_text()

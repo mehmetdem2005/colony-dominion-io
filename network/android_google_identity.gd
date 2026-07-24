@@ -22,6 +22,14 @@ func sign_in(auth_client: SupabaseAuthClient, web_client_id: String) -> Dictiona
 	_cancelled = false
 	if OS.get_name() != "Android":
 		return _native_error("Yerel Google girişi yalnızca Android'de kullanılabilir")
+	# The native plugin singleton can finish registering a fraction of a second
+	# after the panel opens, so the very first tap used to miss it and show the
+	# "module not found" error while the second tap worked. Give it a brief
+	# window to appear before giving up.
+	var resolve_attempts: int = 0
+	while not _resolve_plugin() and resolve_attempts < 8 and not _cancelled:
+		resolve_attempts += 1
+		await get_tree().create_timer(0.12, true, false, true).timeout
 	if not _resolve_plugin():
 		return _native_error("Android Google kimlik modülü APK içinde bulunamadı")
 	if web_client_id.strip_edges().is_empty():

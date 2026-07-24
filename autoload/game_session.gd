@@ -3,7 +3,7 @@ extends Node
 var local_team_id: int = 0
 var current_match: Node = null
 var player_controller: Node = null
-var player_name: String = "Mehmet"
+var player_name: String = ""
 var rng := RandomNumberGenerator.new()
 var match_seed: int = 738291
 var online_assignment: Dictionary = {}

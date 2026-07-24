@@ -141,6 +141,14 @@ func configure(
 	_request_redraw()
 
 
+## Repaint this ant's ring (e.g. to the conqueror's colour once its colony is
+## defeated). Local/authoritative visual only.
+func set_ring_color(color: Color) -> void:
+	team_color = color
+	if is_instance_valid(visual_root):
+		visual_root.set_team_color(color)
+
+
 func set_commander_display_name(value: String) -> void:
 	if definition == null or definition.role != &"commander":
 		return

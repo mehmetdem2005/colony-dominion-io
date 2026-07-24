@@ -34,6 +34,8 @@ var is_human: bool = false
 var is_local_player: bool = false
 var owner_peer_id: int = 0
 var eliminated: bool = false
+var _conqueror_color: Color = Color.WHITE
+var _has_conqueror: bool = false
 
 var inventory: ColonyInventory
 var progression: ColonyProgression
@@ -613,6 +615,7 @@ func on_unit_died(unit: ColonyUnit, killer: Node, killer_team_id: int = -1) -> v
 				)
 		else:
 			eliminated = true
+			_mark_conquered_visuals()
 			match_controller.on_colony_eliminated(self)
 	_emit_counts()
 	match_controller.unregister_network_entity(unit.network_entity_id, unit)
@@ -620,13 +623,44 @@ func on_unit_died(unit: ColonyUnit, killer: Node, killer_team_id: int = -1) -> v
 
 
 func _on_nest_destroyed(_destroyed_nest: ColonyNest, _attacker: Node) -> void:
+	_capture_conqueror(_attacker)
 	match_controller.unregister_network_entity(_destroyed_nest.network_entity_id, _destroyed_nest)
 	_emit_progress()
 	if is_player:
 		match_controller.events.toast_requested.emit("Yuvan yok edildi; komutan son canın")
 	if not is_instance_valid(commander):
 		eliminated = true
+		_mark_conquered_visuals()
 		match_controller.on_colony_eliminated(self)
+
+
+## Remember which colony destroyed our queen, so its colour can be painted over
+## our defeated ants. Called from the nest-destroyed signal (the attacker is the
+## enemy unit that dealt the killing blow).
+func _capture_conqueror(attacker: Node) -> void:
+	if _has_conqueror:
+		return
+	var attacker_unit := attacker as ColonyUnit
+	if (
+		attacker_unit == null
+		or not is_instance_valid(attacker_unit.controller)
+		or attacker_unit.controller == self
+	):
+		return
+	_conqueror_color = attacker_unit.team_color
+	_has_conqueror = true
+
+
+## Paint every remaining ant of this defeated colony in the conqueror's colour,
+## so beating a colony visibly turns its swarm to the victor's colour.
+func _mark_conquered_visuals() -> void:
+	if not _has_conqueror:
+		return
+	for unit in units:
+		if is_instance_valid(unit) and unit.has_method("set_ring_color"):
+			unit.set_ring_color(_conqueror_color)
+	if is_instance_valid(commander) and commander.has_method("set_ring_color"):
+		commander.set_ring_color(_conqueror_color)
 
 
 func is_active() -> bool:
