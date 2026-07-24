@@ -157,6 +157,14 @@ func detach_peer_for_reconnect(peer_id: int) -> int:
 		if is_instance_valid(controller):
 			controller.set_joystick_input(Vector2.ZERO)
 			controller.owner_peer_id = 0
+			# Hand the colony straight back to the AI for the reconnect grace.
+			# Without this the colony keeps is_human = true with no peer driving
+			# it, so the bot brain (gated on `not is_human`) never runs and the
+			# colony freezes — a sitting duck — until the reservation finally
+			# expires. The reservation still holds the slot; if the player
+			# reconnects, assign_peer_to_team re-flags it human and they resume.
+			controller.is_human = false
+			_notify_ai_refresh()
 	_notify_interest_changed()
 	return team_id
 
