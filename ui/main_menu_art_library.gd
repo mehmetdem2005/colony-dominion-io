@@ -2,7 +2,7 @@ class_name MainMenuArtLibrary
 extends RefCounted
 
 const ENCODED_ROOT: String = "res://assets/ui/main_menu/encoded/"
-const SKIN_CHUNK_COUNT: int = 14
+const SKIN_CHUNK_COUNT: int = 16
 
 static var _skin_cache: Texture2D
 
