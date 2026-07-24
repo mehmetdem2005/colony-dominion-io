@@ -166,8 +166,16 @@ func sign_in_google() -> Dictionary:
 	# the "normal", in-app one-tap experience. Only fall back to the Custom Tab /
 	# browser OAuth handoff when the native module is genuinely unavailable
 	# (e.g. plugin missing), so the player is never stranded.
-	if is_instance_valid(android_identity) and android_identity.is_supported():
-		return await android_identity.sign_in(auth, config.google_web_client_id)
+	if OS.get_name() == "Android" and is_instance_valid(android_identity):
+		# The native plugin can register a beat after the first tap; wait briefly
+		# so we don't wrongly fall back to the browser on that first tap.
+		if not android_identity.is_supported():
+			for _attempt in 6:
+				await get_tree().create_timer(0.12, true, false, true).timeout
+				if android_identity.is_supported():
+					break
+		if android_identity.is_supported():
+			return await android_identity.sign_in(auth, config.google_web_client_id)
 	if not is_instance_valid(oauth):
 		return {"ok": false, "error": "Google giriş servisi hazır değil"}
 	return await oauth.sign_in_google(auth)

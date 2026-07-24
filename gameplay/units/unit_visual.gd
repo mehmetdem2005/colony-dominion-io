@@ -29,6 +29,15 @@ func configure(
 	_request_redraw()
 
 
+## Recolour the unit's ring — used to paint a conquered colony's ants in the
+## victor's colour when its queen (nest) is destroyed.
+func set_team_color(color: Color) -> void:
+	if _team_color == color:
+		return
+	_team_color = color
+	_request_redraw()
+
+
 func set_squad_id(value: int) -> void:
 	var next_id: int = clampi(value, 0, 1)
 	if _squad_id == next_id:
