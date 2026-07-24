@@ -101,12 +101,14 @@ func _pulse_primary() -> void:
 	if _pulse_tween != null and _pulse_tween.is_valid():
 		_pulse_tween.kill()
 	_pulse_tween = create_tween().set_loops()
-	_pulse_tween.tween_property(
-		_online_button, "self_modulate", Color(1.08, 1.06, 0.96, 1.0), 1.25
-	).set_trans(Tween.TRANS_SINE)
-	_pulse_tween.tween_property(
-		_online_button, "self_modulate", Color.WHITE, 1.25
-	).set_trans(Tween.TRANS_SINE)
+	(
+		_pulse_tween
+		. tween_property(_online_button, "self_modulate", Color(1.08, 1.06, 0.96, 1.0), 1.25)
+		. set_trans(Tween.TRANS_SINE)
+	)
+	_pulse_tween.tween_property(_online_button, "self_modulate", Color.WHITE, 1.25).set_trans(
+		Tween.TRANS_SINE
+	)
 
 
 func _build_modals() -> void:
@@ -406,8 +408,7 @@ func _on_matchmaking_status(status: Dictionary) -> void:
 		var target := maxi(int(status.get("target_players", 10)), humans)
 		var seconds := maxi(int(status.get("bot_backfill_seconds_remaining", 0)), 0)
 		var message := (
-			"Eşleştirme • %d/%d insan • %d sn sonra botlarla tamamlanır"
-			% [humans, target, seconds]
+			"Eşleştirme • %d/%d insan • %d sn sonra botlarla tamamlanır" % [humans, target, seconds]
 		)
 		if position > 0:
 			message += " • sıra %d" % (position + 1)
