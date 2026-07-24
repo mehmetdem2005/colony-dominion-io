@@ -123,7 +123,9 @@ func _refresh() -> void:
 		ViewMode.PROFILE:
 			_summary.text = "Profil yükleniyor..."
 			var profile_rating_result: Dictionary = await OnlineServices.data.fetch_current_rating()
-			var profile_history_result: Dictionary = await OnlineServices.data.fetch_rating_history(8)
+			var profile_history_result: Dictionary = await OnlineServices.data.fetch_rating_history(
+				8
+			)
 			_summary.text = _format_rating(profile_rating_result)
 			_history.text = _format_history(profile_history_result)
 		ViewMode.RANKING:
@@ -132,9 +134,15 @@ func _refresh() -> void:
 			_leaderboard.text = _format_leaderboard(ranking_result)
 		_:
 			_summary.text = "Profil yükleniyor..."
-			var combined_rating_result: Dictionary = await OnlineServices.data.fetch_current_rating()
-			var combined_history_result: Dictionary = await OnlineServices.data.fetch_rating_history(8)
-			var combined_leaderboard_result: Dictionary = await OnlineServices.data.fetch_leaderboard(12)
+			var combined_rating_result: Dictionary = await (
+				OnlineServices.data.fetch_current_rating()
+			)
+			var combined_history_result: Dictionary = await (
+				OnlineServices.data.fetch_rating_history(8)
+			)
+			var combined_leaderboard_result: Dictionary = await (
+				OnlineServices.data.fetch_leaderboard(12)
+			)
 			_summary.text = _format_rating(combined_rating_result)
 			_history.text = _format_history(combined_history_result)
 			_leaderboard.text = _format_leaderboard(combined_leaderboard_result)
