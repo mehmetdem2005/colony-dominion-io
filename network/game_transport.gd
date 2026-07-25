@@ -26,6 +26,11 @@ const MATCH_START_GATE_SCRIPT := preload("res://network/dedicated_match_start_ga
 
 const SERVER_SHUTDOWN_DELAY_SECONDS: float = 8.0
 const MATCH_RESULT_RETRY_COUNT: int = 3
+# After the match is under way, a server with zero connected humans is paying for
+# nobody (everyone crashed or dropped without a clean exit). Hold for a little
+# longer than the reconnect window, then quit so the container exits and Edgegap
+# ends the deployment — guaranteeing no server keeps billing with no players.
+const EMPTY_SHUTDOWN_GRACE_SECONDS: float = NetworkProtocol.RECONNECT_GRACE_SECONDS + 15.0
 
 var _peer: ENetMultiplayerPeer = null
 var _match: MatchController = null
@@ -40,6 +45,8 @@ var _build_id: String = ""
 var _reconnect_token: String = ""
 var _local_team_id: int = -1
 var _last_server_tick: int = 0
+var _empty_since_msec: int = 0
+var _hard_shutdown_msec: int = 0
 var _command_sequence: int = 0
 var _last_ack_sequence: int = -1
 var _server_port: int = NetworkProtocol.DEFAULT_GAME_PORT
@@ -142,6 +149,12 @@ func start_dedicated_server() -> Dictionary:
 	_server_id = OS.get_environment("SERVER_ID").strip_edges()
 	_server_build_id = OS.get_environment("BUILD_ID").strip_edges()
 	_server_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
+	# Absolute lifetime cap from boot: no container can bill past this age even if
+	# the match logic hangs. Defaults to 45 min, clamped to a sane range.
+	var max_match_minutes: int = DedicatedMatchStartGate.read_int_environment(
+		"MAX_MATCH_MINUTES", 45, 5, 180
+	)
+	_hard_shutdown_msec = Time.get_ticks_msec() + max_match_minutes * 60000
 	if _server_build_id.is_empty():
 		_server_build_id = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 	if not OS.is_debug_build() and (_server_match_id.is_empty() or _server_id.is_empty()):
@@ -601,6 +614,11 @@ func _process_reconnect(_delta: float) -> void:
 
 func _server_process(delta: float) -> void:
 	var now_msec: int = Time.get_ticks_msec()
+	# Hard lifetime cap — the final safety net against a runaway/hung container.
+	if _hard_shutdown_msec > 0 and now_msec >= _hard_shutdown_msec:
+		push_warning("Dedicated server closing: reached the absolute match lifetime cap")
+		get_tree().quit(0)
+		return
 	var gate_result: Dictionary = (
 		_match_start_gate.advance(_peer_records.size(), now_msec)
 		if _match_start_gate != null
@@ -611,6 +629,19 @@ func _server_process(delta: float) -> void:
 	if bool(gate_result.get("shutdown", false)):
 		push_warning("Dedicated server closed because no authenticated player joined")
 		get_tree().quit(0)
+		return
+	# No-humans-left watchdog: once started, if every human connection is gone for
+	# longer than the reconnect grace, tear the server down so it stops billing.
+	if _match_start_gate != null and _match_start_gate.is_started():
+		if _peer_records.is_empty():
+			if _empty_since_msec == 0:
+				_empty_since_msec = now_msec
+			elif now_msec - _empty_since_msec >= roundi(EMPTY_SHUTDOWN_GRACE_SECONDS * 1000.0):
+				push_warning("Dedicated server closing: no human players remained")
+				get_tree().quit(0)
+				return
+		else:
+			_empty_since_msec = 0
 	if _match_start_gate == null or _match_start_gate.is_started():
 		_snapshot_left -= delta
 		if _snapshot_left <= 0.0:

@@ -194,6 +194,14 @@ function gameMaxPlayers(): number {
   return Math.min(Math.max(configured, 1), 10);
 }
 
+// Absolute server lifetime cap (minutes). The game server self-terminates at
+// this age no matter what, so a hung or runaway container can never keep billing.
+function gameMaxMatchMinutes(): number {
+  const configured = Number.parseInt(env("GAME_MAX_MATCH_MINUTES"), 10);
+  if (!Number.isInteger(configured)) return 45;
+  return Math.min(Math.max(configured, 5), 180);
+}
+
 // POST /join — deploy a server near the player and return a request handle.
 async function join(request: Request): Promise<Response> {
   const appName = env("EDGEGAP_APP_NAME");
@@ -243,6 +251,7 @@ async function join(request: Request): Promise<Response> {
       { key: "HUMAN_PLAYER_COUNT", value: "1" },
       { key: "BOT_COUNT", value: String(maxPlayers - 1) },
       { key: "RANKED_MATCH", value: "0" },
+      { key: "MAX_MATCH_MINUTES", value: String(gameMaxMatchMinutes()) },
       { key: "NETWORK_TRANSPORT", value: "enet" },
       { key: "GAME_PORT", value: "20000" },
       { key: "EXPECTED_JOIN_TICKET", value: joinTicket, is_hidden: true },
