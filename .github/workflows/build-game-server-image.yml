@@ -83,12 +83,17 @@ jobs:
 
       - name: Refresh Edgegap version to the new image
         if: ${{ env.EDGEGAP_API_TOKEN != '' }}
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          # Sanitise the token: drop an accidental "token " prefix and any
+          # surrounding whitespace/newlines from pasting into the secret.
+          TOKEN="${EDGEGAP_API_TOKEN#token }"
+          TOKEN="$(printf '%s' "${TOKEN}" | tr -d '[:space:]')"
           # Re-submit the version so Edgegap re-pulls ghcr.io/<owner>/…:latest,
-          # which now points at the image just pushed. Registry credentials that
-          # are already stored on the version are preserved (the image is public
-          # anyway). max_duration is a server-side backstop above the in-game cap.
+          # which now points at the image just pushed. Stored registry creds are
+          # preserved (the image is public anyway). max_duration is a server-side
+          # backstop above the in-game cap.
           body="$(cat <<JSON
           {
             "docker_repository": "ghcr.io",
@@ -102,13 +107,18 @@ jobs:
           JSON
           )"
           code="$(curl -sS -o /tmp/edgegap-patch.json -w '%{http_code}' -X PATCH \
-            -H "Authorization: token ${EDGEGAP_API_TOKEN}" \
+            -H "Authorization: token ${TOKEN}" \
             -H "Content-Type: application/json" \
             "https://api.edgegap.com/v1/app/${EDGEGAP_APP_NAME}/version/${EDGEGAP_APP_VERSION}" \
             -d "${body}")"
           echo "Edgegap PATCH HTTP ${code}"
-          python3 -c "import json,sys; d=json.load(open('/tmp/edgegap-patch.json')); print('success:', d.get('success')); print('last_updated:', (d.get('version') or {}).get('last_updated'))" || cat /tmp/edgegap-patch.json
-          test "${code}" -ge 200 -a "${code}" -lt 300
+          cat /tmp/edgegap-patch.json 2>/dev/null || true
+          echo ""
+          if [ "${code}" -ge 200 ] && [ "${code}" -lt 300 ]; then
+            echo "Edgegap version refreshed to the latest image."
+          else
+            echo "::warning::Edgegap auto-refresh failed (HTTP ${code}). The image is still pushed to GHCR; fix the EDGEGAP_API_TOKEN secret (wrong, revoked, or contains whitespace) — online play keeps running the previous image until then."
+          fi
 
       - name: Upload server build logs
         if: always()
