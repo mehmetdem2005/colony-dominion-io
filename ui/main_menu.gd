@@ -23,6 +23,9 @@ var _auth_panel: AuthPanel
 var _legal_panel: LegalGatePanel
 var _profile_panel: OnlineProfilePanel
 var _settings_panel: SettingsPanel
+var _clan_panel: MenuPlaceholderPanel
+var _ranking_panel: MenuPlaceholderPanel
+var _dock_buttons: Array[TextureButton] = []
 var _sidebar: PanelContainer
 var _pulse_tween: Tween
 var _starting: bool = false
@@ -243,7 +246,65 @@ func _build_menu() -> void:
 	ColonyUiKit.apply_label(version, 12, 400, ColonyUiKit.TEXT_MUTED)
 	box.add_child(version)
 
+	_build_icon_dock()
 	_build_modals()
+
+
+## Ornate gold action dock pinned to the bottom-right corner. Each plate opens a
+## menu section: clan crest → Clan, trophy → Ranking & Statistics, figure →
+## Profile, gear → Settings. Anchored to the corner (not a PanelContainer) so
+## MainMenuLayoutGuard — which only re-centres PanelContainers — leaves it alone.
+func _build_icon_dock() -> void:
+	var dock := HBoxContainer.new()
+	dock.name = "IconDock"
+	dock.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	dock.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	dock.offset_left = -352.0
+	dock.offset_top = -104.0
+	dock.offset_right = -28.0
+	dock.offset_bottom = -28.0
+	dock.add_theme_constant_override("separation", 14)
+	add_child(dock)
+
+	_dock_buttons.clear()
+	dock.add_child(_dock_icon("res://assets/ui/menu/icon_clan.png", "Klan", _open_clan_panel))
+	dock.add_child(
+		_dock_icon(
+			"res://assets/ui/menu/icon_ranking.png", "Sıralama & İstatistik", _open_ranking_panel
+		)
+	)
+	dock.add_child(
+		_dock_icon("res://assets/ui/menu/icon_profile.png", "Profil", _open_profile_panel)
+	)
+	dock.add_child(_dock_icon("res://assets/ui/menu/icon_settings.png", "Ayarlar", _open_settings))
+
+
+func _dock_icon(texture_path: String, tooltip: String, on_pressed: Callable) -> TextureButton:
+	var button := TextureButton.new()
+	button.texture_normal = load(texture_path)
+	button.ignore_texture_size = true
+	button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	button.custom_minimum_size = Vector2(76.0, 76.0)
+	button.tooltip_text = tooltip
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.pivot_offset = Vector2(38.0, 38.0)
+	button.pressed.connect(on_pressed)
+	button.mouse_entered.connect(_on_dock_icon_hover.bind(button, true))
+	button.mouse_exited.connect(_on_dock_icon_hover.bind(button, false))
+	_dock_buttons.append(button)
+	return button
+
+
+## Subtle lift + brighten so the plate feels tactile without any extra art.
+func _on_dock_icon_hover(button: TextureButton, hovering: bool) -> void:
+	if not is_instance_valid(button) or button.disabled:
+		return
+	var scale_target := Vector2(1.12, 1.12) if hovering else Vector2.ONE
+	var modulate_target := Color(1.18, 1.18, 1.18, 1.0) if hovering else Color.WHITE
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(button, "scale", scale_target, 0.12).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(button, "modulate", modulate_target, 0.12).set_trans(Tween.TRANS_SINE)
 
 
 func _nav_button(text: String, variant: StringName, height: float) -> Button:
@@ -325,6 +386,16 @@ func _build_modals() -> void:
 	_settings_panel = SettingsPanel.new()
 	_settings_panel.closed.connect(_on_settings_closed)
 	add_child(_settings_panel)
+
+	_clan_panel = MenuPlaceholderPanel.new()
+	_clan_panel.configure("Klan")
+	_clan_panel.closed.connect(_on_modal_closed)
+	add_child(_clan_panel)
+
+	_ranking_panel = MenuPlaceholderPanel.new()
+	_ranking_panel.configure("Sıralama & İstatistik")
+	_ranking_panel.closed.connect(_on_modal_closed)
+	add_child(_ranking_panel)
 
 
 func _connect_services() -> void:
@@ -517,6 +588,16 @@ func _open_settings() -> void:
 	_settings_panel.open_panel()
 
 
+func _open_clan_panel() -> void:
+	_set_modal_visible(true)
+	_clan_panel.open_panel()
+
+
+func _open_ranking_panel() -> void:
+	_set_modal_visible(true)
+	_ranking_panel.open_panel()
+
+
 func _on_settings_closed() -> void:
 	_set_modal_visible(false)
 	_refresh_status()
@@ -641,6 +722,9 @@ func _set_buttons_enabled(enabled: bool) -> void:
 	_legal_button.disabled = not enabled
 	_profile_button.disabled = not enabled
 	_settings_button.disabled = not enabled
+	for dock_button in _dock_buttons:
+		if is_instance_valid(dock_button):
+			dock_button.disabled = not enabled
 	_name_input.editable = enabled
 
 
