@@ -15,7 +15,7 @@ const REQUIRED_FILES: Array[String] = [
 	"res://scenes/ui/hud.tscn",
 	"res://ui/main_menu_layout_guard.gd",
 	"res://ui/hud_elimination_lifecycle.gd",
-	"res://ui/main_menu_modal_visibility.gd",
+	"res://ui/menu_placeholder_panel.gd",
 	"res://ui/colony_ui_kit.gd",
 	"res://ui/legal_consent_card.gd",
 	"res://backend/supabase/functions/matchmaking/index.ts",
@@ -81,8 +81,9 @@ func _validate_ui_lifecycle(failures: PackedStringArray) -> void:
 		and not menu_scene.contains("main_menu_layout_guard.gd")
 	):
 		failures.append("Main menu must retain the safe-area layout guard")
-	if not menu_scene.contains("main_menu_modal_visibility.gd"):
-		failures.append("Main menu must hide its base panel behind modal content")
+	var menu_script := FileAccess.get_file_as_string("res://ui/main_menu.gd")
+	if not menu_script.contains("_modal_shade") or not menu_script.contains("_set_modal_visible"):
+		failures.append("Main menu must dim its base behind modal content")
 	var hud_scene := FileAccess.get_file_as_string("res://scenes/ui/hud.tscn")
 	if not hud_scene.contains("hud_elimination_lifecycle.gd"):
 		failures.append("Shared HUD must retain the local elimination lifecycle controller")

@@ -1,22 +1,35 @@
 class_name ColonyMainMenu
 extends Control
 
-const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
+## Front-end rebuilt to match the supplied reference art: a full-bleed ant-colony
+## background, a crowned title banner up top, four ornate stone/gold action bars
+## down the centre (play, region, settings, exit) and a four-icon plate dock in
+## the bottom-right corner. Every label is intentionally blank for now — text will
+## be painted in once the text texture and font are provided — so the buttons are
+## pure art with tooltips and wired actions.
+
 const ONLINE_SCENE_PATH: String = "res://scenes/online_game.tscn"
+const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
 const BUILD_ID: String = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 
-var _name_input: LineEdit
-var _offline_button: Button
-var _online_button: Button
-var _resume_button: Button
-var _region_button: Button
-var _account_button: Button
-var _legal_button: Button
-var _profile_button: Button
-var _settings_button: Button
+const BG_PATH := "res://assets/ui/menu/frames/bg_colony.png"
+const TITLE_PATH := "res://assets/ui/menu/frames/title_banner.png"
+const BTN_PLAY_PATH := "res://assets/ui/menu/frames/btn_play.png"
+const BTN_WORLD_PATH := "res://assets/ui/menu/frames/btn_world.png"
+const BTN_SETTINGS_PATH := "res://assets/ui/menu/frames/btn_settings.png"
+const BTN_EXIT_PATH := "res://assets/ui/menu/frames/btn_exit.png"
+const DOCK_STRIP_PATH := "res://assets/ui/menu/frames/dock_strip.png"
+
+# Normalised x-centres of the four plates baked into the dock strip art.
+const DOCK_ICON_FRACTIONS: Array[float] = [0.19, 0.40, 0.60, 0.81]
+
+var _play_button: TextureButton
+var _world_button: TextureButton
+var _settings_button: TextureButton
+var _exit_button: TextureButton
+var _center_buttons: Array[TextureButton] = []
+var _dock_buttons: Array[Button] = []
 var _status_label: Label
-var _region_status: Label
-var _account_status: Label
 var _modal_shade: ColorRect
 var _region_panel: RegionSelectorPanel
 var _auth_panel: AuthPanel
@@ -25,8 +38,6 @@ var _profile_panel: OnlineProfilePanel
 var _settings_panel: SettingsPanel
 var _clan_panel: MenuPlaceholderPanel
 var _ranking_panel: MenuPlaceholderPanel
-var _dock_buttons: Array[TextureButton] = []
-var _sidebar: PanelContainer
 var _pulse_tween: Tween
 var _starting: bool = false
 var _matchmaking: bool = false
@@ -47,318 +58,181 @@ func _ready() -> void:
 	call_deferred("_try_resume_previous_match")
 
 
-## Fade the whole menu in — a confident, quick reveal like an AAA front-end
-## opens with. Positioning is owned by MainMenuLayoutGuard (it centres every
-## PanelContainer each layout pass), so we only animate `modulate`, which the
-## guard never touches, to avoid fighting it over the sidebar's transform.
 func _play_entrance() -> void:
 	modulate = Color(1.0, 1.0, 1.0, 0.0)
 	var tween := create_tween()
-	tween.tween_property(self, "modulate", Color.WHITE, 0.45).set_trans(Tween.TRANS_SINE).set_ease(
+	tween.tween_property(self, "modulate", Color.WHITE, 0.5).set_trans(Tween.TRANS_SINE).set_ease(
 		Tween.EASE_OUT
 	)
 
 
-## A slow, subtle amber breathing glow on the hero button so the eye is drawn to
-## the primary action without any distracting motion.
+## A slow amber breathing glow on the primary "play" bar so the eye lands on the
+## action the player wants first.
 func _pulse_primary() -> void:
-	if not is_instance_valid(_online_button):
+	if not is_instance_valid(_play_button):
 		return
 	if _pulse_tween != null and _pulse_tween.is_valid():
 		_pulse_tween.kill()
 	_pulse_tween = create_tween().set_loops()
 	(
 		_pulse_tween
-		. tween_property(_online_button, "modulate", Color(1.12, 1.12, 1.12, 1.0), 1.1)
+		. tween_property(_play_button, "modulate", Color(1.16, 1.16, 1.16, 1.0), 1.15)
 		. set_trans(Tween.TRANS_SINE)
 	)
-	_pulse_tween.tween_property(_online_button, "modulate", Color.WHITE, 1.1).set_trans(
+	_pulse_tween.tween_property(_play_button, "modulate", Color.WHITE, 1.15).set_trans(
 		Tween.TRANS_SINE
 	)
 
 
 func _build_menu() -> void:
 	var background := TextureRect.new()
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background.texture = load("res://assets/ground/ground_menu_1280x720.png")
+	_anchor_norm(background, 0.0, 0.0, 1.0, 1.0)
+	background.texture = load(BG_PATH)
 	background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
 
+	# Gentle darkening so the light plates and (future) text stay legible over the
+	# busy background art.
 	var shade := ColorRect.new()
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	shade.color = Color(0.055, 0.035, 0.012, 0.50)
+	_anchor_norm(shade, 0.0, 0.0, 1.0, 1.0)
+	shade.color = Color(0.02, 0.015, 0.01, 0.28)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
 
-	# Hero artwork fills the space to the right of the navigation sidebar.
-	var commander := TextureRect.new()
-	commander.texture = load("res://assets/units/commander.png")
-	commander.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	commander.offset_left = -760.0
-	commander.offset_top = 40.0
-	commander.offset_bottom = -40.0
-	commander.offset_right = -60.0
-	commander.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	commander.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	commander.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(commander)
+	# Crowned title banner (empty — title text arrives later).
+	var title := TextureRect.new()
+	_anchor_norm(title, 0.275, -0.04, 0.725, 0.34)
+	title.texture = load(TITLE_PATH)
+	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(title)
 
-	# Radial vignette layered over the ground art: focuses the eye toward the
-	# sidebar and gives the flat background cinematic depth (no new art needed).
-	var vignette := TextureRect.new()
-	vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vignette.texture = ColonyUiKit.make_vignette(0.66)
-	vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	vignette.stretch_mode = TextureRect.STRETCH_SCALE
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(vignette)
+	# Central stack of four action bars.
+	var column := VBoxContainer.new()
+	_anchor_norm(column, 0.325, 0.42, 0.675, 0.94)
+	column.add_theme_constant_override("separation", 10)
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	add_child(column)
 
-	# Left navigation sidebar (full height).
-	_sidebar = PanelContainer.new()
-	_sidebar.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
-	_sidebar.offset_right = 552.0
-	var sidebar_style := ColonyUiKit.rounded_style(
-		Color(ColonyUiKit.SURFACE, 0.975),
-		Color(ColonyUiKit.ACCENT, 0.5),
-		0,
-		0,
-		Vector4(40.0, 34.0, 36.0, 28.0)
-	)
-	sidebar_style.border_width_right = 2
-	# Cast a soft shadow onto the battlefield so the panel feels like a
-	# physical layer above the world rather than a flat overlay.
-	sidebar_style.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
-	sidebar_style.shadow_size = 24
-	sidebar_style.shadow_offset = Vector2(10.0, 0.0)
-	_sidebar.add_theme_stylebox_override("panel", sidebar_style)
-	add_child(_sidebar)
+	_center_buttons.clear()
+	_play_button = _bar_button(BTN_PLAY_PATH, "Oyna", _request_online_play)
+	_world_button = _bar_button(BTN_WORLD_PATH, "Bölge Seç", _open_region_selector)
+	_settings_button = _bar_button(BTN_SETTINGS_PATH, "Ayarlar", _open_settings)
+	_exit_button = _bar_button(BTN_EXIT_PATH, "Çıkış", _request_exit)
+	for button in _center_buttons:
+		column.add_child(button)
 
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_sidebar.add_child(scroll)
-
-	var box := VBoxContainer.new()
-	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 9)
-	scroll.add_child(box)
-
-	# --- Brand block: accent mark, wordmark, underline, tagline. ---
-	var brand := HBoxContainer.new()
-	brand.add_theme_constant_override("separation", 14)
-	box.add_child(brand)
-	var brand_mark := ColonyUiKit.accent_bar(6.0, 46.0)
-	brand_mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	brand.add_child(brand_mark)
-	var brand_text := VBoxContainer.new()
-	brand_text.add_theme_constant_override("separation", 2)
-	brand.add_child(brand_text)
-	var title := Label.new()
-	title.text = "COLONY DOMINION"
-	ColonyUiKit.apply_label(title, 32, 800, ColonyUiKit.ACCENT)
-	brand_text.add_child(title)
-	var wordmark_sub := Label.new()
-	wordmark_sub.text = ".IO  •  GERÇEK ZAMANLI STRATEJİ"
-	ColonyUiKit.apply_label(wordmark_sub, 12, 700, Color(ColonyUiKit.TEXT_MUTED, 0.95))
-	brand_text.add_child(wordmark_sub)
-
-	box.add_child(ColonyUiKit.accent_bar(120.0, 3.0, Color(ColonyUiKit.ACCENT, 0.85)))
-
-	var subtitle := Label.new()
-	subtitle.text = "Kolonini büyüt • Bölgeni seç • Rakip yuvaları yık"
-	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ColonyUiKit.apply_label(subtitle, 15, 400, ColonyUiKit.TEXT_SECONDARY)
-	box.add_child(subtitle)
-
-	box.add_child(_menu_spacer(6.0))
-
-	box.add_child(ColonyUiKit.section_label("Komutan Adı"))
-	_name_input = LineEdit.new()
-	_name_input.text = GameSession.player_name
-	_name_input.placeholder_text = "Oyuncu adı"
-	_name_input.max_length = 16
-	_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ColonyUiKit.apply_input(_name_input)
-	box.add_child(_name_input)
-
-	box.add_child(_section_header("Oyun Modu"))
-
-	_online_button = _nav_button("ÇOK OYUNCULU OYNA", &"primary", 62.0)
-	_online_button.pressed.connect(_request_online_play)
-	box.add_child(_online_button)
-
-	_offline_button = _nav_button("ÇEVRİM DIŞI OYNA", &"default", 54.0)
-	_offline_button.pressed.connect(_start_offline)
-	box.add_child(_offline_button)
-
-	_resume_button = _nav_button("DEVAM EDEN MAÇA DÖN", &"default", 50.0)
-	_resume_button.pressed.connect(_resume_online_match)
-	_resume_button.visible = false
-	box.add_child(_resume_button)
-
-	box.add_child(_section_header("Sunucu & Hesap"))
-
-	_region_button = _nav_button("BÖLGE SEÇ", &"ghost", 46.0)
-	_region_button.pressed.connect(_open_region_selector)
-	box.add_child(_region_button)
-	_region_status = Label.new()
-	ColonyUiKit.apply_label(_region_status, 14, 500, ColonyUiKit.TEXT_SECONDARY)
-	box.add_child(_region_status)
-
-	_account_button = _nav_button("GİRİŞ / KAYIT", &"ghost", 46.0)
-	_account_button.pressed.connect(_on_account_pressed)
-	box.add_child(_account_button)
-	_account_status = Label.new()
-	ColonyUiKit.apply_label(_account_status, 14, 500, ColonyUiKit.TEXT_SECONDARY)
-	box.add_child(_account_status)
-
-	var secondary_row := HBoxContainer.new()
-	secondary_row.add_theme_constant_override("separation", 10)
-	box.add_child(secondary_row)
-	_profile_button = _nav_button("PROFİL", &"ghost", 44.0)
-	_profile_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_profile_button.pressed.connect(_open_profile_panel)
-	secondary_row.add_child(_profile_button)
-	_legal_button = _nav_button("YASAL", &"ghost", 44.0)
-	_legal_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_legal_button.pressed.connect(_open_legal_gate)
-	secondary_row.add_child(_legal_button)
-
-	box.add_child(_section_header("Tercihler"))
-
-	_settings_button = _nav_button("⚙  AYARLAR", &"ghost", 46.0)
-	_settings_button.pressed.connect(_open_settings)
-	box.add_child(_settings_button)
-
-	box.add_child(_menu_spacer(12.0))
-	box.add_child(_menu_divider())
-
+	# Status line (matchmaking / connection feedback) tucked into the bottom-left.
 	_status_label = Label.new()
+	_anchor_norm(_status_label, 0.02, 0.90, 0.44, 0.99)
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ColonyUiKit.apply_label(_status_label, 14, 500, ColonyUiKit.TEXT_SECONDARY)
-	box.add_child(_status_label)
+	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	ColonyUiKit.apply_label(_status_label, 15, 600, ColonyUiKit.TEXT_SECONDARY)
+	_status_label.add_theme_color_override("font_outline_color", Color(0.02, 0.015, 0.01, 0.95))
+	_status_label.add_theme_constant_override("outline_size", 5)
+	add_child(_status_label)
 
-	var version := Label.new()
-	version.text = (
-		"Godot 4.6.3 • Üretim online • Protokol %d" % OnlineServices.config.protocol_version
-	)
-	ColonyUiKit.apply_label(version, 12, 400, ColonyUiKit.TEXT_MUTED)
-	box.add_child(version)
-
-	_build_icon_dock()
+	_build_dock()
 	_build_modals()
 
 
-## Ornate gold action dock pinned to the bottom-right corner. Each plate opens a
-## menu section: clan crest → Clan, trophy → Ranking & Statistics, figure →
-## Profile, gear → Settings. Anchored to the corner (not a PanelContainer) so
-## MainMenuLayoutGuard — which only re-centres PanelContainers — leaves it alone.
-func _build_icon_dock() -> void:
-	var dock := HBoxContainer.new()
-	dock.name = "IconDock"
-	dock.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	dock.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	dock.offset_left = -352.0
-	dock.offset_top = -104.0
-	dock.offset_right = -28.0
-	dock.offset_bottom = -28.0
-	dock.add_theme_constant_override("separation", 14)
-	add_child(dock)
-
-	_dock_buttons.clear()
-	dock.add_child(_dock_icon("res://assets/ui/menu/icon_clan.png", "Klan", _open_clan_panel))
-	dock.add_child(
-		_dock_icon(
-			"res://assets/ui/menu/icon_ranking.png", "Sıralama & İstatistik", _open_ranking_panel
-		)
-	)
-	dock.add_child(
-		_dock_icon("res://assets/ui/menu/icon_profile.png", "Profil", _open_profile_panel)
-	)
-	dock.add_child(_dock_icon("res://assets/ui/menu/icon_settings.png", "Ayarlar", _open_settings))
-
-
-func _dock_icon(texture_path: String, tooltip: String, on_pressed: Callable) -> TextureButton:
+func _bar_button(texture_path: String, tooltip: String, on_pressed: Callable) -> TextureButton:
 	var button := TextureButton.new()
 	button.texture_normal = load(texture_path)
 	button.ignore_texture_size = true
 	button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	button.custom_minimum_size = Vector2(76.0, 76.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size = Vector2(280.0, 68.0)
 	button.tooltip_text = tooltip
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.pivot_offset = Vector2(38.0, 38.0)
 	button.pressed.connect(on_pressed)
-	button.mouse_entered.connect(_on_dock_icon_hover.bind(button, true))
-	button.mouse_exited.connect(_on_dock_icon_hover.bind(button, false))
-	_dock_buttons.append(button)
+	button.mouse_entered.connect(_on_control_hover.bind(button, true))
+	button.mouse_exited.connect(_on_control_hover.bind(button, false))
+	_center_buttons.append(button)
 	return button
 
 
-## Subtle lift + brighten so the plate feels tactile without any extra art.
-func _on_dock_icon_hover(button: TextureButton, hovering: bool) -> void:
-	if not is_instance_valid(button) or button.disabled:
+## Bottom-right plate dock. The strip art already carries the four emblem plates
+## (trophy → ranking & statistics, shield → clan, chart → profile, gear →
+## settings); we lay four transparent hit-areas over the baked plates.
+func _build_dock() -> void:
+	var dock := Control.new()
+	dock.name = "IconDock"
+	_anchor_norm(dock, 0.70, 0.85, 0.99, 0.99)
+	add_child(dock)
+
+	var strip := TextureRect.new()
+	_anchor_norm(strip, 0.0, 0.0, 1.0, 1.0)
+	strip.texture = load(DOCK_STRIP_PATH)
+	strip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	strip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dock.add_child(strip)
+
+	_dock_buttons.clear()
+	var actions: Array[Dictionary] = [
+		{"tip": "Sıralama & İstatistik", "cb": Callable(self, "_open_ranking_panel")},
+		{"tip": "Klan", "cb": Callable(self, "_open_clan_panel")},
+		{"tip": "Profil", "cb": Callable(self, "_open_profile_panel")},
+		{"tip": "Ayarlar", "cb": Callable(self, "_open_settings")},
+	]
+	var half_width: float = 0.5 / float(DOCK_ICON_FRACTIONS.size())
+	for index in actions.size():
+		var frac: float = DOCK_ICON_FRACTIONS[index]
+		var hit := Button.new()
+		hit.flat = true
+		hit.focus_mode = Control.FOCUS_NONE
+		_anchor_norm(hit, frac - half_width, 0.06, frac + half_width, 0.94)
+		hit.tooltip_text = String(actions[index]["tip"])
+		hit.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		hit.add_theme_stylebox_override("normal", _transparent_stylebox())
+		hit.add_theme_stylebox_override("hover", _transparent_stylebox())
+		hit.add_theme_stylebox_override("pressed", _transparent_stylebox())
+		hit.add_theme_stylebox_override("focus", _transparent_stylebox())
+		hit.pressed.connect(actions[index]["cb"] as Callable)
+		hit.mouse_entered.connect(_on_control_hover.bind(hit, true))
+		hit.mouse_exited.connect(_on_control_hover.bind(hit, false))
+		dock.add_child(hit)
+		_dock_buttons.append(hit)
+
+
+func _transparent_stylebox() -> StyleBoxEmpty:
+	return StyleBoxEmpty.new()
+
+
+## Shared hover feedback: a subtle lift + brighten, driven from the control's own
+## centre so nothing drifts.
+func _on_control_hover(control: Control, hovering: bool) -> void:
+	if not is_instance_valid(control) or control.get("disabled"):
 		return
-	var scale_target := Vector2(1.12, 1.12) if hovering else Vector2.ONE
-	var modulate_target := Color(1.18, 1.18, 1.18, 1.0) if hovering else Color.WHITE
+	control.pivot_offset = control.size * 0.5
+	var scale_target := Vector2(1.06, 1.06) if hovering else Vector2.ONE
+	var modulate_target := Color(1.16, 1.16, 1.16, 1.0) if hovering else Color.WHITE
 	var tween := create_tween().set_parallel(true)
-	tween.tween_property(button, "scale", scale_target, 0.12).set_trans(Tween.TRANS_SINE)
-	tween.tween_property(button, "modulate", modulate_target, 0.12).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(control, "scale", scale_target, 0.12).set_trans(Tween.TRANS_SINE)
+	# The primary bar owns its own looping glow; don't fight it over `modulate`.
+	if control != _play_button:
+		tween.tween_property(control, "modulate", modulate_target, 0.12).set_trans(Tween.TRANS_SINE)
 
 
-func _nav_button(text: String, variant: StringName, height: float) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ColonyUiKit.apply_button(button, variant, height)
-	# The primary CTA gets a looping glow instead of hover-brighten so the two
-	# animations never fight over the same `modulate` property.
-	if variant != &"primary":
-		button.mouse_entered.connect(_on_nav_button_hover.bind(button, true))
-		button.mouse_exited.connect(_on_nav_button_hover.bind(button, false))
-	return button
-
-
-func _on_nav_button_hover(button: Button, hovering: bool) -> void:
-	if not is_instance_valid(button) or button.disabled:
-		return
-	var target := Color(1.14, 1.14, 1.14, 1.0) if hovering else Color.WHITE
-	var tween := create_tween()
-	tween.tween_property(button, "modulate", target, 0.12).set_trans(Tween.TRANS_SINE)
-
-
-## A section header (small caps label) with a little breathing room above it, so
-## the navigation groups read as distinct blocks.
-func _section_header(text: String) -> Control:
-	var wrapper := VBoxContainer.new()
-	wrapper.add_theme_constant_override("separation", 4)
-	wrapper.add_child(_menu_spacer(8.0))
-	wrapper.add_child(ColonyUiKit.section_label(text))
-	return wrapper
-
-
-func _menu_spacer(height: float, expand: bool = false) -> Control:
-	var spacer := Control.new()
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if expand:
-		spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	else:
-		spacer.custom_minimum_size.y = height
-	return spacer
-
-
-func _menu_divider() -> Control:
-	var line := ColorRect.new()
-	line.color = Color(ColonyUiKit.BORDER, 0.7)
-	line.custom_minimum_size.y = 2.0
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return line
+func _anchor_norm(control: Control, left: float, top: float, right: float, bottom: float) -> void:
+	control.anchor_left = left
+	control.anchor_top = top
+	control.anchor_right = right
+	control.anchor_bottom = bottom
+	control.offset_left = 0.0
+	control.offset_top = 0.0
+	control.offset_right = 0.0
+	control.offset_bottom = 0.0
 
 
 func _build_modals() -> void:
 	_modal_shade = ColorRect.new()
-	_modal_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_anchor_norm(_modal_shade, 0.0, 0.0, 1.0, 1.0)
 	_modal_shade.color = Color(0.0, 0.0, 0.0, 0.72)
 	_modal_shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	_modal_shade.visible = false
@@ -407,25 +281,12 @@ func _connect_services() -> void:
 	NetworkSession.connection_state_changed.connect(_on_connection_state_changed)
 
 
-func _start_offline() -> void:
-	if _starting or _matchmaking:
-		return
-	_save_player_name()
-	GameSession.prepare_offline_match()
-	_starting = true
-	_set_buttons_enabled(false)
-	_show_status("Çevrimdışı savaş alanı hazırlanıyor", false)
-	AudioSystem.play_ui(&"ui_select")
-	call_deferred("_change_to_offline_game")
-
-
 func _request_online_play() -> void:
 	if _starting:
 		return
 	if _matchmaking:
 		_cancel_matchmaking()
 		return
-	_save_player_name()
 	_pending_online_request = true
 	if not OnlineServices.legal_store.has_required_acceptances():
 		_open_legal_gate()
@@ -439,6 +300,12 @@ func _request_online_play() -> void:
 		_open_auth_panel()
 		return
 	_begin_matchmaking()
+
+
+func _request_exit() -> void:
+	if _matchmaking:
+		_cancel_matchmaking()
+	get_tree().quit()
 
 
 func _try_resume_previous_match() -> void:
@@ -456,7 +323,6 @@ func _resume_online_match() -> void:
 	var summary: Dictionary = GameTransport.get_persisted_reconnect_summary(build_id)
 	if summary.is_empty():
 		_refresh_status()
-		_show_status("Devam eden maç oturumunun süresi doldu", true)
 		return
 	_starting = true
 	_set_buttons_enabled(false)
@@ -469,8 +335,7 @@ func _resume_online_match() -> void:
 	if not assignment_variant is Dictionary:
 		_start_error("Kaydedilmiş maç ataması geçersiz")
 		return
-	var assignment: Dictionary = assignment_variant
-	GameSession.prepare_online_match(assignment)
+	GameSession.prepare_online_match(assignment_variant as Dictionary)
 	var auth_result: Dictionary = await GameTransport.wait_for_authentication(12.0)
 	if not bool(auth_result.get("ok", false)):
 		GameTransport.clear_persisted_reconnect_session()
@@ -487,16 +352,12 @@ func _begin_matchmaking() -> void:
 	_matchmaking_generation += 1
 	var generation: int = _matchmaking_generation
 	_matchmaking = true
-	_online_button.text = "EŞLEŞTİRMEYİ İPTAL ET"
-	_offline_button.disabled = true
-	_region_button.disabled = true
-	_account_button.disabled = true
-	_legal_button.disabled = true
+	_set_matchmaking_visuals(true)
 	var result: Dictionary = await OnlineServices.begin_matchmaking(GameSession.player_name)
 	if generation != _matchmaking_generation:
 		return
 	_matchmaking = false
-	_online_button.text = "ÇOK OYUNCULU OYNA"
+	_set_matchmaking_visuals(false)
 	if bool(result.get("ok", false)):
 		_starting = true
 		_set_buttons_enabled(false)
@@ -530,10 +391,24 @@ func _begin_matchmaking() -> void:
 func _cancel_matchmaking() -> void:
 	_matchmaking_generation += 1
 	_matchmaking = false
-	_online_button.text = "ÇOK OYUNCULU OYNA"
+	_set_matchmaking_visuals(false)
 	_set_buttons_enabled(true)
 	OnlineServices.cancel_matchmaking()
 	_show_status("Eşleştirme iptal edildi", false)
+
+
+## While queuing, the play bar keeps a steady amber tint (instead of a text
+## change) so the player can see it is "searching — tap again to cancel".
+func _set_matchmaking_visuals(active: bool) -> void:
+	if not is_instance_valid(_play_button):
+		return
+	if active:
+		if _pulse_tween != null and _pulse_tween.is_valid():
+			_pulse_tween.kill()
+		_play_button.modulate = Color(1.35, 1.12, 0.55, 1.0)
+	else:
+		_play_button.modulate = Color.WHITE
+		_pulse_primary()
 
 
 func _change_to_online_game() -> void:
@@ -545,19 +420,6 @@ func _change_to_online_game() -> void:
 	var error: Error = get_tree().change_scene_to_file(ONLINE_SCENE_PATH)
 	if error != OK:
 		_start_error("Çevrim içi sahne geçişi başarısız: %s" % error_string(error))
-
-
-func _change_to_offline_game() -> void:
-	if not ResourceLoader.exists(MAIN_SCENE_PATH, "PackedScene"):
-		_start_error("Ana oyun sahnesi bulunamadı")
-		return
-	var scene := load(MAIN_SCENE_PATH) as PackedScene
-	if scene == null:
-		_start_error("Ana oyun sahnesi yüklenemedi")
-		return
-	var error: Error = get_tree().change_scene_to_packed(scene)
-	if error != OK:
-		_start_error("Sahne geçişi başarısız: %s" % error_string(error))
 
 
 func _open_region_selector() -> void:
@@ -603,15 +465,6 @@ func _on_settings_closed() -> void:
 	_refresh_status()
 
 
-func _on_account_pressed() -> void:
-	if OnlineServices.auth.has_session():
-		GameTransport.clear_persisted_reconnect_session()
-		OnlineServices.auth.sign_out()
-		_show_status("Oturum kapatıldı", false)
-		return
-	_open_auth_panel()
-
-
 func _on_region_selected(_region_id: String) -> void:
 	_set_modal_visible(false)
 	_refresh_status()
@@ -654,16 +507,16 @@ func _on_session_changed(_session: Dictionary) -> void:
 func _on_matchmaking_status(status: Dictionary) -> void:
 	var state: String = String(status.get("status", "queued"))
 	if state == "queued":
-		var position: int = int(status.get("position", -1))
 		var humans := maxi(int(status.get("human_players_waiting", 1)), 1)
 		var target := maxi(int(status.get("target_players", 10)), humans)
 		var seconds := maxi(int(status.get("bot_backfill_seconds_remaining", 0)), 0)
-		var message := (
-			"Eşleştirme • %d/%d insan • %d sn sonra botlarla tamamlanır" % [humans, target, seconds]
+		_show_status(
+			(
+				"Eşleştirme • %d/%d insan • %d sn sonra botlarla tamamlanır"
+				% [humans, target, seconds]
+			),
+			false
 		)
-		if position > 0:
-			message += " • sıra %d" % (position + 1)
-		_show_status(message, false)
 
 
 func _on_connection_state_changed(_state: int, message: String) -> void:
@@ -672,40 +525,23 @@ func _on_connection_state_changed(_state: int, message: String) -> void:
 
 
 func _refresh_status() -> void:
-	if not is_instance_valid(_region_status):
+	if not is_instance_valid(_status_label):
 		return
-	var reconnect_summary: Dictionary = GameTransport.get_persisted_reconnect_summary(
-		OnlineServices.config.build_id
-	)
-	_resume_button.visible = not reconnect_summary.is_empty()
-	if _resume_button.visible:
-		var region_name: String = String(reconnect_summary.get("region_name", "Sunucu"))
-		_resume_button.text = "DEVAM EDEN MAÇA DÖN • %s" % region_name
+	if _starting or _matchmaking:
+		return
 	var ping_text: String = (
 		"-- ms" if NetworkSession.ping_ms < 0 else "%d ms" % NetworkSession.ping_ms
 	)
-	_region_status.text = "%s • %s" % [NetworkSession.selected_region_name, ping_text]
-	if NetworkSession.ping_ms >= 0 and NetworkSession.ping_ms <= 70:
-		_region_status.add_theme_color_override("font_color", Color(0.45, 1.0, 0.54, 1.0))
-	elif NetworkSession.ping_ms >= 0 and NetworkSession.ping_ms <= 140:
-		_region_status.add_theme_color_override("font_color", Color(1.0, 0.82, 0.32, 1.0))
+	var account_text: String = (
+		"Hesap bağlı" if OnlineServices.auth.has_session() else "Hesap bağlı değil"
+	)
+	var missing: PackedStringArray = OnlineServices.get_missing_client_settings()
+	if missing.is_empty():
+		_show_status(
+			"%s • %s • %s" % [NetworkSession.selected_region_name, ping_text, account_text], false
+		)
 	else:
-		_region_status.add_theme_color_override("font_color", Color(0.90, 0.72, 0.42, 1.0))
-	if OnlineServices.auth.has_session():
-		_profile_button.visible = true
-		_account_button.text = "ÇIKIŞ YAP"
-		var user_id: String = OnlineServices.auth.get_user_id()
-		_account_status.text = "Hesap bağlı • %s" % user_id.left(8)
-	else:
-		_profile_button.visible = false
-		_account_button.text = "GİRİŞ / KAYIT"
-		_account_status.text = "Hesap bağlı değil"
-	if not _starting and not _matchmaking:
-		var missing: PackedStringArray = OnlineServices.get_missing_client_settings()
-		if missing.is_empty():
-			_show_status("Çevrimdışı hazır • Çevrim içi servisler yapılandırıldı", false)
-		else:
-			_show_status("Çevrimdışı hazır • Online için %s gerekli" % ", ".join(missing), false)
+		_show_status("Online için gerekli: %s" % ", ".join(missing), false)
 
 
 func _set_modal_visible(value: bool) -> void:
@@ -714,28 +550,21 @@ func _set_modal_visible(value: bool) -> void:
 
 
 func _set_buttons_enabled(enabled: bool) -> void:
-	_offline_button.disabled = not enabled
-	_online_button.disabled = not enabled and not _matchmaking
-	_resume_button.disabled = not enabled
-	_region_button.disabled = not enabled
-	_account_button.disabled = not enabled
-	_legal_button.disabled = not enabled
-	_profile_button.disabled = not enabled
-	_settings_button.disabled = not enabled
+	for button in _center_buttons:
+		if is_instance_valid(button):
+			# Keep the play bar tappable while queuing so it can cancel.
+			button.disabled = not enabled and not (button == _play_button and _matchmaking)
 	for dock_button in _dock_buttons:
 		if is_instance_valid(dock_button):
 			dock_button.disabled = not enabled
-	_name_input.editable = enabled
-
-
-func _save_player_name() -> void:
-	GameSession.set_player_name(_name_input.text)
 
 
 func _show_status(message: String, is_error: bool) -> void:
+	if not is_instance_valid(_status_label):
+		return
 	_status_label.text = message
 	_status_label.add_theme_color_override(
-		"font_color", Color(1.0, 0.38, 0.30, 1.0) if is_error else Color(0.86, 0.82, 0.66, 1.0)
+		"font_color", Color(1.0, 0.46, 0.36, 1.0) if is_error else Color(0.90, 0.86, 0.70, 1.0)
 	)
 
 
