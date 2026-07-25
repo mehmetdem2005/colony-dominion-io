@@ -17,6 +17,11 @@ const LOCAL_INPUT_SOURCE_SCRIPT := preload("res://gameplay/input/local_command_i
 const MATCH_EVENT_HUB_SCRIPT := preload("res://gameplay/presentation/match_event_hub.gd")
 
 const SPATIAL_CELL_SIZE: float = 256.0
+# Authoritative world extents. The online client streams its own deterministic
+# copy of the world and MUST configure its WorldStreamManager with the exact
+# same bounds and safe-spawn positions (see SPAWN_POSITIONS) as this server, or
+# the two RNG streams diverge and streamed resources land in different places.
+const WORLD_BOUNDS := Rect2(-18000.0, -12000.0, 36000.0, 24000.0)
 
 @onready var ground_root: Node2D = $World/Ground
 @onready var decoration_root: Node2D = $World/Decorations
@@ -28,7 +33,7 @@ const SPATIAL_CELL_SIZE: float = 256.0
 var camera: PlayerCameraController = get_node_or_null("PlayerCamera") as PlayerCameraController
 @onready var hud: MatchPresentationAdapter = get_node_or_null("HUD") as MatchPresentationAdapter
 
-var world_bounds := Rect2(-18000.0, -12000.0, 36000.0, 24000.0)
+var world_bounds := WORLD_BOUNDS
 var unit_cap_per_colony: int = 72
 var match_rules: MatchRules
 var events: MatchEventHub
