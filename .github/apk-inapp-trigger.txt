@@ -1,2 +1,2 @@
-Minimap cleanup + server-tick interpolation (jitter).
-bump: 2026-07-23T1345Z
+manual APK rebuild request
+2026-07-25T16:09:21Z
