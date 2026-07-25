@@ -19,6 +19,10 @@ const BTN_WORLD_PATH := "res://assets/ui/menu/frames/btn_world.png"
 const BTN_SETTINGS_PATH := "res://assets/ui/menu/frames/btn_settings.png"
 const BTN_EXIT_PATH := "res://assets/ui/menu/frames/btn_exit.png"
 const DOCK_STRIP_PATH := "res://assets/ui/menu/frames/dock_strip.png"
+const ICON_RANKING_PATH := "res://assets/ui/menu/icons/icon_ranking.png"
+const ICON_CLAN_PATH := "res://assets/ui/menu/icons/icon_clan.png"
+const ICON_PROFILE_PATH := "res://assets/ui/menu/icons/icon_profile.png"
+const ICON_SETTINGS_PATH := "res://assets/ui/menu/icons/icon_settings.png"
 
 # Normalised x-centres of the four plates baked into the dock strip art.
 const DOCK_ICON_FRACTIONS: Array[float] = [0.19, 0.40, 0.60, 0.81]
@@ -28,7 +32,7 @@ var _world_button: TextureButton
 var _settings_button: TextureButton
 var _exit_button: TextureButton
 var _center_buttons: Array[TextureButton] = []
-var _dock_buttons: Array[Button] = []
+var _dock_buttons: Array[BaseButton] = []
 var _status_label: Label
 var _modal_shade: ColorRect
 var _region_panel: RegionSelectorPanel
@@ -156,9 +160,10 @@ func _bar_button(texture_path: String, tooltip: String, on_pressed: Callable) ->
 	return button
 
 
-## Bottom-right plate dock. The strip art already carries the four emblem plates
-## (trophy → ranking & statistics, shield → clan, chart → profile, gear →
-## settings); we lay four transparent hit-areas over the baked plates.
+## Bottom-right plate dock: the ornate strip frame carries four octagonal plates,
+## and the player's own gold emblem icons (trophy → ranking & statistics, ant
+## shield → clan, figure → profile, gear → settings) sit on those plates as the
+## clickable buttons.
 func _build_dock() -> void:
 	var dock := Control.new()
 	dock.name = "IconDock"
@@ -175,33 +180,27 @@ func _build_dock() -> void:
 
 	_dock_buttons.clear()
 	var actions: Array[Dictionary] = [
-		{"tip": "Sıralama & İstatistik", "cb": Callable(self, "_open_ranking_panel")},
-		{"tip": "Klan", "cb": Callable(self, "_open_clan_panel")},
-		{"tip": "Profil", "cb": Callable(self, "_open_profile_panel")},
-		{"tip": "Ayarlar", "cb": Callable(self, "_open_settings")},
+		{"tip": "Sıralama & İstatistik", "icon": ICON_RANKING_PATH, "cb": _open_ranking_panel},
+		{"tip": "Klan", "icon": ICON_CLAN_PATH, "cb": _open_clan_panel},
+		{"tip": "Profil", "icon": ICON_PROFILE_PATH, "cb": _open_profile_panel},
+		{"tip": "Ayarlar", "icon": ICON_SETTINGS_PATH, "cb": _open_settings},
 	]
 	var half_width: float = 0.5 / float(DOCK_ICON_FRACTIONS.size())
 	for index in actions.size():
 		var frac: float = DOCK_ICON_FRACTIONS[index]
-		var hit := Button.new()
-		hit.flat = true
-		hit.focus_mode = Control.FOCUS_NONE
-		_anchor_norm(hit, frac - half_width, 0.06, frac + half_width, 0.94)
-		hit.tooltip_text = String(actions[index]["tip"])
-		hit.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		hit.add_theme_stylebox_override("normal", _transparent_stylebox())
-		hit.add_theme_stylebox_override("hover", _transparent_stylebox())
-		hit.add_theme_stylebox_override("pressed", _transparent_stylebox())
-		hit.add_theme_stylebox_override("focus", _transparent_stylebox())
-		hit.pressed.connect(actions[index]["cb"] as Callable)
-		hit.mouse_entered.connect(_on_control_hover.bind(hit, true))
-		hit.mouse_exited.connect(_on_control_hover.bind(hit, false))
-		dock.add_child(hit)
-		_dock_buttons.append(hit)
-
-
-func _transparent_stylebox() -> StyleBoxEmpty:
-	return StyleBoxEmpty.new()
+		var icon_button := TextureButton.new()
+		icon_button.texture_normal = load(String(actions[index]["icon"]))
+		icon_button.ignore_texture_size = true
+		icon_button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		# Slightly wider/taller than the baked plate emblem so it fully covers it.
+		_anchor_norm(icon_button, frac - half_width * 0.86, 0.14, frac + half_width * 0.86, 0.86)
+		icon_button.tooltip_text = String(actions[index]["tip"])
+		icon_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		icon_button.pressed.connect(actions[index]["cb"] as Callable)
+		icon_button.mouse_entered.connect(_on_control_hover.bind(icon_button, true))
+		icon_button.mouse_exited.connect(_on_control_hover.bind(icon_button, false))
+		dock.add_child(icon_button)
+		_dock_buttons.append(icon_button)
 
 
 ## Shared hover feedback: a subtle lift + brighten, driven from the control's own
