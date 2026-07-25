@@ -13,21 +13,16 @@ const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
 const BUILD_ID: String = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 
 const BG_PATH := "res://assets/ui/menu/frames/bg_colony.png"
-const TITLE_PATH := "res://assets/ui/menu/frames/title_banner.png"
+const TITLE_PATH := "res://assets/ui/menu/frames/title_banner_titled.png"
 const BTN_PLAY_PATH := "res://assets/ui/menu/frames/btn_play.png"
 const BTN_WORLD_PATH := "res://assets/ui/menu/frames/btn_world.png"
-const BTN_SETTINGS_PATH := "res://assets/ui/menu/frames/btn_settings.png"
 const BTN_EXIT_PATH := "res://assets/ui/menu/frames/btn_exit.png"
-const DOCK_STRIP_PATH := "res://assets/ui/menu/frames/dock_strip.png"
-const ICON_RANKING_PATH := "res://assets/ui/menu/icons/icon_ranking.png"
-const ICON_CLAN_PATH := "res://assets/ui/menu/icons/icon_clan.png"
-const ICON_PROFILE_PATH := "res://assets/ui/menu/icons/icon_profile.png"
-const ICON_SETTINGS_PATH := "res://assets/ui/menu/icons/icon_settings.png"
-
-const TITLE_TEXT_PATH := "res://assets/ui/menu/text/title_colony.png"
+const DOCK_STRIP_PATH := "res://assets/ui/menu/frames/dock_iconed.png"
+# Aspect ratio of the dock strip art; the dock box is sized to this so the baked
+# icons and the invisible hit-areas over them line up on any screen shape.
+const DOCK_ASPECT := 3.0
 const TXT_PLAY_PATH := "res://assets/ui/menu/text/txt_play.png"
 const TXT_MULTIPLAYER_PATH := "res://assets/ui/menu/text/txt_multiplayer.png"
-const TXT_SETTINGS_PATH := "res://assets/ui/menu/text/txt_settings.png"
 const TXT_EXIT_PATH := "res://assets/ui/menu/text/txt_exit.png"
 
 # Normalised x-centres of the four plates baked into the dock strip art.
@@ -35,9 +30,9 @@ const DOCK_ICON_FRACTIONS: Array[float] = [0.19, 0.40, 0.60, 0.81]
 
 var _play_button: TextureButton
 var _world_button: TextureButton
-var _settings_button: TextureButton
 var _exit_button: TextureButton
 var _center_buttons: Array[TextureButton] = []
+var _dock: Control
 var _dock_buttons: Array[BaseButton] = []
 var _status_label: Label
 var _modal_shade: ColorRect
@@ -59,6 +54,10 @@ func _ready() -> void:
 	print("[Colony Dominion] Build: %s" % BUILD_ID)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	AudioSystem.enter_menu()
+	# The global top-centre connection badge is redundant on the menu (the status
+	# line already shows region/ping/account) and it overlaps the title banner, so
+	# hide it here and restore it when leaving for a match.
+	_set_network_overlay_visible(false)
 	_build_menu()
 	_connect_services()
 	_refresh_status()
@@ -66,6 +65,16 @@ func _ready() -> void:
 	_play_entrance()
 	_pulse_primary()
 	call_deferred("_try_resume_previous_match")
+
+
+func _exit_tree() -> void:
+	_set_network_overlay_visible(true)
+
+
+func _set_network_overlay_visible(value: bool) -> void:
+	var overlay := get_node_or_null("/root/NetworkStatusOverlay")
+	if overlay is CanvasLayer:
+		(overlay as CanvasLayer).visible = value
 
 
 func _play_entrance() -> void:
@@ -111,27 +120,20 @@ func _build_menu() -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
 
-	# Crowned title banner with the gold-textured wordmark laid on the plate.
+	# Crowned title banner — the COLONY.io wordmark is baked onto the plate so it
+	# can never drift off the banner on unusual screen shapes.
 	var title := TextureRect.new()
-	_anchor_norm(title, 0.275, -0.04, 0.725, 0.34)
+	_anchor_norm(title, 0.30, -0.03, 0.70, 0.33)
 	title.texture = load(TITLE_PATH)
 	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(title)
 
-	var title_text := TextureRect.new()
-	_anchor_norm(title_text, 0.365, 0.108, 0.635, 0.212)
-	title_text.texture = load(TITLE_TEXT_PATH)
-	title_text.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	title_text.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	title_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(title_text)
-
-	# Central stack of four action bars.
+	# Central stack of three action bars (settings lives in the dock, not here).
 	var column := VBoxContainer.new()
-	_anchor_norm(column, 0.325, 0.42, 0.675, 0.94)
-	column.add_theme_constant_override("separation", 10)
+	_anchor_norm(column, 0.34, 0.44, 0.66, 0.92)
+	column.add_theme_constant_override("separation", 14)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	add_child(column)
 
@@ -140,7 +142,6 @@ func _build_menu() -> void:
 	_world_button = _bar_button(
 		BTN_WORLD_PATH, TXT_MULTIPLAYER_PATH, "Çok Oyunculu", _request_online_play
 	)
-	_settings_button = _bar_button(BTN_SETTINGS_PATH, TXT_SETTINGS_PATH, "Ayarlar", _open_settings)
 	_exit_button = _bar_button(BTN_EXIT_PATH, TXT_EXIT_PATH, "Çıkış", _request_exit)
 	for button in _center_buttons:
 		column.add_child(button)
@@ -190,47 +191,66 @@ func _bar_button(
 	return button
 
 
-## Bottom-right plate dock: the ornate strip frame carries four octagonal plates,
-## and the player's own gold emblem icons (trophy → ranking & statistics, ant
-## shield → clan, figure → profile, gear → settings) sit on those plates as the
-## clickable buttons.
+## Bottom-right plate dock. The strip art (with the four gold emblems already
+## baked into its octagonal sockets — trophy → ranking, ant shield → clan,
+## figure → profile, gear → settings) is one image, and the dock box is sized to
+## the strip's aspect ratio so it never letterboxes; four invisible hit-areas sit
+## exactly over the baked plates.
 func _build_dock() -> void:
-	var dock := Control.new()
-	dock.name = "IconDock"
-	_anchor_norm(dock, 0.70, 0.85, 0.99, 0.99)
-	add_child(dock)
+	_dock = Control.new()
+	_dock.name = "IconDock"
+	_dock.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	add_child(_dock)
 
 	var strip := TextureRect.new()
 	_anchor_norm(strip, 0.0, 0.0, 1.0, 1.0)
 	strip.texture = load(DOCK_STRIP_PATH)
 	strip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	strip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	strip.stretch_mode = TextureRect.STRETCH_SCALE
 	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dock.add_child(strip)
+	_dock.add_child(strip)
 
 	_dock_buttons.clear()
 	var actions: Array[Dictionary] = [
-		{"tip": "Sıralama & İstatistik", "icon": ICON_RANKING_PATH, "cb": _open_ranking_panel},
-		{"tip": "Klan", "icon": ICON_CLAN_PATH, "cb": _open_clan_panel},
-		{"tip": "Profil", "icon": ICON_PROFILE_PATH, "cb": _open_profile_panel},
-		{"tip": "Ayarlar", "icon": ICON_SETTINGS_PATH, "cb": _open_settings},
+		{"tip": "Sıralama & İstatistik", "cb": _open_ranking_panel},
+		{"tip": "Klan", "cb": _open_clan_panel},
+		{"tip": "Profil", "cb": _open_profile_panel},
+		{"tip": "Ayarlar", "cb": _open_settings},
 	]
 	var half_width: float = 0.5 / float(DOCK_ICON_FRACTIONS.size())
 	for index in actions.size():
 		var frac: float = DOCK_ICON_FRACTIONS[index]
-		var icon_button := TextureButton.new()
-		icon_button.texture_normal = load(String(actions[index]["icon"]))
-		icon_button.ignore_texture_size = true
-		icon_button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-		# Slightly wider/taller than the baked plate emblem so it fully covers it.
-		_anchor_norm(icon_button, frac - half_width * 0.86, 0.14, frac + half_width * 0.86, 0.86)
-		icon_button.tooltip_text = String(actions[index]["tip"])
-		icon_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		icon_button.pressed.connect(actions[index]["cb"] as Callable)
-		icon_button.mouse_entered.connect(_on_control_hover.bind(icon_button, true))
-		icon_button.mouse_exited.connect(_on_control_hover.bind(icon_button, false))
-		dock.add_child(icon_button)
-		_dock_buttons.append(icon_button)
+		var hit := Button.new()
+		hit.flat = true
+		hit.focus_mode = Control.FOCUS_NONE
+		_anchor_norm(hit, frac - half_width, 0.06, frac + half_width, 0.94)
+		hit.tooltip_text = String(actions[index]["tip"])
+		hit.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var empty := StyleBoxEmpty.new()
+		for state in ["normal", "hover", "pressed", "focus"]:
+			hit.add_theme_stylebox_override(state, empty)
+		hit.pressed.connect(actions[index]["cb"] as Callable)
+		_dock.add_child(hit)
+		_dock_buttons.append(hit)
+
+	_relayout_dock()
+	get_viewport().size_changed.connect(_relayout_dock)
+
+
+## Keep the dock a fixed-aspect box pinned to the bottom-right corner so the
+## baked strip fills it exactly (no letterboxing) and the hit-areas stay aligned.
+func _relayout_dock() -> void:
+	if not is_instance_valid(_dock):
+		return
+	var viewport := get_viewport_rect().size
+	var dock_height: float = clampf(viewport.y * 0.135, 64.0, 150.0)
+	var dock_width: float = dock_height * DOCK_ASPECT
+	var margin_x: float = viewport.x * 0.012
+	var margin_y: float = viewport.y * 0.02
+	_dock.offset_right = -margin_x
+	_dock.offset_bottom = -margin_y
+	_dock.offset_left = -margin_x - dock_width
+	_dock.offset_top = -margin_y - dock_height
 
 
 ## Shared hover feedback: a subtle lift + brighten, driven from the control's own
