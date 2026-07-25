@@ -24,6 +24,8 @@ const DOCK_ASPECT := 3.0
 const TXT_PLAY_PATH := "res://assets/ui/menu/text/txt_play.png"
 const TXT_MULTIPLAYER_PATH := "res://assets/ui/menu/text/txt_multiplayer.png"
 const TXT_EXIT_PATH := "res://assets/ui/menu/text/txt_exit.png"
+const TXT_CANCEL_PATH := "res://assets/ui/menu/text/txt_cancel.png"
+const SPINNER_PATH := "res://assets/ui/menu/frames/spinner.png"
 
 # Normalised x-centres of the four plates baked into the dock strip art.
 const DOCK_ICON_FRACTIONS: Array[float] = [0.19, 0.40, 0.60, 0.81]
@@ -32,6 +34,9 @@ var _play_button: TextureButton
 var _world_button: TextureButton
 var _exit_button: TextureButton
 var _center_buttons: Array[TextureButton] = []
+var _world_label: TextureRect
+var _world_spinner: TextureRect
+var _spinner_tween: Tween
 var _dock: Control
 var _dock_buttons: Array[BaseButton] = []
 var _status_label: Label
@@ -146,6 +151,18 @@ func _build_menu() -> void:
 	for button in _center_buttons:
 		column.add_child(button)
 
+	# The ÇOK OYUNCULU bar's label is swapped to the cancel text while queuing, and
+	# a spinning ring overlays its right side.
+	_world_label = _world_button.get_node("Label") as TextureRect
+	_world_spinner = TextureRect.new()
+	_anchor_norm(_world_spinner, 0.82, 0.24, 0.93, 0.76)
+	_world_spinner.texture = load(SPINNER_PATH)
+	_world_spinner.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_world_spinner.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_world_spinner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world_spinner.visible = false
+	_world_button.add_child(_world_spinner)
+
 	# Status line (matchmaking / connection feedback) tucked into the bottom-left.
 	_status_label = Label.new()
 	_anchor_norm(_status_label, 0.02, 0.90, 0.44, 0.99)
@@ -180,6 +197,7 @@ func _bar_button(
 	# box makes height the binding constraint, so every label keeps the same cap
 	# height regardless of word length.
 	var label := TextureRect.new()
+	label.name = "Label"
 	_anchor_norm(label, 0.24, 0.28, 0.92, 0.72)
 	label.texture = load(text_path)
 	label.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -361,8 +379,13 @@ func _request_online_play() -> void:
 		_show_status("Çevrim içi yapılandırma eksik: %s" % ", ".join(missing), true)
 		return
 	if not OnlineServices.auth.has_session():
-		_open_auth_panel()
-		return
+		# A previous sign-in may be stored (only the refresh token is persisted);
+		# try to silently restore it before asking the player to log in again.
+		_show_status("Oturum kontrol ediliyor", false)
+		var refreshed: Dictionary = await OnlineServices.auth.refresh_session()
+		if not bool(refreshed.get("ok", false)) or not OnlineServices.auth.has_session():
+			_open_auth_panel()
+			return
 	_begin_matchmaking()
 
 
@@ -461,18 +484,29 @@ func _cancel_matchmaking() -> void:
 	_show_status("Eşleştirme iptal edildi", false)
 
 
-## While queuing, the play bar keeps a steady amber tint (instead of a text
-## change) so the player can see it is "searching — tap again to cancel".
+## While queuing, the ÇOK OYUNCULU bar becomes "EŞLEŞTİRMEYİ İPTAL ET" with a
+## spinning ring next to it, and tapping it again cancels. The play bar keeps a
+## steady amber tint too.
 func _set_matchmaking_visuals(active: bool) -> void:
-	if not is_instance_valid(_play_button):
-		return
-	if active:
-		if _pulse_tween != null and _pulse_tween.is_valid():
-			_pulse_tween.kill()
-		_play_button.modulate = Color(1.35, 1.12, 0.55, 1.0)
-	else:
-		_play_button.modulate = Color.WHITE
-		_pulse_primary()
+	if is_instance_valid(_play_button):
+		if active:
+			if _pulse_tween != null and _pulse_tween.is_valid():
+				_pulse_tween.kill()
+			_play_button.modulate = Color(1.35, 1.12, 0.55, 1.0)
+		else:
+			_play_button.modulate = Color.WHITE
+			_pulse_primary()
+	if is_instance_valid(_world_label):
+		_world_label.texture = load(TXT_CANCEL_PATH if active else TXT_MULTIPLAYER_PATH)
+	if is_instance_valid(_world_spinner):
+		_world_spinner.visible = active
+		if _spinner_tween != null and _spinner_tween.is_valid():
+			_spinner_tween.kill()
+		if active:
+			_world_spinner.pivot_offset = _world_spinner.size * 0.5
+			_world_spinner.rotation = 0.0
+			_spinner_tween = create_tween().set_loops()
+			_spinner_tween.tween_property(_world_spinner, "rotation", TAU, 1.0).from(0.0)
 
 
 func _change_to_online_game() -> void:
@@ -535,13 +569,16 @@ func _on_region_selected(_region_id: String) -> void:
 
 
 func _on_authenticated() -> void:
+	# Do not auto-start matchmaking after signing in; hand control back to the
+	# player so they press ÇOK OYUNCULU again when they are ready.
+	_pending_online_request = false
 	_set_modal_visible(false)
 	_refresh_status()
-	if _pending_online_request:
-		_request_online_play()
+	_show_status("Giriş yapıldı — başlamak için ÇOK OYUNCULU'ya bas", false)
 
 
 func _on_legal_accepted() -> void:
+	_pending_online_request = false
 	_set_modal_visible(false)
 	_refresh_status()
 	if OnlineServices.auth.has_session():
@@ -555,8 +592,7 @@ func _on_legal_accepted() -> void:
 				true
 			)
 			return
-	if _pending_online_request:
-		_request_online_play()
+	_show_status("Onaylandı — başlamak için ÇOK OYUNCULU'ya bas", false)
 
 
 func _on_modal_closed() -> void:

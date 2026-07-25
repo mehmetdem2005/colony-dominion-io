@@ -57,6 +57,7 @@ var _spatial_rebuild_left: float = 0.0
 var _spatial_dirty: bool = true
 var _last_emitted_second: int = -1
 var _match_seed: int = 738291
+var _spawn_points: Array[Vector2] = []
 var _command_router: AuthoritativeCommandRouter
 var _local_input_source: LocalCommandInputSource
 var _audio_context_left: float = 0.0
@@ -143,16 +144,22 @@ func _ready() -> void:
 
 	world_stream = WORLD_STREAM_MANAGER_SCRIPT.new() as WorldStreamManager
 	add_child(world_stream)
+	# Randomise which nest lands on which safe-spawn each match, deterministically
+	# from the match seed so the dedicated server and every client agree. The set
+	# of positions is unchanged (they are already spread far apart), so nests never
+	# end up next to each other and the streamed-world safe zones stay identical.
+	_spawn_points = _shuffled_spawn_points(_match_seed)
+
 	world_stream.configure(
 		world_bounds,
 		ground_root,
 		decoration_root,
 		resources_root,
-		SPAWN_POSITIONS,
+		_spawn_points,
 		not is_headless_server
 	)
 
-	for index in SPAWN_POSITIONS.size():
+	for index in _spawn_points.size():
 		var controller := COLONY_CONTROLLER_SCRIPT.new() as ColonyController
 		add_child(controller)
 		var colony_name: String = _game_session().player_name if index == 0 else COLONY_NAMES[index]
@@ -163,7 +170,7 @@ func _ready() -> void:
 			colony_name,
 			ColonyVisualCatalog.team_color(index),
 			local_human,
-			SPAWN_POSITIONS[index],
+			_spawn_points[index],
 			local_human,
 			1 if local_human else 0
 		)
@@ -672,6 +679,21 @@ func get_controller_by_team_id(team_id: int) -> ColonyController:
 
 func get_match_seed() -> int:
 	return _match_seed
+
+
+## Deterministic Fisher-Yates shuffle of the safe-spawn set, keyed off the match
+## seed. Same seed → same order on server and every client, so nest placement is
+## consistent; a fresh seed each match reshuffles who spawns where.
+func _shuffled_spawn_points(seed_value: int) -> Array[Vector2]:
+	var points: Array[Vector2] = SPAWN_POSITIONS.duplicate()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	for index in range(points.size() - 1, 0, -1):
+		var swap_index: int = rng.randi_range(0, index)
+		var temporary: Vector2 = points[index]
+		points[index] = points[swap_index]
+		points[swap_index] = temporary
+	return points
 
 
 func get_server_tick() -> int:
