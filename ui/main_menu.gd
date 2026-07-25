@@ -472,7 +472,26 @@ func _begin_matchmaking() -> void:
 		_change_to_online_game()
 		return
 	_set_buttons_enabled(true)
-	_show_status(String(result.get("error", "Eşleştirme başarısız")), true)
+	_show_status(_friendly_matchmaking_error(String(result.get("error", ""))), true)
+
+
+## Turn raw server error codes into something a player can act on. The common one
+## on the free tier is deploy_failed: the previous match's server is still
+## shutting down, so its single deployment slot is briefly occupied.
+func _friendly_matchmaking_error(raw: String) -> String:
+	match raw:
+		"deploy_failed", "deployment_failed":
+			return "Sunucu başlatılamadı — önceki maçın sunucusu hâlâ kapanıyor olabilir. ~1 dakika bekleyip tekrar dene."
+		"matchmaking_not_configured":
+			return "Çok oyunculu sunucu yapılandırması eksik."
+		"matchmaking_unavailable", "status_failed":
+			return "Eşleştirme şu an kullanılamıyor, birazdan tekrar dene."
+		"authentication_required":
+			return "Oturum doğrulanamadı — tekrar giriş yapman gerekebilir."
+		"":
+			return "Eşleştirme başarısız"
+		_:
+			return raw
 
 
 func _cancel_matchmaking() -> void:
