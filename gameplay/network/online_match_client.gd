@@ -4,7 +4,8 @@ extends Node2D
 const PROXY_SCENE := preload("res://scenes/network/network_entity_proxy.tscn")
 const WORLD_STREAM_SCRIPT := preload("res://gameplay/world/world_stream_manager.gd")
 
-var world_bounds := Rect2(-18000.0, -12000.0, 36000.0, 24000.0)
+# Mirror the authoritative server's world extents exactly (see MatchController).
+var world_bounds := MatchController.WORLD_BOUNDS
 var _world_stream: WorldStreamManager
 var _proxies: Dictionary = {}
 var _local_commander: NetworkEntityProxy = null
@@ -48,8 +49,23 @@ func _ready() -> void:
 	camera.set_safe_frame_insets(hud.get_world_safe_frame_insets())
 	_world_stream = WORLD_STREAM_SCRIPT.new() as WorldStreamManager
 	add_child(_world_stream)
+	# The client streams its OWN deterministic copy of the world and only receives
+	# resource *amounts* (keyed by chunk + local id) from the server, never resource
+	# positions. For those positions to line up, this configure() call must match the
+	# server's MatchController exactly: same bounds AND the same safe-spawn positions.
+	# `_find_chunk_position()` rejects candidate points near spawn positions, consuming
+	# a variable number of RNG draws; passing an empty list here desynced the RNG
+	# stream so every streamed resource landed elsewhere — ants (driven by the server's
+	# real positions) appeared to harvest empty ground while the visible resources were
+	# never touched. Resources are still not simulated locally (server is authoritative).
 	_world_stream.configure(
-		world_bounds, ground_root, decoration_root, resource_root, [], true, false
+		world_bounds,
+		ground_root,
+		decoration_root,
+		resource_root,
+		MatchController.SPAWN_POSITIONS,
+		true,
+		false
 	)
 	hud.bind_online(self, GameTransport.get_local_team_id())
 	AudioSystem.enter_match()
