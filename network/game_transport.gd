@@ -150,9 +150,9 @@ func start_dedicated_server() -> Dictionary:
 	_server_build_id = OS.get_environment("BUILD_ID").strip_edges()
 	_server_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
 	# Absolute lifetime cap from boot: no container can bill past this age even if
-	# the match logic hangs. Defaults to 45 min, clamped to a sane range.
+	# the match logic hangs. Defaults to 15 min, clamped to a sane range.
 	var max_match_minutes: int = DedicatedMatchStartGate.read_int_environment(
-		"MAX_MATCH_MINUTES", 45, 5, 180
+		"MAX_MATCH_MINUTES", 15, 5, 180
 	)
 	_hard_shutdown_msec = Time.get_ticks_msec() + max_match_minutes * 60000
 	if _server_build_id.is_empty():

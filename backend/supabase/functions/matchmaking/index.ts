@@ -198,7 +198,7 @@ function gameMaxPlayers(): number {
 // this age no matter what, so a hung or runaway container can never keep billing.
 function gameMaxMatchMinutes(): number {
   const configured = Number.parseInt(env("GAME_MAX_MATCH_MINUTES"), 10);
-  if (!Number.isInteger(configured)) return 45;
+  if (!Number.isInteger(configured)) return 15;
   return Math.min(Math.max(configured, 5), 180);
 }
 
