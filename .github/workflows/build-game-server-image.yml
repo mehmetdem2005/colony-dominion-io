@@ -35,6 +35,13 @@ jobs:
       GODOT_VERSION: "4.6.3"
       GODOT_BIN: ${{ github.workspace }}/.godot-bin/godot
       IMAGE: ghcr.io/${{ github.repository_owner }}/colony-dominion-server
+      # Optional: when EDGEGAP_API_TOKEN is present, the freshly pushed image is
+      # auto-adopted by the Edgegap version so online play always runs the latest
+      # server code. App/version default to the live app; override with repo vars.
+      EDGEGAP_API_TOKEN: ${{ secrets.EDGEGAP_API_TOKEN }}
+      EDGEGAP_APP_NAME: ${{ vars.EDGEGAP_APP_NAME || 'Colony_io' }}
+      EDGEGAP_APP_VERSION: ${{ vars.EDGEGAP_APP_VERSION || 'V1' }}
+      EDGEGAP_MAX_DURATION: ${{ vars.EDGEGAP_MAX_DURATION || '20' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,6 +80,35 @@ jobs:
           docker push "$IMAGE:$TAG"
           docker push "$IMAGE:latest"
           echo "PUSHED_IMAGE=$IMAGE:$TAG"
+
+      - name: Refresh Edgegap version to the new image
+        if: ${{ env.EDGEGAP_API_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          # Re-submit the version so Edgegap re-pulls ghcr.io/<owner>/…:latest,
+          # which now points at the image just pushed. Registry credentials that
+          # are already stored on the version are preserved (the image is public
+          # anyway). max_duration is a server-side backstop above the in-game cap.
+          body="$(cat <<JSON
+          {
+            "docker_repository": "ghcr.io",
+            "docker_image": "${GITHUB_REPOSITORY_OWNER}/colony-dominion-server",
+            "docker_tag": "latest",
+            "ports": [{"name": "game", "port": 20000, "protocol": "UDP", "to_check": false}],
+            "req_cpu": 1024,
+            "req_memory": 2048,
+            "max_duration": ${EDGEGAP_MAX_DURATION}
+          }
+          JSON
+          )"
+          code="$(curl -sS -o /tmp/edgegap-patch.json -w '%{http_code}' -X PATCH \
+            -H "Authorization: token ${EDGEGAP_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.edgegap.com/v1/app/${EDGEGAP_APP_NAME}/version/${EDGEGAP_APP_VERSION}" \
+            -d "${body}")"
+          echo "Edgegap PATCH HTTP ${code}"
+          python3 -c "import json,sys; d=json.load(open('/tmp/edgegap-patch.json')); print('success:', d.get('success')); print('last_updated:', (d.get('version') or {}).get('last_updated'))" || cat /tmp/edgegap-patch.json
+          test "${code}" -ge 200 -a "${code}" -lt 300
 
       - name: Upload server build logs
         if: always()
