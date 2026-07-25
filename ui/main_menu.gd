@@ -1,12 +1,12 @@
 class_name ColonyMainMenu
 extends Control
 
-## Front-end rebuilt to match the supplied reference art: a full-bleed ant-colony
+## Front-end built to match the supplied reference art: a full-bleed ant-colony
 ## background, a crowned title banner up top, four ornate stone/gold action bars
-## down the centre (play, region, settings, exit) and a four-icon plate dock in
-## the bottom-right corner. Every label is intentionally blank for now — text will
-## be painted in once the text texture and font are provided — so the buttons are
-## pure art with tooltips and wired actions.
+## down the centre (OYNA → solo, ÇOK OYUNCULU → online, AYARLAR, ÇIKIŞ) and a
+## four-icon plate dock in the bottom-right corner. Labels and the wordmark are
+## pre-rendered gold-textured art (Cinzel caps filled with the supplied gold
+## texture) laid over the plates.
 
 const ONLINE_SCENE_PATH: String = "res://scenes/online_game.tscn"
 const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
@@ -23,6 +23,12 @@ const ICON_RANKING_PATH := "res://assets/ui/menu/icons/icon_ranking.png"
 const ICON_CLAN_PATH := "res://assets/ui/menu/icons/icon_clan.png"
 const ICON_PROFILE_PATH := "res://assets/ui/menu/icons/icon_profile.png"
 const ICON_SETTINGS_PATH := "res://assets/ui/menu/icons/icon_settings.png"
+
+const TITLE_TEXT_PATH := "res://assets/ui/menu/text/title_colony.png"
+const TXT_PLAY_PATH := "res://assets/ui/menu/text/txt_play.png"
+const TXT_MULTIPLAYER_PATH := "res://assets/ui/menu/text/txt_multiplayer.png"
+const TXT_SETTINGS_PATH := "res://assets/ui/menu/text/txt_settings.png"
+const TXT_EXIT_PATH := "res://assets/ui/menu/text/txt_exit.png"
 
 # Normalised x-centres of the four plates baked into the dock strip art.
 const DOCK_ICON_FRACTIONS: Array[float] = [0.19, 0.40, 0.60, 0.81]
@@ -105,7 +111,7 @@ func _build_menu() -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
 
-	# Crowned title banner (empty — title text arrives later).
+	# Crowned title banner with the gold-textured wordmark laid on the plate.
 	var title := TextureRect.new()
 	_anchor_norm(title, 0.275, -0.04, 0.725, 0.34)
 	title.texture = load(TITLE_PATH)
@@ -113,6 +119,14 @@ func _build_menu() -> void:
 	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(title)
+
+	var title_text := TextureRect.new()
+	_anchor_norm(title_text, 0.365, 0.108, 0.635, 0.212)
+	title_text.texture = load(TITLE_TEXT_PATH)
+	title_text.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_text.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(title_text)
 
 	# Central stack of four action bars.
 	var column := VBoxContainer.new()
@@ -122,10 +136,12 @@ func _build_menu() -> void:
 	add_child(column)
 
 	_center_buttons.clear()
-	_play_button = _bar_button(BTN_PLAY_PATH, "Oyna", _request_online_play)
-	_world_button = _bar_button(BTN_WORLD_PATH, "Bölge Seç", _open_region_selector)
-	_settings_button = _bar_button(BTN_SETTINGS_PATH, "Ayarlar", _open_settings)
-	_exit_button = _bar_button(BTN_EXIT_PATH, "Çıkış", _request_exit)
+	_play_button = _bar_button(BTN_PLAY_PATH, TXT_PLAY_PATH, "Oyna", _start_offline_play)
+	_world_button = _bar_button(
+		BTN_WORLD_PATH, TXT_MULTIPLAYER_PATH, "Çok Oyunculu", _request_online_play
+	)
+	_settings_button = _bar_button(BTN_SETTINGS_PATH, TXT_SETTINGS_PATH, "Ayarlar", _open_settings)
+	_exit_button = _bar_button(BTN_EXIT_PATH, TXT_EXIT_PATH, "Çıkış", _request_exit)
 	for button in _center_buttons:
 		column.add_child(button)
 
@@ -143,7 +159,9 @@ func _build_menu() -> void:
 	_build_modals()
 
 
-func _bar_button(texture_path: String, tooltip: String, on_pressed: Callable) -> TextureButton:
+func _bar_button(
+	texture_path: String, text_path: String, tooltip: String, on_pressed: Callable
+) -> TextureButton:
 	var button := TextureButton.new()
 	button.texture_normal = load(texture_path)
 	button.ignore_texture_size = true
@@ -156,6 +174,18 @@ func _bar_button(texture_path: String, tooltip: String, on_pressed: Callable) ->
 	button.pressed.connect(on_pressed)
 	button.mouse_entered.connect(_on_control_hover.bind(button, true))
 	button.mouse_exited.connect(_on_control_hover.bind(button, false))
+
+	# Gold-textured label sits on the plate, right of the emblem. The wide/short
+	# box makes height the binding constraint, so every label keeps the same cap
+	# height regardless of word length.
+	var label := TextureRect.new()
+	_anchor_norm(label, 0.24, 0.28, 0.92, 0.72)
+	label.texture = load(text_path)
+	label.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	label.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(label)
+
 	_center_buttons.append(button)
 	return button
 
@@ -278,6 +308,21 @@ func _connect_services() -> void:
 	NetworkSession.region_changed.connect(_refresh_status.unbind(2))
 	NetworkSession.metrics_changed.connect(_refresh_status.unbind(3))
 	NetworkSession.connection_state_changed.connect(_on_connection_state_changed)
+
+
+## "OYNA" — a solo match against the colony AI, no server round-trip.
+func _start_offline_play() -> void:
+	if _starting or _matchmaking:
+		return
+	if not ResourceLoader.exists(MAIN_SCENE_PATH, "PackedScene"):
+		_show_status("Oyun sahnesi bulunamadı", true)
+		return
+	_starting = true
+	_set_buttons_enabled(false)
+	GameSession.prepare_offline_match()
+	var error: Error = get_tree().change_scene_to_file(MAIN_SCENE_PATH)
+	if error != OK:
+		_start_error("Oyun sahnesi geçişi başarısız: %s" % error_string(error))
 
 
 func _request_online_play() -> void:
