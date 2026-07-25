@@ -3,10 +3,10 @@ extends Control
 
 ## Front-end built to match the supplied reference art: a full-bleed ant-colony
 ## background, a crowned title banner up top, four ornate stone/gold action bars
-## down the centre (OYNA → solo, ÇOK OYUNCULU → online, AYARLAR, ÇIKIŞ) and a
-## four-icon plate dock in the bottom-right corner. Labels and the wordmark are
-## pre-rendered gold-textured art (Cinzel caps filled with the supplied gold
-## texture) laid over the plates.
+## down the centre (OYNA → solo, ÇOK OYUNCULU → online, BÖLGE → region + live
+## ping, ÇIKIŞ) and a four-icon plate dock in the bottom-right corner. Labels and
+## the wordmark are pre-rendered gold-textured art (Cinzel caps filled with the
+## supplied gold texture) laid over the plates.
 
 const ONLINE_SCENE_PATH: String = "res://scenes/online_game.tscn"
 const MAIN_SCENE_PATH: String = "res://scenes/main_game.tscn"
@@ -16,6 +16,7 @@ const BG_PATH := "res://assets/ui/menu/frames/bg_colony.png"
 const TITLE_PATH := "res://assets/ui/menu/frames/title_banner_titled.png"
 const BTN_PLAY_PATH := "res://assets/ui/menu/frames/btn_play.png"
 const BTN_WORLD_PATH := "res://assets/ui/menu/frames/btn_world.png"
+const BTN_REGION_PATH := "res://assets/ui/menu/frames/btn_settings.png"
 const BTN_EXIT_PATH := "res://assets/ui/menu/frames/btn_exit.png"
 const DOCK_STRIP_PATH := "res://assets/ui/menu/frames/dock_iconed.png"
 # Aspect ratio of the dock strip art; the dock box is sized to this so the baked
@@ -23,6 +24,7 @@ const DOCK_STRIP_PATH := "res://assets/ui/menu/frames/dock_iconed.png"
 const DOCK_ASPECT := 3.0
 const TXT_PLAY_PATH := "res://assets/ui/menu/text/txt_play.png"
 const TXT_MULTIPLAYER_PATH := "res://assets/ui/menu/text/txt_multiplayer.png"
+const TXT_REGION_PATH := "res://assets/ui/menu/text/txt_region.png"
 const TXT_EXIT_PATH := "res://assets/ui/menu/text/txt_exit.png"
 const TXT_CANCEL_PATH := "res://assets/ui/menu/text/txt_cancel.png"
 const SPINNER_PATH := "res://assets/ui/menu/frames/spinner.png"
@@ -37,6 +39,8 @@ var _center_buttons: Array[TextureButton] = []
 var _world_label: TextureRect
 var _world_spinner: TextureRect
 var _spinner_tween: Tween
+var _region_button: TextureButton
+var _region_ping: Label
 var _dock: Control
 var _dock_buttons: Array[BaseButton] = []
 var _status_label: Label
@@ -135,10 +139,10 @@ func _build_menu() -> void:
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(title)
 
-	# Central stack of three action bars (settings lives in the dock, not here).
+	# Central stack of four action bars (settings lives in the dock, not here).
 	var column := VBoxContainer.new()
-	_anchor_norm(column, 0.34, 0.44, 0.66, 0.92)
-	column.add_theme_constant_override("separation", 14)
+	_anchor_norm(column, 0.34, 0.40, 0.66, 0.95)
+	column.add_theme_constant_override("separation", 12)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	add_child(column)
 
@@ -147,9 +151,27 @@ func _build_menu() -> void:
 	_world_button = _bar_button(
 		BTN_WORLD_PATH, TXT_MULTIPLAYER_PATH, "Çok Oyunculu", _request_online_play
 	)
+	_region_button = _bar_button(
+		BTN_REGION_PATH, TXT_REGION_PATH, "Bölge Seç", _open_region_selector
+	)
 	_exit_button = _bar_button(BTN_EXIT_PATH, TXT_EXIT_PATH, "Çıkış", _request_exit)
 	for button in _center_buttons:
 		column.add_child(button)
+
+	# Keep the BÖLGE wordmark on the left so the live ping has room on the right.
+	var region_label := _region_button.get_node("Label") as TextureRect
+	_anchor_norm(region_label, 0.24, 0.30, 0.56, 0.70)
+
+	# Live ping / region indicator on the right of the BÖLGE bar.
+	_region_ping = Label.new()
+	_anchor_norm(_region_ping, 0.58, 0.30, 0.90, 0.70)
+	_region_ping.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_region_ping.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_region_ping.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ColonyUiKit.apply_label(_region_ping, 22, 700, Color(0.96, 0.86, 0.55, 1.0))
+	_region_ping.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
+	_region_ping.add_theme_constant_override("outline_size", 5)
+	_region_button.add_child(_region_ping)
 
 	# The ÇOK OYUNCULU bar's label is swapped to the cancel text while queuing, and
 	# a spinning ring overlays its right side.
@@ -644,13 +666,16 @@ func _on_connection_state_changed(_state: int, message: String) -> void:
 
 
 func _refresh_status() -> void:
+	var ping_text: String = (
+		"-- ms" if NetworkSession.ping_ms < 0 else "%d ms" % NetworkSession.ping_ms
+	)
+	# The BÖLGE bar's live ping updates even while queuing.
+	if is_instance_valid(_region_ping):
+		_region_ping.text = ping_text
 	if not is_instance_valid(_status_label):
 		return
 	if _starting or _matchmaking:
 		return
-	var ping_text: String = (
-		"-- ms" if NetworkSession.ping_ms < 0 else "%d ms" % NetworkSession.ping_ms
-	)
 	var account_text: String = (
 		"Hesap bağlı" if OnlineServices.auth.has_session() else "Hesap bağlı değil"
 	)
