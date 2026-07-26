@@ -7,3 +7,6 @@ config/backend_config.local.json
 *.apk
 *.aab
 *.pck
+.godot-bin/
+# Generated at import time from project.godot's [importer_defaults].
+*.import

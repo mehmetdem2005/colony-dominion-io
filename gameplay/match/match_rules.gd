@@ -48,23 +48,20 @@ func sanitize() -> void:
 	_apply_device_profile()
 
 
-## Phones run the same simulation as desktop but with a fraction of the CPU, and
-## ten colonies at the desktop cap means hundreds of GDScript units stepping every
-## tick. Trim the work that costs the most frames and gains the least on a small
-## screen. The dedicated server is not "mobile", so online matches keep the full
-## desktop numbers.
+## Phones run the same match as desktop — same unit counts, same world, same
+## content. Only two invisible scheduling knobs change, and neither removes
+## anything from the game.
 func _apply_device_profile() -> void:
 	if not OS.has_feature("mobile") or OS.has_feature("dedicated_server"):
 		return
-	unit_cap_per_colony = mini(unit_cap_per_colony, 48)
-	# Catch-up stepping is a stutter amplifier: once a phone misses the budget it
-	# runs even more steps next frame. Cap the catch-up so a hitch stays a hitch.
+	# Catch-up stepping is a stutter amplifier: once a phone misses the frame
+	# budget it runs even more simulation steps next frame, which makes it miss
+	# again. Three steps still cover 3x real time, so the match never runs slow;
+	# it just stops the spiral.
 	max_server_steps_per_frame = mini(max_server_steps_per_frame, 3)
 	max_projectile_steps_per_frame = mini(max_projectile_steps_per_frame, 3)
-	# Rebuilding the spatial index over every unit ~8x a second is pure overhead
-	# at this scale; 5x is still well inside one server tick.
+	# Rebuilding the spatial index ~8x a second is redundant at a 20 Hz tick.
 	spatial_rebuild_interval = maxf(spatial_rebuild_interval, 0.2)
-	max_visual_projectiles = mini(max_visual_projectiles, 64)
 
 
 func get_server_tick_interval() -> float:

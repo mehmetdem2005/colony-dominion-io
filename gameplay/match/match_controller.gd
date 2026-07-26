@@ -59,8 +59,7 @@ var _last_emitted_second: int = -1
 var _match_seed: int = 738291
 var _spawn_points: Array[Vector2] = []
 # How far an AI colony may sit from a simulation-interest point and still run at
-# each tier. Phones use a tighter ring so fewer distant colonies burn frames on
-# units nobody can see; the dedicated server keeps the wide desktop rings.
+# each tier.
 var _full_tier_radius: float = 2200.0
 var _reduced_tier_radius: float = 4600.0
 var _command_router: AuthoritativeCommandRouter
@@ -106,9 +105,6 @@ func _ready() -> void:
 	if match_rules == null:
 		match_rules = MatchRules.new()
 	match_rules.sanitize()
-	if OS.has_feature("mobile") and not is_headless_server:
-		_full_tier_radius = 1500.0
-		_reduced_tier_radius = 3000.0
 	events = MATCH_EVENT_HUB_SCRIPT.new() as MatchEventHub
 	events.name = "MatchEvents"
 	add_child(events)

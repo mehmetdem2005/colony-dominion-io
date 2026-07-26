@@ -81,15 +81,8 @@ func configure(
 		ceili(world_bounds.size.x / CHUNK_SIZE), ceili(world_bounds.size.y / CHUNK_SIZE)
 	)
 	_residency_planner = RESIDENCY_PLANNER_SCRIPT.new() as WorldResidencyPlanner
-	# Every resident chunk keeps its props and resources alive as real nodes. A
-	# phone pays for those in both draw calls and memory, and it can only show a
-	# fraction of them at once, so cap how far the residency planner may grow.
-	# Both game modes stream the same world, so this helps offline and online.
-	var resident_ceiling: int = MAX_RESIDENT_CHUNKS
-	if presentation_enabled and OS.has_feature("mobile"):
-		resident_ceiling = mini(resident_ceiling, 48)
 	_residency_planner.configure(
-		_chunk_count, ACTIVE_RADIUS, CACHE_RADIUS, BASE_MAX_RESIDENT_CHUNKS, resident_ceiling
+		_chunk_count, ACTIVE_RADIUS, CACHE_RADIUS, BASE_MAX_RESIDENT_CHUNKS, MAX_RESIDENT_CHUNKS
 	)
 	_object_pool = OBJECT_POOL_SCRIPT.new() as WorldObjectPool
 	_object_pool.configure(
