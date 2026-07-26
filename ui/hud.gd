@@ -11,6 +11,7 @@ signal exit_requested
 const FRAME_LEADERBOARD_PATH: String = "res://assets/ui/hud/frame_leaderboard.png"
 const FRAME_MINIMAP_PATH: String = "res://assets/ui/hud/frame_minimap.png"
 const FRAME_RESOURCES_PATH: String = "res://assets/ui/hud/frame_resources.png"
+const FRAME_PRODUCTION_PATH: String = "res://assets/ui/hud/frame_production.png"
 
 const HUD_EVENT_BINDER_SCRIPT := preload("res://ui/hud_event_binder.gd")
 const HUD_LAYOUT_CONTEXT_SCRIPT := preload("res://ui/hud_layout_context.gd")
@@ -511,14 +512,21 @@ func _build_production_panel() -> void:
 	production_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	production_panel.z_index = 30
 	production_panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.045, 0.038, 0.025, 0.95), Color(0.95, 0.72, 0.16, 0.90), 16)
+		"panel", _frame_style(FRAME_PRODUCTION_PATH, 42, 14.0, 10.0, -1, 152)
 	)
 	root_control.add_child(production_panel)
 
 	var production_vbox := VBoxContainer.new()
 	production_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	production_vbox.add_theme_constant_override("separation", 4)
-	production_panel.add_child(production_vbox)
+	# The frame art splits the bar into a wide card area and a tall upgrade slot on
+	# the right, so the content is laid out the same way.
+	var production_row := HBoxContainer.new()
+	production_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	production_row.add_theme_constant_override("separation", 10)
+	production_panel.add_child(production_row)
+	production_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	production_row.add_child(production_vbox)
 
 	var cards := HBoxContainer.new()
 	cards.name = "ProductionCards"
@@ -567,8 +575,9 @@ func _build_production_panel() -> void:
 	queue_progress.show_percentage = false
 	status_row.add_child(queue_progress)
 
-	upgrade_button = _command_button("YÜKSELT", Vector2(88.0, 34.0), false)
-	status_row.add_child(upgrade_button)
+	upgrade_button = _command_button("YÜKSELT", Vector2(96.0, 34.0), false)
+	upgrade_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	production_row.add_child(upgrade_button)
 	upgrade_button.pressed.connect(_on_upgrade_pressed)
 
 
