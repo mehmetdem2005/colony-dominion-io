@@ -177,6 +177,22 @@ async function patchLobby(id: string, patch: Record<string, unknown>): Promise<v
   }).catch(() => undefined);
 }
 
+// Is this deployment still running? Used before a player is put into a lobby
+// that already has a server: the lobby row survives its container, so carrying
+// a request_id is not proof that anything is listening on the other end.
+// A network blip or a non-404 fault is treated as "still live" — throwing away
+// a good lobby on a transient error would split the very players it holds.
+async function deploymentIsLive(requestId: string): Promise<boolean> {
+  const response = await fetch(`${EDGEGAP_API}/status/${encodeURIComponent(requestId)}`, {
+    headers: edgegapHeaders(),
+  }).catch(() => null);
+  if (!response) return true;
+  if (response.status === 404) return false;
+  if (!response.ok) return true;
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  return !ERRORLIKE.has(String(payload.current_status ?? ""));
+}
+
 async function lobbyByRequestId(requestId: string): Promise<Record<string, unknown> | null> {
   const url = `${supabaseBase()}/rest/v1/match_lobbies` +
     `?request_id=eq.${encodeURIComponent(requestId)}&order=created_at.desc&limit=1`;
@@ -295,11 +311,18 @@ function normalizeRegionId(value: unknown): string {
   return /^[a-z0-9-]{2,32}$/.test(cleaned) ? cleaned : "auto";
 }
 
+// The lobby a player is pooled into follows only their *explicit* region pick.
+//
+// This used to fall back to region_preference, which is the client's own ping
+// probe result. Two players sitting in the same room, both showing "Otomatik",
+// could measure different nearest continents (or one probe could fail and
+// report nothing) and be silently sent to two different lobbies. Nobody could
+// see why. Leaving the picker alone now means one shared "auto" pool, and
+// placement is still good: with no coordinates Edgegap puts the server on the
+// edge nearest the joining player's own IP, which beats a continent centroid.
 function requestedRegion(payload: Record<string, unknown>): string {
   const selected = normalizeRegionId(payload.selected_region_id);
   if (selected !== "auto" && REGION_TARGETS[selected]) return selected;
-  const preferred = normalizeRegionId(payload.region_preference);
-  if (preferred !== "auto" && REGION_TARGETS[preferred]) return preferred;
   return "auto";
 }
 
@@ -446,6 +469,41 @@ async function joinSharedLobby(
   maxPlayers: number,
   secret: string,
 ): Promise<Response | null> {
+  // Two attempts: a lobby row outlives its server, so if the one we are handed
+  // turns out to point at a deployment that has already gone, we close it and
+  // claim again — which now yields a live lobby or a fresh one.
+  for (let claimAttempt = 0; claimAttempt < 2; claimAttempt++) {
+    const response = await claimLobbyOnce(
+      playerId,
+      displayNameValue,
+      regionId,
+      regionTarget,
+      ip,
+      appName,
+      versionName,
+      buildId,
+      maxPlayers,
+      secret,
+    );
+    if (response !== "retry") return response;
+  }
+  return null;
+}
+
+// One pass at the lobby claim. Returns "retry" when the claimed lobby turned
+// out to be dead and was closed, so the caller should claim again.
+async function claimLobbyOnce(
+  playerId: string,
+  displayNameValue: string,
+  regionId: string,
+  regionTarget: { latitude: number; longitude: number } | undefined,
+  ip: string,
+  appName: string,
+  versionName: string,
+  buildId: string,
+  maxPlayers: number,
+  secret: string,
+): Promise<Response | null | "retry"> {
   const claimed = await rpc("claim_match_lobby", {
     p_region: regionId,
     p_player: playerId,
@@ -461,6 +519,17 @@ async function joinSharedLobby(
   let requestId = String(lobby.request_id ?? "").trim();
   let matchId = String(lobby.match_id ?? "").trim();
   let serverId = String(lobby.server_id ?? "").trim();
+
+  // A lobby that already carries a deployment is only worth joining while that
+  // deployment is actually up. The container self-terminates when its match
+  // ends, and nothing tells the database — so ask Edgegap.
+  if (requestId && !await deploymentIsLive(requestId)) {
+    // Drop this player's membership first, then retire the lobby for everyone
+    // else too — the server behind it is gone, so nobody should be sent there.
+    await rpc("leave_match_lobby", { p_player: playerId });
+    await patchLobby(lobbyId, { status: "closed", closed_at: new Date().toISOString() });
+    return "retry";
+  }
 
   if (!requestId && await claimDeploy(lobbyId, playerId)) {
     matchId = crypto.randomUUID();
