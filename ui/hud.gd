@@ -8,6 +8,10 @@ signal movement_requested(value: Vector2)
 signal command_requested(command_type: StringName, payload: Dictionary)
 signal exit_requested
 
+const FRAME_LEADERBOARD_PATH: String = "res://assets/ui/hud/frame_leaderboard.png"
+const FRAME_MINIMAP_PATH: String = "res://assets/ui/hud/frame_minimap.png"
+const FRAME_RESOURCES_PATH: String = "res://assets/ui/hud/frame_resources.png"
+
 const HUD_EVENT_BINDER_SCRIPT := preload("res://ui/hud_event_binder.gd")
 const HUD_LAYOUT_CONTEXT_SCRIPT := preload("res://ui/hud_layout_context.gd")
 const HUD_RESPONSIVE_LAYOUT_SCRIPT := preload("res://ui/hud_responsive_layout.gd")
@@ -258,30 +262,32 @@ func _build_ui() -> void:
 func _build_resources_panel() -> void:
 	resources_panel = PanelContainer.new()
 	resources_panel.name = "ResourceDock"
-	resources_panel.position = Vector2(14.0, 14.0)
-	resources_panel.size = Vector2(142.0, 224.0)
+	# A horizontal strip along the top-left, above the minimap, matching the
+	# reference art whose frame carries one slot per resource.
+	resources_panel.position = Vector2(14.0, 12.0)
+	resources_panel.size = Vector2(452.0, 62.0)
 	resources_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resources_panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.02, 0.03, 0.02, 0.90), Color(0.38, 0.65, 0.18, 0.82), 16)
+		"panel", _frame_style(FRAME_RESOURCES_PATH, 44, 14.0, 6.0)
 	)
 	root_control.add_child(resources_panel)
 
-	var resources_vbox := VBoxContainer.new()
+	var resources_vbox := HBoxContainer.new()
 	resources_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	resources_vbox.add_theme_constant_override("separation", 1)
+	resources_vbox.add_theme_constant_override("separation", 4)
 	resources_panel.add_child(resources_vbox)
 	for resource_id in ColonyInventory.RESOURCE_IDS:
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.custom_minimum_size = Vector2(120.0, 40.0)
-		row.add_theme_constant_override("separation", 6)
+		row.custom_minimum_size = Vector2(78.0, 38.0)
+		row.add_theme_constant_override("separation", 2)
 
 		var icon_back := PanelContainer.new()
 		icon_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon_back.custom_minimum_size = Vector2(42.0, 38.0)
-		icon_back.add_theme_stylebox_override(
-			"panel", _badge_style(Color(0.13, 0.11, 0.055, 0.88), Color(0.72, 0.63, 0.26, 0.32), 9)
-		)
+		icon_back.custom_minimum_size = Vector2(38.0, 36.0)
+		# The frame art already draws a slot behind each resource, so the old
+		# badge plate would double up.
+		icon_back.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 		row.add_child(icon_back)
 
 		var icon := TextureRect.new()
@@ -297,8 +303,8 @@ func _build_resources_panel() -> void:
 		amount_label.text = "0"
 		amount_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		amount_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		amount_label.add_theme_font_size_override("font_size", 22)
+		amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		amount_label.add_theme_font_size_override("font_size", 19)
 		amount_label.add_theme_color_override("font_color", Color(1.0, 0.97, 0.84, 1.0))
 		amount_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
 		amount_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -317,8 +323,10 @@ func _build_leaderboard_panel() -> void:
 	leaderboard_panel.offset_right = -16.0
 	leaderboard_panel.offset_bottom = 238.0
 	leaderboard_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The frame art carries a header strip across the top, which the
+	# "KOLONİ SIRALAMASI" title sits in, so the top padding is deeper.
 	leaderboard_panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.02, 0.03, 0.02, 0.84), Color(0.95, 0.72, 0.14, 0.64), 18)
+		"panel", _frame_style(FRAME_LEADERBOARD_PATH, 46, 18.0, 10.0, 108)
 	)
 	root_control.add_child(leaderboard_panel)
 
@@ -348,11 +356,12 @@ func _build_leaderboard_panel() -> void:
 func _build_minimap_panel() -> void:
 	minimap_panel = PanelContainer.new()
 	minimap_panel.name = "MinimapDock"
-	minimap_panel.position = Vector2(164.0, 14.0)
+	# Sits under the resource strip, matching the reference layout.
+	minimap_panel.position = Vector2(14.0, 86.0)
 	minimap_panel.size = Vector2(224.0, 224.0)
 	minimap_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	minimap_panel.add_theme_stylebox_override(
-		"panel", _panel_style(Color(0.02, 0.03, 0.02, 0.94), Color(0.95, 0.72, 0.14, 0.82), 16)
+		"panel", _frame_style(FRAME_MINIMAP_PATH, 56, 14.0, 14.0)
 	)
 	root_control.add_child(minimap_panel)
 
@@ -1050,6 +1059,20 @@ func _badge_style(background: Color, border: Color, radius: int) -> StyleBoxFlat
 	style.content_margin_top = 1.0
 	style.content_margin_bottom = 1.0
 	style.anti_aliasing = true
+	return style
+
+
+## Ornate gold HUD frame as a 9-patch. The corners keep their art at any panel
+## size while the plain middle stretches, so the same texture fits the tall
+## leaderboard, the square minimap and the wide resource strip.
+func _frame_style(texture_path: String, edge: int, pad_x: float, pad_y: float) -> StyleBoxTexture:
+	var style := StyleBoxTexture.new()
+	style.texture = load(texture_path) as Texture2D
+	style.set_texture_margin_all(float(edge))
+	style.content_margin_left = pad_x
+	style.content_margin_right = pad_x
+	style.content_margin_top = pad_y
+	style.content_margin_bottom = pad_y
 	return style
 
 

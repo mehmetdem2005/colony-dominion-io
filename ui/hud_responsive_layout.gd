@@ -26,20 +26,22 @@ func apply(context: HudLayoutContext) -> Vector4:
 	var scale_vector := Vector2.ONE * ui_scale
 	var margin: float = 14.0 * ui_scale
 
+	# Resource strip runs horizontally along the top-left, with the minimap
+	# directly beneath it — the layout the framed HUD art is drawn for.
 	context.resources_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	context.resources_panel.scale = scale_vector
 	context.resources_panel.position = safe_rect.position + Vector2.ONE * margin
-	context.resources_panel.size = Vector2(142.0, 224.0)
+	context.resources_panel.size = Vector2(452.0, 62.0)
 
 	context.minimap_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	context.minimap_panel.scale = scale_vector
 	context.minimap_panel.position = Vector2(
+		context.resources_panel.position.x,
 		(
-			context.resources_panel.position.x
-			+ context.resources_panel.size.x * ui_scale
+			context.resources_panel.position.y
+			+ context.resources_panel.size.y * ui_scale
 			+ 8.0 * ui_scale
-		),
-		context.resources_panel.position.y
+		)
 	)
 	context.minimap_panel.size = Vector2(224.0, 224.0)
 
