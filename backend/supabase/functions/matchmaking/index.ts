@@ -80,6 +80,48 @@ function edgegapHeaders(): HeadersInit {
   return { authorization: value, "content-type": "application/json" };
 }
 
+// Posts a deployment and returns its request id, or "" when Edgegap refused.
+// Transient refusals (rate limit, capacity, upstream fault) are retried: at a
+// few thousand matches an hour a single failed POST must never be what decides
+// whether a player gets a match. A 4xx other than 429 is a configuration fault
+// that will fail identically next second, so it is not retried.
+async function deployToEdgegap(body: Record<string, unknown>, label: string): Promise<string> {
+  const backoffMs = [350, 1100, 2600];
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    const response = await fetch(`${EDGEGAP_API}/deploy`, {
+      method: "POST",
+      headers: edgegapHeaders(),
+      body: JSON.stringify(body),
+    }).catch(() => null);
+    if (response?.ok) {
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+      const requestId = String(payload.request_id ?? "").trim();
+      if (requestId) return requestId;
+      console.error(label, "deploy returned no request_id");
+    } else {
+      const status = response?.status ?? 0;
+      const detail = response ? await response.text().catch(() => "") : "network error";
+      console.error(label, "deploy failed", status, detail);
+      const retryable = status === 0 || status === 429 || status >= 500;
+      if (!retryable) return "";
+    }
+    if (attempt < backoffMs.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+    }
+  }
+  return "";
+}
+
+// Fingerprint of the configured token: enough to tell two tokens apart in an
+// operational check without ever exposing the token itself.
+async function tokenFingerprint(): Promise<string> {
+  const raw = env("EDGEGAP_API_TOKEN");
+  if (!raw) return "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(digest).slice(0, 4), (b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 // ---------------------------------------------------------------------------
 // Shared lobbies
 //
@@ -388,17 +430,7 @@ async function deployServer(options: {
       longitude: options.regionTarget.longitude,
     };
   }
-  const response = await fetch(`${EDGEGAP_API}/deploy`, {
-    method: "POST",
-    headers: edgegapHeaders(),
-    body: JSON.stringify(body),
-  }).catch(() => null);
-  if (!response?.ok) {
-    console.error("Edgegap lobby deploy failed", response?.status, await response?.text().catch(() => ""));
-    return "";
-  }
-  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-  return String(payload.request_id ?? "").trim();
+  return await deployToEdgegap(body, "lobby");
 }
 
 // Returns a ready response, or null to let the caller fall back to a solo match.
@@ -446,7 +478,10 @@ async function joinSharedLobby(
       ticketSecret: secret,
     });
     if (!requestId) {
-      await patchLobby(lobbyId, { status: "closed", closed_at: new Date().toISOString() });
+      // Hand the claim back rather than closing the lobby. Closing it threw away
+      // everyone else already queued in this window; releasing lets the next
+      // player retry the deploy and still land in the same match.
+      await patchLobby(lobbyId, { deploy_claim: null });
       return json({ ok: false, error: "deploy_failed" }, 502);
     }
     await patchLobby(lobbyId, {
@@ -566,18 +601,8 @@ async function join(request: Request): Promise<Response> {
       longitude: regionTarget.longitude,
     };
   }
-  const response = await fetch(`${EDGEGAP_API}/deploy`, {
-    method: "POST",
-    headers: edgegapHeaders(),
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    console.error("Edgegap deploy failed", response.status, payload);
-    return json({ ok: false, error: "deploy_failed" }, 502);
-  }
-  const requestId = String(payload.request_id ?? "").trim();
-  if (!requestId) return json({ ok: false, error: "deploy_no_request_id" }, 502);
+  const requestId = await deployToEdgegap(body, "solo");
+  if (!requestId) return json({ ok: false, error: "deploy_failed" }, 502);
   return json({
     ok: true,
     request_id: requestId,
@@ -700,11 +725,26 @@ Deno.serve(async (request) => {
     const action = parts[0] ?? "health";
     const requestId = parts[1] ?? "";
     if (request.method === "GET" && action === "health") {
-      return json({
+      // "configured" only proves the secrets are non-empty. `?verify=1` also
+      // asks Edgegap whether the stored token is actually accepted, which is
+      // the difference between a working deploy path and a silent 401 that only
+      // shows up as a failed match. The fingerprint identifies *which* token is
+      // stored without revealing it.
+      const body: Record<string, unknown> = {
         ok: true,
         service: "colony-edgegap-matchmaking",
         configured: Boolean(env("EDGEGAP_API_TOKEN") && env("EDGEGAP_APP_NAME")),
-      });
+      };
+      if (new URL(request.url).searchParams.get("verify") === "1") {
+        const probe = await fetch(`${EDGEGAP_API}/apps`, { headers: edgegapHeaders() })
+          .catch(() => null);
+        body.edgegap_status = probe?.status ?? 0;
+        body.edgegap_ok = Boolean(probe?.ok);
+        body.token_fingerprint = await tokenFingerprint();
+        body.app_name = env("EDGEGAP_APP_NAME");
+        body.app_version = env("EDGEGAP_APP_VERSION");
+      }
+      return json(body);
     }
     if (request.method === "POST" && action === "join") return await join(request);
     if (request.method === "GET" && action === "status") return await status(requestId);

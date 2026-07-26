@@ -462,7 +462,7 @@ func _begin_matchmaking() -> void:
 	var generation: int = _matchmaking_generation
 	_matchmaking = true
 	_set_matchmaking_visuals(true)
-	var result: Dictionary = await OnlineServices.begin_matchmaking(GameSession.player_name)
+	var result: Dictionary = await _request_match_assignment(generation)
 	if generation != _matchmaking_generation:
 		return
 	_matchmaking = false
@@ -497,13 +497,48 @@ func _begin_matchmaking() -> void:
 	_show_status(_friendly_matchmaking_error(String(result.get("error", ""))), true)
 
 
-## Turn raw server error codes into something a player can act on. The common one
-## on the free tier is deploy_failed: the previous match's server is still
-## shutting down, so its single deployment slot is briefly occupied.
+## Errors that are a passing condition on the matchmaking side rather than
+## anything about this player, so they are worth retrying before the player is
+## ever told about them.
+const RETRYABLE_MATCHMAKING_ERRORS: PackedStringArray = [
+	"deploy_failed",
+	"deployment_failed",
+	"deploy_no_request_id",
+	"matchmaking_unavailable",
+	"status_failed",
+	"",
+]
+const MATCHMAKING_RETRY_DELAYS: PackedFloat32Array = [1.5, 4.0]
+
+
+## Asks for a server and quietly retries a transient refusal. A player pressing
+## play does not need to know that one deployment call was refused; they need a
+## match. Only when every attempt fails does the caller surface anything.
+func _request_match_assignment(generation: int) -> Dictionary:
+	var result: Dictionary = await OnlineServices.begin_matchmaking(GameSession.player_name)
+	for delay in MATCHMAKING_RETRY_DELAYS:
+		if generation != _matchmaking_generation:
+			return result
+		if bool(result.get("ok", false)):
+			return result
+		if not RETRYABLE_MATCHMAKING_ERRORS.has(String(result.get("error", ""))):
+			return result
+		_show_status("Sunucu hazırlanıyor", false)
+		await get_tree().create_timer(delay, true, false, true).timeout
+		if generation != _matchmaking_generation:
+			return result
+		result = await OnlineServices.begin_matchmaking(GameSession.player_name)
+	return result
+
+
+## Turn raw server error codes into something a player can act on. Nothing here
+## describes the infrastructure: a player has no way to act on which deployment
+## slot was busy, and at thousands of matches an hour that description would not
+## even be true.
 func _friendly_matchmaking_error(raw: String) -> String:
 	match raw:
-		"deploy_failed", "deployment_failed":
-			return "Sunucu başlatılamadı — önceki maçın sunucusu hâlâ kapanıyor olabilir. ~1 dakika bekleyip tekrar dene."
+		"deploy_failed", "deployment_failed", "deploy_no_request_id":
+			return "Şu an maç başlatılamadı. Tekrar dene."
 		"matchmaking_not_configured":
 			return "Çok oyunculu sunucu yapılandırması eksik."
 		"matchmaking_unavailable", "status_failed":
