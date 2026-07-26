@@ -492,7 +492,10 @@ async function joinSharedLobby(
   }
 
   // Someone else is deploying for this lobby: wait for the identity to land.
-  for (let attempt = 0; attempt < 12 && !requestId; attempt++) {
+  // The budget has to outlast the claim holder's deploy retries, otherwise a
+  // retried deploy pushes this player onto the solo path — splitting up exactly
+  // the friends the lobby exists to keep together.
+  for (let attempt = 0; attempt < 20 && !requestId; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, 700));
     const row = await lobbyById(lobbyId);
     if (!row) break;
@@ -501,7 +504,12 @@ async function joinSharedLobby(
     matchId = String(row.match_id ?? "").trim();
     serverId = String(row.server_id ?? "").trim();
   }
-  if (!requestId || !matchId || !serverId) return null;
+  if (!requestId || !matchId || !serverId) {
+    // This player has a lobby; only its server is not up yet. Falling back to a
+    // private match here would guarantee a split, so ask the client to retry —
+    // the next attempt lands on this same lobby with its server attached.
+    return json({ ok: false, error: "matchmaking_unavailable" }, 503);
+  }
 
   const joinTicket = await mintJoinTicket(secret, playerId, displayNameValue, 10 * 60 * 1000);
   return json({

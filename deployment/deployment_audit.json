@@ -1,0 +1,32 @@
+{
+  "status": "passed_with_warnings",
+  "error_count": 0,
+  "warning_count": 4,
+  "migration_count": 9,
+  "findings": [
+    {
+      "level": "warning",
+      "code": "ACTIVE_DRAFT_LEGAL_DOCUMENTS",
+      "message": "Draft legal documents are active. Keep this only in staging; production requires final legal versions.",
+      "path": "backend/supabase/migrations/202607190002_legal_documents_seed.sql"
+    },
+    {
+      "level": "warning",
+      "code": "DELETION_REQUESTS_ARE_DELETABLE",
+      "message": "Clients can delete account-deletion request records, weakening the compliance audit trail.",
+      "path": "backend/supabase/migrations/202607190001_initial_online_schema.sql"
+    },
+    {
+      "level": "warning",
+      "code": "SEASON_POLICY_TOO_BROAD",
+      "message": "seasons_read_active currently exposes every season rather than only active seasons.",
+      "path": "backend/supabase/migrations/202607190001_initial_online_schema.sql"
+    },
+    {
+      "level": "warning",
+      "code": "OBSOLETE_RIVET_CLI_PATH",
+      "message": "The legacy full-stack deployer still references rivet-cli; keep the Rivet path disabled until it is migrated to @rivetkit/cli.",
+      "path": "/home/user/colony-dominion-io/tools/deploy_online_stack.py"
+    }
+  ]
+}
