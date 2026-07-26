@@ -1074,10 +1074,25 @@ func _badge_style(background: Color, border: Color, radius: int) -> StyleBoxFlat
 ## Ornate gold HUD frame as a 9-patch. The corners keep their art at any panel
 ## size while the plain middle stretches, so the same texture fits the tall
 ## leaderboard, the square minimap and the wide resource strip.
-func _frame_style(texture_path: String, edge: int, pad_x: float, pad_y: float) -> StyleBoxTexture:
+func _frame_style(
+	texture_path: String,
+	edge: int,
+	pad_x: float,
+	pad_y: float,
+	edge_top: int = -1,
+	edge_right: int = -1
+) -> StyleBoxTexture:
 	var style := StyleBoxTexture.new()
 	style.texture = load(texture_path) as Texture2D
 	style.set_texture_margin_all(float(edge))
+	# A frame whose art carries a header band keeps that band in the
+	# non-stretching top slice, so the title strip never smears when resized.
+	if edge_top > 0:
+		style.texture_margin_top = float(edge_top)
+	# Same idea on the right: the production frame draws the upgrade slot there,
+	# and that slot must keep its width instead of stretching with the bar.
+	if edge_right > 0:
+		style.texture_margin_right = float(edge_right)
 	style.content_margin_left = pad_x
 	style.content_margin_right = pad_x
 	style.content_margin_top = pad_y
