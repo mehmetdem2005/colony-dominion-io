@@ -28,10 +28,15 @@ func _run() -> void:
 		[
 			"OS.shell_open",
 			"x-colony-oauth-secret",
-			"sign_in_refresh_token",
 			"POLL_TIMEOUT_SECONDS",
 		],
 		failures
+	)
+	# Refresh-token sign-in lives in the auth client, not the handoff script; the
+	# marker was left behind pointing at the wrong file when it moved, so this
+	# check failed on every run without anything being wrong.
+	_assert_source_contains(
+		"res://network/supabase_auth_client.gd", ["sign_in_refresh_token"], failures
 	)
 	_assert_source_contains(
 		"res://ui/auth_panel.gd",
@@ -66,7 +71,9 @@ func _run() -> void:
 			"Deno.serve",
 			"functionBaseUrl()",
 			"/functions/v1/oauth-google-handoff",
-			"cache-control",
+			# The header is spelled in canonical HTTP casing in the source; the
+			# marker was lowercase, so this matched nothing.
+			"Cache-Control",
 		],
 		failures
 	)

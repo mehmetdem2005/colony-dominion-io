@@ -48,7 +48,7 @@ for i in $(seq 1 "$PLAYERS"); do
     --soak-client \
     --host=127.0.0.1 --port="$GAME_PORT" \
     --match-id="$MATCH_ID" --server-id="$SERVER_ID" \
-    --player-id="$PLAYER_ID" --name="Bot$i" --seed="$i" \
+    --player-id="$PLAYER_ID" --name="Bot$i" --seed="$i" --players="$PLAYERS" \
     --duration="$DURATION_SECONDS" --report="$REPORT_DIR/bot-$i.json" \
     >"$REPORT_DIR/bot-$i.log" 2>&1 &
   pids+=("$!")

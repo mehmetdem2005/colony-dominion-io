@@ -30,6 +30,9 @@ func _ready() -> void:
 		if not websocket_url.is_empty()
 		else NetworkProtocol.TRANSPORT_ENET
 	)
+	var human_players: int = clampi(
+		int(args.get("players", 1)), 1, NetworkProtocol.DEFAULT_MAX_PLAYERS
+	)
 	var assignment := {
 		"match_id": String(args.get("match-id", "")),
 		"server_id": String(args.get("server-id", "")),
@@ -43,6 +46,13 @@ func _ready() -> void:
 		"region_short_name": "SOAK",
 		"expires_at": now_msec + 300_000,
 		"protocol_version": NetworkProtocol.VERSION,
+		# NetworkProtocol.validate_assignment insists the split fills the match.
+		# Without these the client rejected every soak assignment with "Maç
+		# oyuncu dağılımı geçersiz" before a single packet was sent, so the
+		# harness could never test anything.
+		"human_players": human_players,
+		"bot_players": maxi(NetworkProtocol.DEFAULT_MAX_PLAYERS - human_players, 0),
+		"ranked": false,
 	}
 	var player_id: String = String(args.get("player-id", ""))
 	var display_name: String = String(args.get("name", "SoakBot"))
@@ -95,7 +105,7 @@ func _finish(ok: bool, reason: String) -> void:
 		"max_snapshot_gap_msec": _snapshot_gap_max_msec,
 		"ping_ms": NetworkSession.ping_ms,
 		"jitter_ms": NetworkSession.jitter_ms,
-		"packet_loss_percent": NetworkSession.packet_loss_percent,
+		"packet_loss_percent": NetworkSession.packet_loss,
 		"transport": stats,
 		"started_at_unix_msec": _started_unix_msec,
 		"ended_at_unix_msec": roundi(Time.get_unix_time_from_system() * 1000.0),
