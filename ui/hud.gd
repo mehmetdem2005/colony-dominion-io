@@ -266,10 +266,12 @@ func _build_resources_panel() -> void:
 	# A horizontal strip along the top-left, above the minimap, matching the
 	# reference art whose frame carries one slot per resource.
 	resources_panel.position = Vector2(14.0, 12.0)
-	resources_panel.size = Vector2(452.0, 62.0)
+	resources_panel.size = Vector2(452.0, 66.0)
 	resources_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The strip art is drawn at this bar's own proportions and carries one slot
+	# per resource, so it scales as a whole instead of slicing.
 	resources_panel.add_theme_stylebox_override(
-		"panel", _frame_style(FRAME_RESOURCES_PATH, 44, 14.0, 6.0)
+		"panel", _frame_style(FRAME_RESOURCES_PATH, Vector4.ZERO, Vector4(15.0, 10.0, 15.0, 7.0))
 	)
 	root_control.add_child(resources_panel)
 
@@ -280,7 +282,10 @@ func _build_resources_panel() -> void:
 	for resource_id in ColonyInventory.RESOURCE_IDS:
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.custom_minimum_size = Vector2(78.0, 38.0)
+		row.custom_minimum_size = Vector2(74.0, 40.0)
+		# One row per painted slot, each taking an equal share of the strip so the
+		# icons stay centred on the art's compartments.
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_theme_constant_override("separation", 2)
 
 		var icon_back := PanelContainer.new()
@@ -322,12 +327,16 @@ func _build_leaderboard_panel() -> void:
 	leaderboard_panel.offset_left = -262.0
 	leaderboard_panel.offset_top = 16.0
 	leaderboard_panel.offset_right = -16.0
-	leaderboard_panel.offset_bottom = 238.0
+	leaderboard_panel.offset_bottom = 276.0
 	leaderboard_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# The frame art carries a header strip across the top, which the
-	# "KOLONİ SIRALAMASI" title sits in, so the top padding is deeper.
+	# Only the rounded gold corners are pinned; the header band the title sits in
+	# lives in the stretching middle so it keeps the art's proportions instead of
+	# swelling to half the panel on a short board.
 	leaderboard_panel.add_theme_stylebox_override(
-		"panel", _frame_style(FRAME_LEADERBOARD_PATH, 46, 18.0, 10.0, 108)
+		"panel",
+		_frame_style(
+			FRAME_LEADERBOARD_PATH, Vector4(36.0, 36.0, 36.0, 36.0), Vector4(18.0, 12.0, 18.0, 14.0)
+		)
 	)
 	root_control.add_child(leaderboard_panel)
 
@@ -340,6 +349,8 @@ func _build_leaderboard_panel() -> void:
 	leaderboard_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	leaderboard_title.text = "KOLONİ SIRALAMASI"
 	leaderboard_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Tall enough that the rows below start clear of the frame's header rule.
+	leaderboard_title.custom_minimum_size = Vector2(0.0, 32.0)
 	leaderboard_title.add_theme_font_size_override("font_size", 17)
 	leaderboard_title.add_theme_color_override("font_color", Color("ffd447"))
 	leaderboard_box.add_child(leaderboard_title)
@@ -361,8 +372,10 @@ func _build_minimap_panel() -> void:
 	minimap_panel.position = Vector2(14.0, 86.0)
 	minimap_panel.size = Vector2(224.0, 224.0)
 	minimap_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The art is square like the panel, so scaling it whole keeps the corner
+	# brackets in proportion — slicing would draw them three times oversized.
 	minimap_panel.add_theme_stylebox_override(
-		"panel", _frame_style(FRAME_MINIMAP_PATH, 56, 14.0, 14.0)
+		"panel", _frame_style(FRAME_MINIMAP_PATH, Vector4.ZERO, Vector4(13.0, 13.0, 13.0, 13.0))
 	)
 	root_control.add_child(minimap_panel)
 
@@ -505,14 +518,19 @@ func _build_production_panel() -> void:
 	production_panel.anchor_top = 1.0
 	production_panel.anchor_right = 0.5
 	production_panel.anchor_bottom = 1.0
-	production_panel.offset_left = -346.0
-	production_panel.offset_top = -166.0
-	production_panel.offset_right = 316.0
+	production_panel.offset_left = -398.0
+	production_panel.offset_top = -188.0
+	production_panel.offset_right = 370.0
 	production_panel.offset_bottom = -10.0
 	production_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	production_panel.z_index = 30
+	# The right slice is the width of the painted upgrade slot, so that ornament
+	# keeps its size while the card area stretches with the bar.
 	production_panel.add_theme_stylebox_override(
-		"panel", _frame_style(FRAME_PRODUCTION_PATH, 42, 14.0, 10.0, -1, 152)
+		"panel",
+		_frame_style(
+			FRAME_PRODUCTION_PATH, Vector4(42.0, 42.0, 148.0, 42.0), Vector4(16.0, 12.0, 10.0, 12.0)
+		)
 	)
 	root_control.add_child(production_panel)
 
@@ -532,7 +550,7 @@ func _build_production_panel() -> void:
 	cards.name = "ProductionCards"
 	cards.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cards.alignment = BoxContainer.ALIGNMENT_CENTER
-	cards.add_theme_constant_override("separation", 8)
+	cards.add_theme_constant_override("separation", 6)
 	production_vbox.add_child(cards)
 	for unit_id in UnitCatalog.get_producible_ids():
 		var definition := UnitCatalog.get_definition(unit_id)
@@ -575,7 +593,11 @@ func _build_production_panel() -> void:
 	queue_progress.show_percentage = false
 	status_row.add_child(queue_progress)
 
-	upgrade_button = _command_button("YÜKSELT", Vector2(96.0, 34.0), false)
+	# The frame art already prints "YÜKSELT" and its chevron in this slot, so the
+	# button itself stays label-less to avoid a doubled caption and is sized to
+	# cover the painted slot exactly.
+	upgrade_button = _command_button("", Vector2(126.0, 34.0), false)
+	upgrade_button.set_draws_plate(false)
 	upgrade_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	production_row.add_child(upgrade_button)
 	upgrade_button.pressed.connect(_on_upgrade_pressed)
@@ -905,8 +927,10 @@ func _on_colony_progress_changed(
 		)
 	var can_upgrade: bool = nest_active and level < ColonyProgression.MAX_LEVEL
 	upgrade_button.set_enabled(can_upgrade)
+	# "YÜKSELT" is painted into the frame's upgrade slot, so the button only adds
+	# a caption when it has something else to say.
 	upgrade_button.set_label_text(
-		"YÜKSELT" if can_upgrade else ("YUVA YOK" if not nest_active else "MAKS.")
+		"" if can_upgrade else ("YUVA YOK" if not nest_active else "MAKS.")
 	)
 
 
@@ -1022,6 +1046,7 @@ func _configure_layout_context() -> void:
 	_layout_context.timer_label = timer_label
 	_layout_context.audio_settings_button = audio_settings_button
 	_layout_context.audio_settings_panel = audio_settings_panel
+	_layout_context.settings_button = settings_button
 	_layout_context.stick = stick
 	_layout_context.gather_button = gather_button
 	_layout_context.rally_button = rally_button
@@ -1071,32 +1096,24 @@ func _badge_style(background: Color, border: Color, radius: int) -> StyleBoxFlat
 	return style
 
 
-## Ornate gold HUD frame as a 9-patch. The corners keep their art at any panel
-## size while the plain middle stretches, so the same texture fits the tall
-## leaderboard, the square minimap and the wide resource strip.
-func _frame_style(
-	texture_path: String,
-	edge: int,
-	pad_x: float,
-	pad_y: float,
-	edge_top: int = -1,
-	edge_right: int = -1
-) -> StyleBoxTexture:
+## Ornate gold HUD frame. [param edges] is the 9-patch slice in source pixels as
+## (left, top, right, bottom); those slices are drawn at their authored size, so
+## a frame whose art carries a fixed ornament — the production bar's upgrade
+## slot — pins that side and lets the plain middle stretch. Passing
+## [constant Vector4.ZERO] scales the whole texture into the panel instead,
+## which is what the frames drawn at their panel's own proportions want.
+## [param padding] is the inner content inset in the same (l, t, r, b) order.
+func _frame_style(texture_path: String, edges: Vector4, padding: Vector4) -> StyleBoxTexture:
 	var style := StyleBoxTexture.new()
 	style.texture = load(texture_path) as Texture2D
-	style.set_texture_margin_all(float(edge))
-	# A frame whose art carries a header band keeps that band in the
-	# non-stretching top slice, so the title strip never smears when resized.
-	if edge_top > 0:
-		style.texture_margin_top = float(edge_top)
-	# Same idea on the right: the production frame draws the upgrade slot there,
-	# and that slot must keep its width instead of stretching with the bar.
-	if edge_right > 0:
-		style.texture_margin_right = float(edge_right)
-	style.content_margin_left = pad_x
-	style.content_margin_right = pad_x
-	style.content_margin_top = pad_y
-	style.content_margin_bottom = pad_y
+	style.texture_margin_left = edges.x
+	style.texture_margin_top = edges.y
+	style.texture_margin_right = edges.z
+	style.texture_margin_bottom = edges.w
+	style.content_margin_left = padding.x
+	style.content_margin_top = padding.y
+	style.content_margin_right = padding.z
+	style.content_margin_bottom = padding.w
 	return style
 
 

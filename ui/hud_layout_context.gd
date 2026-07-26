@@ -10,6 +10,7 @@ var production_panel: PanelContainer
 var timer_label: Label
 var audio_settings_button: Button
 var audio_settings_panel: PanelContainer
+var settings_button: Button
 var stick: ColonyVirtualStick
 var gather_button: TouchActionButton
 var rally_button: TouchActionButton
@@ -32,6 +33,7 @@ func is_ready() -> bool:
 		and is_instance_valid(timer_label)
 		and is_instance_valid(audio_settings_button)
 		and is_instance_valid(audio_settings_panel)
+		and is_instance_valid(settings_button)
 		and is_instance_valid(stick)
 		and is_instance_valid(gather_button)
 		and is_instance_valid(rally_button)

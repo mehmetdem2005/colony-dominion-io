@@ -9,6 +9,10 @@ var circular: bool = false
 var enabled: bool = true
 var fill_color := Color(0.07, 0.075, 0.055, 0.96)
 var border_color := Color(1.0, 0.76, 0.12, 0.99)
+## Buttons that sit on a slot painted into a HUD frame turn their own plate off
+## and only wash the slot on press or while disabled, so the art shows through
+## instead of being covered by a second, emptier button.
+var draws_plate: bool = true
 
 var _touch_index: int = -1
 var _mouse_active: bool = false
@@ -31,6 +35,13 @@ func set_label_text(value: String) -> void:
 	if is_instance_valid(_label):
 		_label.text = value
 		_label.add_theme_font_size_override("font_size", _get_label_font_size(value))
+
+
+func set_draws_plate(value: bool) -> void:
+	if draws_plate == value:
+		return
+	draws_plate = value
+	_apply_visual_state()
 
 
 func set_enabled(value: bool) -> void:
@@ -175,6 +186,9 @@ func _apply_visual_state() -> void:
 		return
 	var background: Color
 	var border: Color
+	if not draws_plate:
+		_apply_slot_visual_state()
+		return
 	if not enabled or not _interaction_enabled:
 		background = Color(0.12, 0.12, 0.11, 0.72)
 		border = Color(0.38, 0.38, 0.34, 0.72)
@@ -194,4 +208,20 @@ func _apply_visual_state() -> void:
 	if is_instance_valid(_label):
 		var label_enabled: bool = enabled and _interaction_enabled
 		_label.modulate = Color(1.0, 1.0, 1.0, 1.0 if label_enabled else 0.48)
+		_label.position = Vector2(0.0, 2.0 if _pressed_visual else 0.0)
+
+
+func _apply_slot_visual_state() -> void:
+	var wash := Color(0.0, 0.0, 0.0, 0.0)
+	if not enabled or not _interaction_enabled:
+		wash = Color(0.04, 0.03, 0.02, 0.62)
+	elif _pressed_visual:
+		wash = Color(1.0, 0.84, 0.35, 0.24)
+	var style := StyleBoxFlat.new()
+	style.bg_color = wash
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(14)
+	style.anti_aliasing = true
+	_panel.add_theme_stylebox_override("panel", style)
+	if is_instance_valid(_label):
 		_label.position = Vector2(0.0, 2.0 if _pressed_visual else 0.0)

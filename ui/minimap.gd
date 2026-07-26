@@ -92,8 +92,9 @@ func _draw() -> void:
 	var content_rect := Rect2(Vector2.ONE * MAP_PADDING, size - Vector2.ONE * MAP_PADDING * 2.0)
 	draw_rect(content_rect, Color(0.055, 0.065, 0.045, 1.0), true)
 	_draw_terrain_base(content_rect)
+	# The ornate frame around the panel supplies the border now, so the map only
+	# ever paints its own contents — a second outline read as leftover old UI.
 	if _snapshot.is_empty():
-		draw_rect(content_rect, Color(0.92, 0.72, 0.22, 0.72), false, 2.0)
 		return
 
 	var world_bounds: Rect2 = _snapshot.get("world_bounds", Rect2())
@@ -106,8 +107,6 @@ func _draw() -> void:
 	_draw_colonies(content_rect, world_bounds)
 	_draw_camera_view(content_rect, world_bounds)
 	_draw_compass(content_rect)
-	draw_rect(content_rect.grow(-1.0), Color(0.96, 0.79, 0.30, 0.95), false, 2.0)
-	draw_rect(content_rect.grow(-4.0), Color(0.12, 0.08, 0.025, 0.72), false, 1.0)
 
 
 func _draw_terrain_base(content_rect: Rect2) -> void:

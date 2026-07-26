@@ -31,7 +31,7 @@ func apply(context: HudLayoutContext) -> Vector4:
 	context.resources_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	context.resources_panel.scale = scale_vector
 	context.resources_panel.position = safe_rect.position + Vector2.ONE * margin
-	context.resources_panel.size = Vector2(452.0, 62.0)
+	context.resources_panel.size = Vector2(452.0, 66.0)
 
 	context.minimap_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	context.minimap_panel.scale = scale_vector
@@ -47,7 +47,7 @@ func apply(context: HudLayoutContext) -> Vector4:
 
 	context.leaderboard_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	context.leaderboard_panel.scale = scale_vector
-	context.leaderboard_panel.size = Vector2(246.0, 222.0)
+	context.leaderboard_panel.size = Vector2(246.0, 260.0)
 	context.leaderboard_panel.position = Vector2(
 		safe_rect.end.x - margin - context.leaderboard_panel.size.x * ui_scale,
 		safe_rect.position.y + 16.0 * ui_scale
@@ -61,15 +61,29 @@ func apply(context: HudLayoutContext) -> Vector4:
 		safe_rect.position.y + 16.0 * ui_scale
 	)
 
-	context.audio_settings_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	context.audio_settings_button.scale = scale_vector
-	context.audio_settings_button.size = Vector2(76.0, 44.0)
-	var audio_button_x: float = (
+	# The top row is fully taken by the resource strip and the centred clock, so
+	# the two settings buttons sit in the gap beside the minimap instead — that
+	# is the only place they clear both.
+	var settings_column_x: float = (
 		context.minimap_panel.position.x + context.minimap_panel.size.x * ui_scale + 12.0 * ui_scale
 	)
-	var audio_button_limit: float = context.leaderboard_panel.position.x - 88.0 * ui_scale
+	context.audio_settings_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	context.audio_settings_button.scale = scale_vector
+	context.audio_settings_button.size = Vector2(84.0, 44.0)
 	context.audio_settings_button.position = Vector2(
-		minf(audio_button_x, audio_button_limit), safe_rect.position.y + margin
+		settings_column_x, context.minimap_panel.position.y
+	)
+
+	context.settings_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	context.settings_button.scale = scale_vector
+	context.settings_button.size = Vector2(84.0, 44.0)
+	context.settings_button.position = Vector2(
+		settings_column_x,
+		(
+			context.audio_settings_button.position.y
+			+ context.audio_settings_button.size.y * ui_scale
+			+ 8.0 * ui_scale
+		)
 	)
 
 	context.audio_settings_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -98,9 +112,11 @@ func apply(context: HudLayoutContext) -> Vector4:
 
 	context.production_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	context.production_panel.scale = scale_vector
-	context.production_panel.size = Vector2(662.0, 156.0)
+	# Matches the framed production art in hud.gd: the card row plus the status
+	# line underneath only clear the frame's inner border at this size.
+	context.production_panel.size = Vector2(768.0, 178.0)
 	var production_visual_size: Vector2 = context.production_panel.size * ui_scale
-	var command_reserve: float = 324.0 * ui_scale
+	var command_reserve: float = 322.0 * ui_scale
 	var production_x: float = safe_rect.end.x - command_reserve - production_visual_size.x
 	production_x = maxf(production_x, safe_rect.position.x + 190.0 * ui_scale)
 	context.production_panel.position = Vector2(

@@ -33,7 +33,9 @@ func configure(
 	title_text = unit_name
 	role_text = unit_role
 	costs = unit_costs.duplicate(true)
-	custom_minimum_size = Vector2(122.0, 108.0)
+	# Five of these plus the upgrade slot have to fit inside the production
+	# frame's card area without the container overflowing its border.
+	custom_minimum_size = Vector2(116.0, 108.0)
 
 
 func _ready() -> void:
