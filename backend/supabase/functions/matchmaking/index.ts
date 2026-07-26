@@ -820,6 +820,47 @@ Deno.serve(async (request) => {
         body.token_fingerprint = await tokenFingerprint();
         body.app_name = env("EDGEGAP_APP_NAME");
         body.app_version = env("EDGEGAP_APP_VERSION");
+        // Whether players are being pooled at all. If lobbies are off — no
+        // service-role key, no ticket secret, or the table is unreachable —
+        // every /join silently falls through to a private one-player server,
+        // which looks exactly like "we keep landing in different matches" and
+        // is invisible from outside.
+        body.lobbies_enabled = lobbiesEnabled();
+        body.ticket_secret = Boolean(await ticketSecret());
+        body.service_role_key = Boolean(env("SUPABASE_SERVICE_ROLE_KEY"));
+        body.lobby_window_seconds = lobbyWindowSeconds();
+        if (lobbiesEnabled()) {
+          const url = `${supabaseBase()}/rest/v1/match_lobbies` +
+            `?select=region_id,build_id,status,human_count,target_humans,request_id,created_at` +
+            `&order=created_at.desc&limit=6`;
+          const rows = await fetch(url, { headers: serviceHeaders() }).catch(() => null);
+          body.lobby_table_status = rows?.status ?? 0;
+          // Does the service role actually have EXECUTE on the lobby functions?
+          // leave_match_lobby for an unknown player is a no-op, so this asks the
+          // question without creating anything.
+          const rpcProbe = await fetch(`${supabaseBase()}/rest/v1/rpc/leave_match_lobby`, {
+            method: "POST",
+            headers: serviceHeaders(),
+            body: JSON.stringify({ p_player: "00000000-0000-0000-0000-000000000000" }),
+          }).catch(() => null);
+          body.lobby_rpc_status = rpcProbe?.status ?? 0;
+          if (rows?.ok) {
+            const list = await rows.json().catch(() => []) as Record<string, unknown>[];
+            // Identifiers are deliberately left out; this is a shape report, not
+            // a way to look up somebody's match.
+            body.recent_lobbies = list.map((row) => ({
+              region: String(row.region_id ?? ""),
+              build: String(row.build_id ?? ""),
+              status: String(row.status ?? ""),
+              humans: Number(row.human_count ?? 0),
+              target: Number(row.target_humans ?? 0),
+              has_server: Boolean(String(row.request_id ?? "").trim()),
+              age_seconds: Math.round(
+                (Date.now() - (Date.parse(String(row.created_at ?? "")) || Date.now())) / 1000,
+              ),
+            }));
+          }
+        }
       }
       return json(body);
     }

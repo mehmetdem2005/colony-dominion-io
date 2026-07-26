@@ -61,6 +61,15 @@ func set_online() -> void:
 	if mode == SessionMode.ONLINE:
 		return
 	mode = SessionMode.ONLINE
+	# set_offline() parks the region on an "offline" sentinel, and nothing used
+	# to clear it. Playing one offline match therefore left every later online
+	# queue asking for a region that does not exist, instead of the automatic
+	# one the player still sees selected in the menu.
+	if selected_region_id == "offline":
+		selected_region_id = "auto"
+		selected_region_name = "Otomatik — En Yakın Sunucu"
+		active_region_short_name = "AUTO"
+		region_changed.emit(selected_region_id, selected_region_name)
 	mode_changed.emit(mode)
 
 
