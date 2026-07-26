@@ -58,6 +58,11 @@ var _spatial_dirty: bool = true
 var _last_emitted_second: int = -1
 var _match_seed: int = 738291
 var _spawn_points: Array[Vector2] = []
+# How far an AI colony may sit from a simulation-interest point and still run at
+# each tier. Phones use a tighter ring so fewer distant colonies burn frames on
+# units nobody can see; the dedicated server keeps the wide desktop rings.
+var _full_tier_radius: float = 2200.0
+var _reduced_tier_radius: float = 4600.0
 var _command_router: AuthoritativeCommandRouter
 var _local_input_source: LocalCommandInputSource
 var _audio_context_left: float = 0.0
@@ -101,6 +106,9 @@ func _ready() -> void:
 	if match_rules == null:
 		match_rules = MatchRules.new()
 	match_rules.sanitize()
+	if OS.has_feature("mobile") and not is_headless_server:
+		_full_tier_radius = 1500.0
+		_reduced_tier_radius = 3000.0
 	events = MATCH_EVENT_HUB_SCRIPT.new() as MatchEventHub
 	events.name = "MatchEvents"
 	add_child(events)
@@ -600,9 +608,9 @@ func _update_ai_simulation_tiers() -> void:
 		for interest_position in simulation_interest_positions:
 			distance = minf(distance, interest_position.distance_to(anchor_position))
 		var tier: int = ColonyController.SimulationTier.DORMANT
-		if distance <= 2200.0:
+		if distance <= _full_tier_radius:
 			tier = ColonyController.SimulationTier.FULL
-		elif distance <= 4600.0:
+		elif distance <= _reduced_tier_radius:
 			tier = ColonyController.SimulationTier.REDUCED
 		controller.set_simulation_tier(tier)
 	mark_spatial_index_dirty()
