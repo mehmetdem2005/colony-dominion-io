@@ -10,3 +10,4 @@ config/backend_config.local.json
 .godot-bin/
 # Generated at import time from project.godot's [importer_defaults].
 *.import
+*.uid
