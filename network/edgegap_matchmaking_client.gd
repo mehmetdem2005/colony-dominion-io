@@ -116,9 +116,13 @@ func get_queue_status(access_token: String) -> Dictionary:
 		queue_status_changed.emit(failed)
 		return {"ok": true, "body": failed}
 	if not (bool(body.get("ready", false)) and body.has("assignment")):
-		# Still provisioning — report as queued so OnlineServices keeps polling.
-		var pending := {"status": "deploying"}
-		queue_status_changed.emit(pending)
+		# Still provisioning, or the shared lobby is still collecting players.
+		# Forward the lobby counters so the menu can show "2/10 insan • 12 sn".
+		var pending := {"status": String(body.get("status", "deploying"))}
+		for key in ["human_players_waiting", "target_players", "bot_backfill_seconds_remaining"]:
+			if body.has(key):
+				pending[key] = body[key]
+		queue_status_changed.emit(pending.duplicate(true))
 		return {"ok": true, "body": pending}
 	# Ready: fold in the client-agreed identity so the assignment passes
 	# NetworkProtocol.validate_assignment and the server's join handshake, and
@@ -136,13 +140,14 @@ func get_queue_status(access_token: String) -> Dictionary:
 			"EDGE" if _requested_region_id == "auto" else _requested_region_id.to_upper().left(8)
 		)
 	# NetworkProtocol.validate_assignment requires the human/bot split to fill the
-	# match and a future expiry. Each Edgegap /join deploys a fresh dedicated
-	# server for this one player, and the server is launched with
-	# HUMAN_PLAYER_COUNT=1 / BOT_COUNT=(max-1) backfill, so mirror that split here.
-	# Without these the
-	# assignment is rejected as "güvenlik denetiminden geçemedi".
-	assignment["human_players"] = 1
-	assignment["bot_players"] = maxi(NetworkProtocol.DEFAULT_MAX_PLAYERS - 1, 0)
+	# match and a future expiry. With shared lobbies the matchmaker reports how
+	# many humans actually queued together; fall back to a solo split when the
+	# response predates that field.
+	var human_players: int = clampi(
+		int(body.get("human_players", 1)), 1, NetworkProtocol.DEFAULT_MAX_PLAYERS
+	)
+	assignment["human_players"] = human_players
+	assignment["bot_players"] = maxi(NetworkProtocol.DEFAULT_MAX_PLAYERS - human_players, 0)
 	assignment["ranked"] = false
 	assignment["expires_at"] = (int(Time.get_unix_time_from_system() * 1000.0) + ASSIGNMENT_TTL_MS)
 	var assigned := {"status": "assigned", "assignment": assignment}
