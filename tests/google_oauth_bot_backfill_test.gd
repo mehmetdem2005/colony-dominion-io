@@ -107,7 +107,10 @@ func _run() -> void:
 			"HUMAN_PLAYER_COUNT",
 			"BOT_COUNT",
 			"RANKED_MATCH",
-			"EXPECTED_JOIN_TICKET",
+			"MATCH_TICKET_SECRET",
+			"claim_match_lobby",
+			'matchmaking_mode: "shared_only"',
+			"private_match_fallback: false",
 		],
 		failures
 	)

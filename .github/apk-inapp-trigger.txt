@@ -1,2 +1,2 @@
-manual APK rebuild request
-2026-07-25T16:09:21Z
+shared-only matchmaking APK rebuild
+2026-07-27T12:34:26Z

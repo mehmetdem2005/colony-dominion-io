@@ -125,10 +125,21 @@ func _validate_edgegap_and_bot_backfill(failures: PackedStringArray) -> void:
 		"HUMAN_PLAYER_COUNT",
 		"BOT_COUNT",
 		"RANKED_MATCH",
-		"EXPECTED_JOIN_TICKET",
+		"MATCH_TICKET_SECRET",
+		"claim_match_lobby",
+		'matchmaking_mode: "shared_only"',
+		"private_match_fallback: false",
 	]:
 		if not matchmaking.contains(marker):
 			failures.append("Edgegap production contract is missing: %s" % marker)
+	for forbidden in [
+		'deployToEdgegap(body, "solo")',
+		"EXPECTED_JOIN_TICKET",
+		"EXPECTED_PLAYER_ID",
+		"falling back to a solo deployment",
+	]:
+		if matchmaking.contains(forbidden):
+			failures.append("Matchmaking retains player-splitting solo path: %s" % forbidden)
 	var transport := FileAccess.get_file_as_string("res://network/rivet_game_transport.gd")
 	for marker in [
 		"ENetMultiplayerPeer",

@@ -149,12 +149,23 @@ func _validate_edgegap_contract() -> void:
 		"location",
 		"skip_telemetry",
 		"authenticatedUserId",
-		"EXPECTED_JOIN_TICKET",
+		"MATCH_TICKET_SECRET",
+		"claim_match_lobby",
+		'matchmaking_mode: "shared_only"',
+		"private_match_fallback: false",
 	]:
 		if not function_source.contains(marker):
 			_failures.append("Edgegap matchmaking contract is missing: %s" % marker)
 	if function_source.contains("DEV_ACCEPT_JOIN_TICKETS"):
 		_failures.append("Production Edgegap deploy must not enable development ticket acceptance")
+	for forbidden in [
+		'deployToEdgegap(body, "solo")',
+		"EXPECTED_JOIN_TICKET",
+		"EXPECTED_PLAYER_ID",
+		"falling back to a solo deployment",
+	]:
+		if function_source.contains(forbidden):
+			_failures.append("Matchmaking retains player-splitting solo path: %s" % forbidden)
 	var client_source: String = FileAccess.get_file_as_string(
 		"res://network/edgegap_matchmaking_client.gd"
 	)

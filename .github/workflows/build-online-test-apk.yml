@@ -155,9 +155,37 @@ jobs:
                       raise SystemExit(f"{path} returned HTTP {response.status}")
                   return json.loads(response.read().decode("utf-8"))
 
-          health = get_json("/health")
+          health = get_json("/health?verify=1")
           if health.get("ok") is not True or health.get("service") != "colony-edgegap-matchmaking":
               raise SystemExit(f"Edgegap matchmaking health failed: {health}")
+          required_shared_health = {
+              "configured": True,
+              "edgegap_ok": True,
+              "lobbies_enabled": True,
+              "ticket_secret": True,
+              "service_role_key": True,
+              "lobby_table_status": 200,
+              "lobby_rpc_status": 200,
+          }
+          # A pull-request build probes the currently deployed main function,
+          # which may be one commit behind this source branch. If it already
+          # exposes the new mode fields, they must be safe; the post-merge
+          # deployment workflow requires them unconditionally.
+          if "matchmaking_mode" in health or "private_match_fallback" in health:
+              required_shared_health.update({
+                  "matchmaking_mode": "shared_only",
+                  "private_match_fallback": False,
+              })
+          mismatches = {
+              key: {"expected": expected, "actual": health.get(key)}
+              for key, expected in required_shared_health.items()
+              if health.get(key) != expected
+          }
+          if mismatches:
+              raise SystemExit(
+                  "Shared matchmaking health failed: "
+                  + json.dumps(mismatches, sort_keys=True)
+              )
 
           payload = json.dumps({
               "player_id": "00000000-0000-4000-8000-000000000001",
@@ -186,6 +214,8 @@ jobs:
           report = {
               "health": True,
               "edgegap_configured": bool(health.get("configured")),
+              "shared_matchmaking_only": health.get("matchmaking_mode") == "shared_only",
+              "private_match_fallback": bool(health.get("private_match_fallback")),
               "placement_targets": [
                   region.get("id")
                   for region in config.get("regions", [])
