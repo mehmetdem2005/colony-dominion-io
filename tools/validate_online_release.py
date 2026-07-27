@@ -165,8 +165,11 @@ def validate_edgegap() -> None:
             "HUMAN_PLAYER_COUNT",
             "BOT_COUNT",
             "RANKED_MATCH",
-            "EXPECTED_JOIN_TICKET",
-            "EXPECTED_PLAYER_ID",
+            "MATCH_TICKET_SECRET",
+            "mintJoinTicket",
+            "claim_match_lobby",
+            'matchmaking_mode: "shared_only"',
+            "private_match_fallback: false",
             "is_hidden: true",
         ),
     )
@@ -174,6 +177,16 @@ def validate_edgegap() -> None:
         "DEV_ACCEPT_JOIN_TICKETS" not in matchmaking,
         "production Edgegap deployment enables development ticket acceptance",
     )
+    for forbidden in (
+        'deployToEdgegap(body, "solo")',
+        "EXPECTED_JOIN_TICKET",
+        "EXPECTED_PLAYER_ID",
+        "falling back to a solo deployment",
+    ):
+        require(
+            forbidden not in matchmaking,
+            f"matchmaking can silently split players through legacy solo path: {forbidden}",
+        )
     require_markers(
         "deploy/edgegap/Dockerfile",
         ("EXPOSE 20000/udp", "colony-dominion-server.x86_64", "--headless"),

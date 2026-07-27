@@ -16,6 +16,12 @@
 //   EDGEGAP_APP_VERSION  - the Edgegap application version name
 //   GAME_BUILD_ID        - build id injected into the server (match compat)
 //   GAME_MAX_PLAYERS     - max players per match (default 10)
+//   SUPABASE_SERVICE_ROLE_KEY - lobby RPC/table access (injected by Supabase)
+//
+// Online play is shared-lobby-only. If the lobby layer is unavailable, /join
+// fails with 503 and the client retries. It must never silently create a private
+// one-player deployment, because that turns an infrastructure fault into two
+// players being placed in different matches.
 
 const EDGEGAP_API = "https://api.edgegap.com/v1";
 const READY = "Status.READY";
@@ -66,11 +72,6 @@ function json(value: unknown, status = 200): Response {
 
 function env(name: string): string {
   return (Deno.env.get(name) ?? "").trim();
-}
-
-function randomHex(byteCount: number): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(byteCount)), (b) =>
-    b.toString(16).padStart(2, "0")).join("");
 }
 
 function edgegapHeaders(): HeadersInit {
@@ -456,7 +457,8 @@ async function deployServer(options: {
   return await deployToEdgegap(body, "lobby");
 }
 
-// Returns a ready response, or null to let the caller fall back to a solo match.
+// Returns a shared-lobby response. A lobby-layer failure is fail-closed: the
+// caller receives a retryable 503 rather than a private one-player deployment.
 async function joinSharedLobby(
   playerId: string,
   displayNameValue: string,
@@ -468,7 +470,7 @@ async function joinSharedLobby(
   buildId: string,
   maxPlayers: number,
   secret: string,
-): Promise<Response | null> {
+): Promise<Response> {
   // Two attempts: a lobby row outlives its server, so if the one we are handed
   // turns out to point at a deployment that has already gone, we close it and
   // claim again — which now yields a live lobby or a fresh one.
@@ -485,9 +487,11 @@ async function joinSharedLobby(
       maxPlayers,
       secret,
     );
-    if (response !== "retry") return response;
+    if (response !== "retry") {
+      return response ?? json({ ok: false, error: "matchmaking_unavailable" }, 503);
+    }
   }
-  return null;
+  return json({ ok: false, error: "matchmaking_unavailable" }, 503);
 }
 
 // One pass at the lobby claim. Returns "retry" when the claimed lobby turned
@@ -620,76 +624,27 @@ async function join(request: Request): Promise<Response> {
   const maxPlayers = gameMaxPlayers();
   const buildId = env("GAME_BUILD_ID") || "colony";
 
-  // Preferred path: put everyone queueing for this region inside the same short
-  // window onto one shared server, so friends who press play together meet.
+  // The only production path: put everyone queueing for this region into a
+  // shared lobby. Never degrade to one server per player. If the database/RPC
+  // boundary is unhealthy, returning a retryable error preserves matchmaking
+  // correctness and prevents an unbounded deployment/cost fan-out.
   const secret = await ticketSecret();
-  if (lobbiesEnabled() && secret) {
-    const shared = await joinSharedLobby(
-      authenticatedPlayerId,
-      trustedDisplayName,
-      regionId,
-      regionTarget,
-      ip,
-      appName,
-      versionName,
-      buildId,
-      maxPlayers,
-      secret,
-    );
-    if (shared) return shared;
-    // Fall through to the legacy solo deployment when the lobby path is
-    // unavailable (missing migration, DB hiccup) so online play still works.
-    console.error("shared lobby unavailable; falling back to a solo deployment");
+  if (!lobbiesEnabled() || !secret) {
+    console.error("shared matchmaking unavailable: lobby credentials are missing");
+    return json({ ok: false, error: "matchmaking_unavailable" }, 503);
   }
-
-  // The game server authenticates each client with a single-use join ticket,
-  // authenticated player id, and match/server identity. Generate them here,
-  // inject the trusted claims into the server, and return only the client claim.
-  const matchId = crypto.randomUUID();
-  const serverId = crypto.randomUUID();
-  const joinTicket = randomHex(24);
-
-  const body: Record<string, unknown> = {
-    app_name: appName,
-    version_name: versionName,
-    ip_list: [ip],
-    skip_telemetry: true,
-    tags: ["colony", `region-${regionId}`],
-    env_vars: [
-      { key: "MATCH_ID", value: matchId },
-      { key: "SERVER_ID", value: serverId },
-      { key: "BUILD_ID", value: buildId },
-      { key: "MAX_PLAYERS", value: String(maxPlayers) },
-      { key: "EXPECTED_PLAYERS", value: "1" },
-      { key: "HUMAN_PLAYER_COUNT", value: "1" },
-      { key: "BOT_COUNT", value: String(maxPlayers - 1) },
-      { key: "RANKED_MATCH", value: "0" },
-      { key: "MAX_MATCH_MINUTES", value: String(gameMaxMatchMinutes()) },
-      { key: "NETWORK_TRANSPORT", value: "enet" },
-      { key: "GAME_PORT", value: "20000" },
-      { key: "EXPECTED_JOIN_TICKET", value: joinTicket, is_hidden: true },
-      { key: "EXPECTED_PLAYER_ID", value: authenticatedPlayerId, is_hidden: true },
-      { key: "EXPECTED_DISPLAY_NAME", value: trustedDisplayName },
-    ],
-  };
-  if (regionTarget) {
-    body.location = {
-      latitude: regionTarget.latitude,
-      longitude: regionTarget.longitude,
-    };
-  }
-  const requestId = await deployToEdgegap(body, "solo");
-  if (!requestId) return json({ ok: false, error: "deploy_failed" }, 502);
-  return json({
-    ok: true,
-    request_id: requestId,
-    join_ticket: joinTicket,
-    match_id: matchId,
-    server_id: serverId,
-    build_id: buildId,
-    region_id: regionId,
-    poll_interval_ms: 1500,
-  });
+  return await joinSharedLobby(
+    authenticatedPlayerId,
+    trustedDisplayName,
+    regionId,
+    regionTarget,
+    ip,
+    appName,
+    versionName,
+    buildId,
+    maxPlayers,
+    secret,
+  );
 }
 
 // GET /status/{request_id} — poll Edgegap; when READY return the direct ip:port.
@@ -811,6 +766,8 @@ Deno.serve(async (request) => {
         ok: true,
         service: "colony-edgegap-matchmaking",
         configured: Boolean(env("EDGEGAP_API_TOKEN") && env("EDGEGAP_APP_NAME")),
+        matchmaking_mode: "shared_only",
+        private_match_fallback: false,
       };
       if (new URL(request.url).searchParams.get("verify") === "1") {
         const probe = await fetch(`${EDGEGAP_API}/apps`, { headers: edgegapHeaders() })

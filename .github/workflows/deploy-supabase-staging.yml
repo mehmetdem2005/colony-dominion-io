@@ -139,13 +139,46 @@ jobs:
         timeout-minutes: 3
         run: |
           set -euo pipefail
-          FUNCTION_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/matchmaking/health"
+          FUNCTION_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/matchmaking/health?verify=1"
           # The /health route is public (like the other Edge Function verifiers
           # below), so no apikey header is needed. Sending an empty apikey — which
           # is what the previously-referenced, undefined SUPABASE_PUBLISHABLE_KEY
           # expanded to — made Supabase reject the request with 401.
           curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors \
-            "$FUNCTION_URL" | tee build/diagnostics/matchmaking-health.json | grep -q "colony-edgegap-matchmaking"
+            --output build/diagnostics/matchmaking-health.json \
+            "$FUNCTION_URL"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(
+              Path("build/diagnostics/matchmaking-health.json").read_text(encoding="utf-8")
+          )
+          required = {
+              "ok": True,
+              "service": "colony-edgegap-matchmaking",
+              "configured": True,
+              "edgegap_ok": True,
+              "lobbies_enabled": True,
+              "ticket_secret": True,
+              "service_role_key": True,
+              "lobby_table_status": 200,
+              "lobby_rpc_status": 200,
+              "matchmaking_mode": "shared_only",
+              "private_match_fallback": False,
+          }
+          mismatches = {
+              key: {"expected": expected, "actual": health.get(key)}
+              for key, expected in required.items()
+              if health.get(key) != expected
+          }
+          if mismatches:
+              raise SystemExit(
+                  "Shared matchmaking health verification failed: "
+                  + json.dumps(mismatches, sort_keys=True)
+              )
+          print("SHARED_MATCHMAKING_HEALTH_OK")
+          PY
 
       - name: Verify Google OAuth PKCE handoff Edge Function
         timeout-minutes: 3

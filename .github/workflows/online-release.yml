@@ -37,6 +37,18 @@ on:
 jobs:
   validate-and-build:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     permissions:
       contents: read
     env:
@@ -52,7 +64,8 @@ jobs:
           deno-version: v2.x
       - name: Install validation tools
         run: |
-          python -m pip install --disable-pip-version-check gdtoolkit pglast pyyaml pillow
+          python -m pip install --disable-pip-version-check \
+            gdtoolkit pglast pyyaml pillow "psycopg[binary]"
       - name: Install Godot 4.6.3 and export templates
         run: tools/install_godot_ci.sh
       - name: Import and parse Godot project
@@ -68,6 +81,10 @@ jobs:
         run: python tools/validate_online_release.py
       - name: Typecheck Edgegap matchmaking function
         run: deno check backend/supabase/functions/matchmaking/index.ts
+      - name: Test shared matchmaking concurrency in PostgreSQL
+        env:
+          MATCHMAKING_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: python tools/test_shared_matchmaking_concurrency.py
       - name: Lint project GDScript
         shell: bash
         run: |

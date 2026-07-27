@@ -29,7 +29,11 @@ func _initialize() -> void:
 	for required in [
 		"authenticatedUserId",
 		"player_identity_mismatch",
-		"EXPECTED_JOIN_TICKET",
+		"MATCH_TICKET_SECRET",
+		"mintJoinTicket",
+		"claim_match_lobby",
+		'matchmaking_mode: "shared_only"',
+		"private_match_fallback: false",
 		"is_hidden: true",
 		"ip_list",
 		"REGION_TARGETS",
@@ -48,6 +52,14 @@ func _initialize() -> void:
 		failures.append("The game client must never reference the Edgegap API token")
 	if matchmaking.contains("DEV_ACCEPT_JOIN_TICKETS"):
 		failures.append("The Edgegap function enables insecure development ticket acceptance")
+	for forbidden in [
+		'deployToEdgegap(body, "solo")',
+		"EXPECTED_JOIN_TICKET",
+		"EXPECTED_PLAYER_ID",
+		"falling back to a solo deployment",
+	]:
+		if matchmaking.contains(forbidden):
+			failures.append("Matchmaking retains player-splitting solo path: %s" % forbidden)
 	for required in [
 		"security definer",
 		"grant execute on function",
