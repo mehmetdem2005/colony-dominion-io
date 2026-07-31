@@ -10,11 +10,16 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_BUILD = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 EXPECTED_PROTOCOL = 4
 EXPECTED_PLACEMENT_TARGETS = {
-    "auto",
-    "avrupa",
-    "kuzey_amerika",
-    "asya",
-    "guney_amerika",
+    "frankfurt",
+    "paris",
+    "newark",
+    "chicago",
+    "dallas",
+    "seattle",
+    "fremont",
+    "sao_paulo",
+    "mumbai",
+    "singapore",
 }
 
 

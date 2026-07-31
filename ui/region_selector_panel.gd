@@ -1,24 +1,18 @@
 class_name RegionSelectorPanel
 extends PanelContainer
 
-## AAA server-region picker. Auto (nearest edge) is the recommended hero option;
-## every real Edgegap location is listed underneath, grouped by continent with an
-## honest proximity label instead of a fabricated ping. Selecting a region pins
-## the next match to that city's edge node.
+## Server-region picker. Every real Edgegap edge city is listed, ordered by the
+## ping this device has actually measured there, with the automatically chosen
+## city marked. There is no "Otomatik" entry to select: automatic is not a place
+## a server can run, and offering it as a row meant a player could sit in a
+## worldwide pool instead of the city nearest them.
+##
+## Pings are real or absent. Edgegap publishes no per-city latency endpoint, so
+## a region that has never hosted one of this player's matches simply has no
+## number yet and says so, rather than showing an invented one.
 
 signal region_selected(region_id: String)
 signal closed
-
-# A coarse, honest proximity band for a Türkiye/EU player. (No live probe exists
-# for Edgegap edges, so we never show a fake millisecond number — the real ping
-# is measured once the match connects.) The free tier only has edges on these
-# continents; Africa / Middle East / Oceania have no server and are not listed.
-const REGION_META: Dictionary = {
-	"avrupa": {"proximity": "near"},
-	"kuzey_amerika": {"proximity": "far"},
-	"asya": {"proximity": "far"},
-	"guney_amerika": {"proximity": "farthest"},
-}
 
 var _list: VBoxContainer
 var _buttons: Dictionary = {}
@@ -30,6 +24,9 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(680.0, 620.0)
 	_build()
 	OnlineServices.regions_changed.connect(refresh)
+	# A match just played updates one region's number; redraw so the list reorders
+	# without the player having to reopen it.
+	NetworkSession.region_pings_changed.connect(refresh)
 
 
 func open_panel() -> void:
@@ -49,18 +46,26 @@ func refresh() -> void:
 		child.queue_free()
 	_buttons.clear()
 
-	# Hero row: automatic nearest-edge placement (the recommended default).
-	_add_region_card("auto", "Otomatik — En Yakın Sunucu", "AUTO", "auto", true)
-
-	_list.add_child(ColonyUiKit.section_label("Kıtalar"))
-	for region in OnlineServices.get_regions():
-		var region_id: String = String(region.get("id", ""))
-		var meta: Dictionary = REGION_META.get(region_id, {})
+	var regions: Array[Dictionary] = OnlineServices.get_regions()
+	# Measured regions first, fastest at the top; everything unmeasured keeps the
+	# catalogue order underneath so the list does not reshuffle unpredictably.
+	regions.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			var ping_a: int = NetworkSession.get_measured_region_ping(String(a.get("id", "")))
+			var ping_b: int = NetworkSession.get_measured_region_ping(String(b.get("id", "")))
+			if ping_a < 0 and ping_b < 0:
+				return false
+			if ping_a < 0:
+				return false
+			if ping_b < 0:
+				return true
+			return ping_a < ping_b
+	)
+	for region in regions:
 		_add_region_card(
-			region_id,
-			String(region.get("display_name", region_id)),
+			String(region.get("id", "")),
+			String(region.get("display_name", "")),
 			String(region.get("short_name", "")),
-			String(meta.get("proximity", "far")),
 			bool(region.get("enabled", true))
 		)
 
@@ -115,38 +120,33 @@ func _build() -> void:
 
 
 func _add_region_card(
-	region_id: String, display_name: String, short_name: String, proximity: String, enabled: bool
+	region_id: String, display_name: String, short_name: String, enabled: bool
 ) -> void:
-	var is_selected: bool = region_id == NetworkSession.preferred_region_id
+	var is_active: bool = region_id == NetworkSession.selected_region_id
+	var is_automatic: bool = is_active and NetworkSession.region_is_automatic
 	var button := Button.new()
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not enabled
+	var marker: String = ""
+	if is_automatic:
+		marker = "★  "
+	elif is_active:
+		marker = "✓  "
 	button.text = (
-		"%s%s   ·   %s   —   %s"
-		% [
-			"✓  " if is_selected else "",
-			display_name,
-			short_name,
-			_proximity_label(region_id, proximity),
-		]
+		"%s%s   ·   %s   —   %s" % [marker, display_name, short_name, _ping_label(region_id)]
 	)
-	ColonyUiKit.apply_button(button, &"primary" if is_selected else &"ghost", 58.0)
+	ColonyUiKit.apply_button(button, &"primary" if is_active else &"ghost", 58.0)
 	button.pressed.connect(_select.bind(region_id))
 	_list.add_child(button)
 	_buttons[region_id] = button
 
 
-func _proximity_label(region_id: String, proximity: String) -> String:
-	if region_id == "auto":
-		return "Önerilen • otomatik seçim"
-	match proximity:
-		"near":
-			return "Düşük ping"
-		"farthest":
-			return "Çok yüksek ping"
-		_:
-			return "Yüksek ping"
+func _ping_label(region_id: String) -> String:
+	var measured: int = NetworkSession.get_measured_region_ping(region_id)
+	if measured < 0:
+		return "ping ölçülmedi"
+	return "%d ms" % measured
 
 
 func _select(region_id: String) -> void:

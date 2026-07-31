@@ -39,31 +39,32 @@ type RegionTarget = {
   shortName: string;
 };
 
-// Manual targets are deliberately resolved server-side. The client may select
-// an id, but it cannot inject arbitrary coordinates into the Edgegap request.
-// The real Edgegap edge locations. Each id maps to that city's coordinates;
-// Edgegap places the server on the node nearest those coordinates, so selecting
-// an id pins the match to that actual city (real, measurably different ping).
-// Continent-level targets. Each id points at a representative coordinate on that
-// continent; Edgegap places the server on the nearest edge node to it. The free
-// tier only has edges on these four continents (Europe, North/South America,
-// Asia) — there is no Africa / Middle East / Oceania node, so those are not
-// offered rather than silently routing the player to Europe.
+// Targets are resolved server-side: the client picks an id, never coordinates.
 const REGION_TARGETS: Record<string, RegionTarget> = {
-  "avrupa": { latitude: 50.1109, longitude: 8.6821, displayName: "Avrupa", shortName: "AVR" },
-  "kuzey_amerika": {
-    latitude: 39.8283,
-    longitude: -98.5795,
-    displayName: "Kuzey Amerika",
-    shortName: "K.AM",
+  // The ten real Edgegap edge cities, taken from GET /v1/locations. These
+  // replace the old continent centroids: pointing at a continent's midpoint
+  // sent a Turkish player's server to whatever node happened to be nearest to
+  // a spot in the North Sea, when Frankfurt was the answer all along.
+  "frankfurt": { latitude: 50.08, longitude: 8.66, displayName: "Frankfurt", shortName: "FRA" },
+  "paris": { latitude: 48.86, longitude: 2.33, displayName: "Paris", shortName: "PAR" },
+  "newark": { latitude: 40.86, longitude: -74.14, displayName: "New York", shortName: "NY" },
+  "chicago": { latitude: 42.1187, longitude: -88.1955, displayName: "Chicago", shortName: "CHI" },
+  "dallas": { latitude: 32.93, longitude: -96.66, displayName: "Dallas", shortName: "DAL" },
+  "seattle": { latitude: 47.6, longitude: -122.33, displayName: "Seattle", shortName: "SEA" },
+  "fremont": {
+    latitude: 37.54,
+    longitude: -122.01,
+    displayName: "San Francisco",
+    shortName: "SF",
   },
-  "asya": { latitude: 1.3521, longitude: 103.8198, displayName: "Asya", shortName: "ASYA" },
-  "guney_amerika": {
-    latitude: -23.5505,
-    longitude: -46.6333,
-    displayName: "Güney Amerika",
-    shortName: "G.AM",
+  "sao_paulo": {
+    latitude: -23.55,
+    longitude: -46.64,
+    displayName: "Sao Paulo",
+    shortName: "SAO",
   },
+  "mumbai": { latitude: 18.94, longitude: 72.84, displayName: "Mumbai", shortName: "MUM" },
+  "singapore": { latitude: 1.23, longitude: 103.83, displayName: "Singapur", shortName: "SGP" },
 };
 
 function json(value: unknown, status = 200): Response {

@@ -23,6 +23,9 @@ const HTTP_CLIENT_SCRIPT := preload("res://network/http_json_client.gd")
 const HEALTH_SERVER_SCRIPT := preload("res://network/dedicated_server_health.gd")
 const RECONNECT_STORE_SCRIPT := preload("res://network/reconnect_session_store.gd")
 const MATCH_START_GATE_SCRIPT := preload("res://network/dedicated_match_start_gate.gd")
+## Pings sent before a match's latency is trusted enough to attribute to its
+## region. The first sample or two carry connection setup cost.
+const REGION_PING_SAMPLE_THRESHOLD: int = 4
 
 const SERVER_SHUTDOWN_DELAY_SECONDS: float = 8.0
 const MATCH_RESULT_RETRY_COUNT: int = 3
@@ -843,6 +846,11 @@ func _update_network_metrics() -> void:
 	var total: int = maxi(_sent_ping_count, 1)
 	var loss: float = clampf(float(_lost_ping_count) / float(total), 0.0, 1.0)
 	NetworkSession.apply_live_metrics(ping_value, jitter_value, loss)
+	# This is the only real latency reading the game ever gets for an Edgegap
+	# city, so it is what the region picker shows and what automatic selection
+	# uses. A handful of samples in is enough to be worth keeping.
+	if ping_value >= 0 and _sent_ping_count >= REGION_PING_SAMPLE_THRESHOLD:
+		OnlineServices.record_match_region_ping()
 
 
 func _median_sample(sorted_samples: Array[float]) -> float:

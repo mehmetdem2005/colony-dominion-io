@@ -147,18 +147,41 @@ func probe_regions() -> void:
 
 func select_region(region_id: String) -> void:
 	if region_id == "auto":
-		NetworkSession.set_preferred_region("auto")
-		var best_id: String = region_probe.get_best_region_id()
-		if best_id.is_empty():
-			NetworkSession.select_region("auto", "Otomatik", "AUTO", {}, true)
-		else:
-			_apply_region_selection(best_id, true)
+		resolve_automatic_region()
 		regions_changed.emit()
 		_sync_preferences_deferred()
 		return
 	_apply_region_selection(region_id, false)
 	regions_changed.emit()
 	_sync_preferences_deferred()
+
+
+## Choose the region to play in on the player's behalf.
+##
+## There is no "Otomatik" region to be placed in — Edgegap has no such edge, and
+## pooling every automatic player worldwide into one queue meant a player in
+## Türkiye could be handed a server in Brazil. Automatic now resolves to a real
+## city, chosen by the lowest ping this device has actually measured there, and
+## that city is the queue. Until a region has been played it has no measurement,
+## so the first choice falls back to the catalogue's default.
+func resolve_automatic_region() -> void:
+	var candidates := PackedStringArray()
+	for region in get_regions():
+		candidates.append(String(region.get("id", "")))
+	if candidates.is_empty():
+		return
+	var chosen: String = NetworkSession.get_auto_region_id(candidates, candidates[0])
+	_apply_region_selection(chosen, true)
+
+
+## Attribute the ping just measured in a match to the region it was played in,
+## so the picker shows real numbers and automatic selection has something true
+## to work from.
+func record_match_region_ping() -> void:
+	var region_id: String = String(NetworkSession.match_assignment.get("region_id", ""))
+	NetworkSession.record_region_ping(region_id, NetworkSession.ping_ms)
+	if NetworkSession.region_is_automatic:
+		resolve_automatic_region()
 
 
 func sign_in_google() -> Dictionary:
@@ -380,12 +403,14 @@ func _on_region_updated(_region_id: String, _metrics: Dictionary) -> void:
 	regions_changed.emit()
 
 
-func _on_probe_cycle_completed(best_region_id: String) -> void:
+func _on_probe_cycle_completed(_best_region_id: String) -> void:
+	# The probe no longer decides anything. It has no endpoint to measure against
+	# — Edgegap publishes none — so its "best region" was an empty guess that
+	# still overwrote the player's region every twenty seconds, which is what
+	# split players who both believed they were on automatic. Region choice now
+	# comes from pings actually measured in matches.
 	if NetworkSession.preferred_region_id == "auto":
-		if not best_region_id.is_empty():
-			_apply_region_selection(best_region_id, true)
-		else:
-			NetworkSession.select_region("auto", "Otomatik", "AUTO", {}, true)
+		resolve_automatic_region()
 	else:
 		_apply_region_selection(NetworkSession.preferred_region_id, false)
 	if NetworkSession.connection_state == NetworkSession.ConnectionState.PROBING:

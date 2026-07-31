@@ -33,7 +33,7 @@ func _run() -> void:
 		"host": "203.0.113.10",
 		"port": 32000,
 		"join_ticket": "0123456789abcdef0123456789abcdef",
-		"region_id": "avrupa",
+		"region_id": "frankfurt",
 		"region_name": "Avrupa",
 		"region_short_name": "AVR",
 		"expires_at": int(Time.get_unix_time_from_system() * 1000.0) + 60_000,

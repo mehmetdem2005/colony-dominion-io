@@ -170,7 +170,7 @@ func _run() -> void:
 				if region_variant is Dictionary:
 					var region: Dictionary = region_variant
 					region_ids[String(region.get("id", ""))] = true
-			for required_id in ["auto", "avrupa", "asya", "guney_amerika"]:
+			for required_id in ["frankfurt", "newark", "singapore", "sao_paulo"]:
 				if not region_ids.has(required_id):
 					failures.append("Missing Edgegap placement target: %s" % required_id)
 

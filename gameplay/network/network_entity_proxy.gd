@@ -28,6 +28,7 @@ var _last_snapshot_tick: int = -1
 var _snapshot_buffer: Array[Dictionary] = []
 var _newest_server_ms: float = 0.0
 var _render_ms: float = -1.0
+var _visual_rotation_target: float = 0.0
 var _last_visual_team_id: int = -2
 var _last_visual_kind: StringName = &""
 var _display_name: String = ""
@@ -142,7 +143,7 @@ func _physics_process(delta: float) -> void:
 		_advance_local_prediction(delta)
 	else:
 		_advance_remote_interpolation(delta)
-	_refresh_world_presentation()
+	_refresh_world_presentation(delta)
 
 
 func _advance_local_prediction(delta: float) -> void:
@@ -220,15 +221,26 @@ func _sample_remote_position(delta: float) -> Vector2:
 	return newest.get("position", authoritative_position) as Vector2
 
 
-func _refresh_world_presentation() -> void:
+func _refresh_world_presentation(delta: float) -> void:
 	z_index = WorldDepthPolicy.depth_z(
 		global_position.y, WorldDepthPolicy.unit_sub_layer(entity_id)
 	)
-	if velocity.length_squared() <= 4.0:
+	# An online unit's velocity is the frame-to-frame difference of an
+	# interpolated position, so its direction carries noise that a simulated
+	# velocity does not. Snapping the sprite straight onto it made every ant
+	# twitch each frame — the shaking players see online but never offline,
+	# regardless of latency. Offline units use a speed floor and a smoothed
+	# rotation for exactly this reason; the proxy now matches them.
+	if velocity.length_squared() > ColonyUnit.FACING_SPEED_SQUARED_THRESHOLD:
+		facing_direction = velocity.normalized()
+		_visual_rotation_target = facing_direction.angle() + PI * 0.5
+	if not is_instance_valid(sprite):
 		return
-	facing_direction = velocity.normalized()
-	if is_instance_valid(sprite):
-		sprite.rotation = facing_direction.angle() + PI * 0.5
+	if kind == &"commander":
+		sprite.rotation = _visual_rotation_target
+		return
+	var rotation_blend: float = clampf(delta * ColonyUnit.SWARM_ROTATION_SMOOTH_SPEED, 0.0, 1.0)
+	sprite.rotation = lerp_angle(sprite.rotation, _visual_rotation_target, rotation_blend)
 
 
 func _refresh_visual_if_needed(force: bool = false) -> void:

@@ -1,2 +1,2 @@
-region pooling fix: automatic region no longer splits players
-2026-07-31T13:20:00Z
+ten edge cities, real per-region ping, no Otomatik row, ant jitter fixed
+2026-07-31T15:10:00Z

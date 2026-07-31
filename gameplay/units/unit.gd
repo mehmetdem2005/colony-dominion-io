@@ -17,6 +17,10 @@ const SWARM_VISUAL_SMOOTH_TIME: float = 1.0 / 20.0
 const SWARM_REDUCED_VISUAL_SMOOTH_TIME: float = 0.12
 const SWARM_VISUAL_MAX_OFFSET: float = 56.0
 const SWARM_ROTATION_SMOOTH_SPEED: float = 18.0
+## Below this speed a unit keeps its current facing. Slow drift carries too
+## little direction to be worth turning for, and turning for it looks like a
+## twitch. Shared with the online proxy so both sides settle the same way.
+const FACING_SPEED_SQUARED_THRESHOLD: float = 25.0
 const ACTIVATION_RECOVERY_DIRECTIONS: int = 12
 const ACTIVATION_RECOVERY_RINGS: int = 5
 const MAX_WORLD_SLIDE_ITERATIONS: int = 3
@@ -269,7 +273,7 @@ func _simulate_step(delta: float) -> void:
 	else:
 		_tick_combat_unit(simulation_delta)
 
-	if velocity.length_squared() > 25.0:
+	if velocity.length_squared() > FACING_SPEED_SQUARED_THRESHOLD:
 		facing_direction = velocity.normalized()
 		_visual_rotation_target = facing_direction.angle() + PI * 0.5
 		if definition.role == &"commander":
