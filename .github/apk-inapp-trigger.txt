@@ -1,2 +1,2 @@
-shared-only matchmaking APK rebuild
-2026-07-27T12:34:26Z
+bounded matchmaking join cost + cached ready endpoint
+2026-07-26T21:45:00Z

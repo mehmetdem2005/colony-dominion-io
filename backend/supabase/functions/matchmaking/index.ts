@@ -527,7 +527,12 @@ async function claimLobbyOnce(
   // A lobby that already carries a deployment is only worth joining while that
   // deployment is actually up. The container self-terminates when its match
   // ends, and nothing tells the database — so ask Edgegap.
-  if (requestId && !await deploymentIsLive(requestId)) {
+  // A lobby created moments ago cannot have outlived its container, so the
+  // liveness call is skipped for the common case. Without this guard every
+  // join into a busy lobby costs an Edgegap request.
+  const lobbyAgeMs = Date.now() - (Date.parse(String(lobby.created_at ?? "")) || Date.now());
+  const worthChecking = lobbyAgeMs > 45_000;
+  if (requestId && worthChecking && !await deploymentIsLive(requestId)) {
     // Drop this player's membership first, then retire the lobby for everyone
     // else too — the server behind it is gone, so nobody should be sent there.
     await rpc("leave_match_lobby", { p_player: playerId });
@@ -658,9 +663,13 @@ async function status(requestId: string): Promise<Response> {
   // window closes (or the lobby fills) the server converts the unclaimed slots
   // to bots.
   let humansInLobby = 1;
+  let lobbyId = "";
+  let lobbyRegionId = "";
   if (lobbiesEnabled()) {
     const lobby = await lobbyByRequestId(requestId);
     if (lobby?.id) {
+      lobbyId = String(lobby.id);
+      lobbyRegionId = String(lobby.region_id ?? "");
       humansInLobby = Math.max(Number(lobby.human_count ?? 1), 1);
       const target = Math.max(Number(lobby.target_humans ?? 10), 1);
       if (String(lobby.status ?? "") === "filling") {
@@ -676,7 +685,25 @@ async function status(requestId: string): Promise<Response> {
             bot_backfill_seconds_remaining: Math.ceil(remainingMs / 1000),
           }, 200);
         }
-        await patchLobby(String(lobby.id), { status: "ready" });
+        await patchLobby(lobbyId, { status: "ready" });
+      }
+
+      // Serve the endpoint from the lobby row once it is known.
+      //
+      // Every player polls this route once a second while they wait, and each
+      // poll used to call Edgegap. A ten-player lobby waiting forty seconds for
+      // its container therefore sent ~400 identical status requests for a
+      // single match, all asking about the same deployment. That is the first
+      // thing that falls over as the game grows: Edgegap rate-limits long
+      // before the game server does.
+      //
+      // The lobby table has carried host/port columns since it was created and
+      // nothing ever wrote them. Now the first poll to see READY stores the
+      // endpoint, and everyone else is answered from Postgres.
+      const cachedHost = String(lobby.host ?? "").trim();
+      const cachedPort = Number(lobby.port ?? 0);
+      if (cachedHost && Number.isInteger(cachedPort) && cachedPort > 0) {
+        return readyResponse(requestId, cachedHost, cachedPort, lobbyRegionId, humansInLobby);
       }
     }
   }
@@ -709,6 +736,11 @@ async function status(requestId: string): Promise<Response> {
   const city = String(payload.city ?? "").trim();
   const country = String(payload.country ?? "").trim();
   const actualLocation = [city, country].filter(Boolean).join(", ");
+  // First poll to see a live endpoint publishes it, so nobody else in this
+  // lobby has to ask Edgegap again.
+  if (lobbyId) {
+    await patchLobby(lobbyId, { host: publicIp, port: externalPort });
+  }
   const humanPlayers = Math.min(Math.max(humansInLobby, 1), gameMaxPlayers());
   return json({
     ok: true,
@@ -722,6 +754,35 @@ async function status(requestId: string): Promise<Response> {
       request_id: requestId,
       region_id: regionId,
       region_name: actualLocation || regionTarget?.displayName || "Edgegap — En Yakın",
+      region_short_name: regionTarget?.shortName ?? "EDGE",
+    },
+  });
+}
+
+// The cached form of the ready response. The city/country Edgegap reports are
+// not stored, so the label falls back to the region the lobby asked for — the
+// endpoint itself, which is what the client connects to, is exact.
+function readyResponse(
+  requestId: string,
+  host: string,
+  port: number,
+  regionId: string,
+  humansInLobby: number,
+): Response {
+  const regionTarget = REGION_TARGETS[regionId];
+  const humanPlayers = Math.min(Math.max(humansInLobby, 1), gameMaxPlayers());
+  return json({
+    ok: true,
+    ready: true,
+    human_players: humanPlayers,
+    bot_players: Math.max(gameMaxPlayers() - humanPlayers, 0),
+    assignment: {
+      transport: "enet",
+      host,
+      port,
+      request_id: requestId,
+      region_id: regionId,
+      region_name: regionTarget?.displayName ?? "Edgegap — En Yakın",
       region_short_name: regionTarget?.shortName ?? "EDGE",
     },
   });

@@ -27,6 +27,7 @@ MIGRATIONS = (
     "202607260010_matchmaking_join_in_progress.sql",
     "202607260011_matchmaking_lobby_grants.sql",
     "202607270012_matchmaking_compatibility_lock.sql",
+    "202607270013_matchmaking_lobby_scale.sql",
 )
 
 
