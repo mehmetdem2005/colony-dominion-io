@@ -64,7 +64,7 @@ func _apply_device_profile() -> void:
 	# it just stops the spiral.
 	max_server_steps_per_frame = mini(max_server_steps_per_frame, 3)
 	max_projectile_steps_per_frame = mini(max_projectile_steps_per_frame, 3)
-	# Rebuilding the spatial index ~8x a second is redundant at a 20 Hz tick.
+	# Rebuilding the spatial index ~8x a second is redundant at a 30 Hz tick.
 	spatial_rebuild_interval = maxf(spatial_rebuild_interval, 0.2)
 
 

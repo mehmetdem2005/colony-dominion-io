@@ -216,7 +216,34 @@ func _append_relevant_nest(
 func _finalize_entity_batch(
 	entities: Array[Dictionary], current_relevant: Dictionary, viewer_team_id: int, server_tick: int
 ) -> void:
-	entities.sort_custom(
+	# Everything inside the viewer's radius is present, whether or not this tick
+	# carries an update for it.
+	#
+	# The per-tick cap used to be applied to the whole in-radius list before the
+	# relevant set was collected, so anything ranked past it arrived at the client
+	# as a despawn and its proxy was destroyed. A tick later a slightly different
+	# 128 survived the cut and the proxy was rebuilt — in any fight large enough
+	# to exceed the cap (ten colonies of seventy ants clears it comfortably) the
+	# ants at the boundary blinked in and out continuously.
+	current_relevant.clear()
+	for entity in entities:
+		var relevant_id: int = int(entity.get("id", 0))
+		if relevant_id > 0:
+			current_relevant[relevant_id] = true
+
+	# The cap applies to what is actually transmitted, so drop the entities whose
+	# turn in the send rotation has not come round before ranking. Counting them
+	# spent cap slots on updates that were about to be discarded anyway, which
+	# starved the far units — they are sorted last and their turn came round least
+	# often, so they could go without an update indefinitely and sit frozen at a
+	# stale position.
+	var transmitted: Array[Dictionary] = []
+	for entity in entities:
+		var entity_id: int = int(entity.get("id", 0))
+		var due: bool = bool(entity.get("_due", false))
+		if entity_id > 0 and due:
+			transmitted.append(entity)
+	transmitted.sort_custom(
 		func(a: Dictionary, b: Dictionary) -> bool:
 			var priority_a: int = _snapshot_priority(a, viewer_team_id)
 			var priority_b: int = _snapshot_priority(b, viewer_team_id)
@@ -224,23 +251,15 @@ func _finalize_entity_batch(
 				return priority_a < priority_b
 			return float(a.get("_distance_sq", INF)) < float(b.get("_distance_sq", INF))
 	)
-	if entities.size() > NetworkProtocol.MAX_SNAPSHOT_ENTITIES:
-		entities.resize(NetworkProtocol.MAX_SNAPSHOT_ENTITIES)
-	current_relevant.clear()
-	for index in range(entities.size() - 1, -1, -1):
-		var entity: Dictionary = entities[index]
-		var entity_id: int = int(entity.get("id", 0))
-		if entity_id <= 0:
-			entities.remove_at(index)
-			continue
-		current_relevant[entity_id] = true
-		var due: bool = bool(entity.get("_due", false))
+	if transmitted.size() > NetworkProtocol.MAX_SNAPSHOT_ENTITIES:
+		transmitted.resize(NetworkProtocol.MAX_SNAPSHOT_ENTITIES)
+
+	entities.clear()
+	for entity in transmitted:
 		entity.erase("_distance_sq")
 		entity.erase("_due")
-		if not due:
-			entities.remove_at(index)
-			continue
-		_mark_entity_sent(viewer_team_id, entity_id, server_tick)
+		entities.append(entity)
+		_mark_entity_sent(viewer_team_id, int(entity.get("id", 0)), server_tick)
 
 
 func _snapshot_priority(entity: Dictionary, viewer_team_id: int) -> int:

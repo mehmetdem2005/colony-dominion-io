@@ -1,2 +1,2 @@
-movement latency: 238ms -> 193ms at 100ms ping
-2026-07-31T16:30:00Z
+snapshot cap fix: ants no longer blink out or freeze in large fights
+2026-07-31T20:15:00Z
