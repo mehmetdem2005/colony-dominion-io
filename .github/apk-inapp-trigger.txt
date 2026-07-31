@@ -1,2 +1,2 @@
-snapshot cap fix: ants no longer blink out or freeze in large fights
-2026-07-31T20:15:00Z
+per-entity interpolation buffer: remote ants stop freezing between updates
+2026-07-31T21:30:00Z

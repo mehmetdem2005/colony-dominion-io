@@ -192,7 +192,9 @@ func _sample_remote_position(delta: float) -> Vector2:
 	# the buffered window: never ahead of the newest sample (no extrapolation),
 	# and re-synced if it drifts too far behind after a stall.
 	var delay_ms: float = float(
-		NetworkProtocol.get_interpolation_delay_msec(_get_network_metric("jitter_ms"))
+		NetworkProtocol.get_interpolation_delay_msec(
+			_get_network_metric("jitter_ms"), roundi(_measured_sample_spacing_msec())
+		)
 	)
 	var target_ms: float = _newest_server_ms - delay_ms
 	if _render_ms < 0.0:
@@ -219,6 +221,27 @@ func _sample_remote_position(delta: float) -> Vector2:
 				newer_position, clampf((_render_ms - older_ms) / span, 0.0, 1.0)
 			)
 	return newest.get("position", authoritative_position) as Vector2
+
+
+## How far apart this entity's own updates actually arrive.
+##
+## The server updates a commander every tick, a nearby unit every second tick
+## and a distant one every fifth, so the spacing is a property of the entity
+## rather than of the connection. Measuring it from the buffer means the delay
+## follows a unit as it moves between those bands, with no table to keep in step
+## with the server's cadence.
+func _measured_sample_spacing_msec() -> float:
+	var default_spacing: float = float(NetworkProtocol.get_snapshot_interval_msec())
+	if _snapshot_buffer.size() < 2:
+		return default_spacing
+	var oldest_ms: float = float(_snapshot_buffer[0].get("server_ms", 0.0))
+	var newest_ms: float = float(
+		_snapshot_buffer[_snapshot_buffer.size() - 1].get("server_ms", 0.0)
+	)
+	var span_ms: float = newest_ms - oldest_ms
+	if span_ms <= 0.0:
+		return default_spacing
+	return maxf(span_ms / float(_snapshot_buffer.size() - 1), default_spacing)
 
 
 func _refresh_world_presentation(delta: float) -> void:

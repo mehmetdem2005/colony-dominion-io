@@ -120,6 +120,7 @@ jobs:
             tests/online_production_completion_test.gd
             tests/google_oauth_bot_backfill_test.gd
             tests/snapshot_entity_cap_regression_test.gd
+            tests/interpolation_buffer_regression_test.gd
           )
           for test_path in "${tests[@]}"; do
             "$GODOT_BIN" --headless --path . --script "res://$test_path"

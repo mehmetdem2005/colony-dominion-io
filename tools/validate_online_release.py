@@ -85,10 +85,18 @@ def validate_transport_and_presentation() -> None:
             "TRANSPORT_ENET",
             "RECONNECT_GRACE_SECONDS: float = 60.0",
             "MAX_SNAPSHOT_ENTITIES: int = 128",
-            "MAX_INTERPOLATION_DELAY_MSEC: int = 85",
+            # The buffer is sized per entity from its own update cadence, so what
+            # matters is that the derivation is present, not any one number.
+            "sample_spacing_msec: int = 0",
+            "MAX_INTERPOLATION_DELAY_MSEC",
         ),
     )
     require("INTERPOLATION_DELAY_MSEC: int = 110" not in protocol, "legacy 110 ms delay remains")
+    require(
+        "const INTERPOLATION_DELAY_MSEC" not in protocol,
+        "a flat interpolation delay is back; it starves every entity the server "
+        "updates more slowly than the commander",
+    )
 
     require_markers(
         "network/rivet_game_transport.gd",

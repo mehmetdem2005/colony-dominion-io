@@ -26,7 +26,10 @@ const RECONNECT_PERSIST_TTL_SECONDS: float = 75.0
 ## arrival wobble. Deriving it from SNAPSHOT_HZ means a change to the tick rate
 ## carries the buffer with it instead of leaving a hand-tuned number behind.
 const INTERPOLATION_MARGIN_MSEC: int = 7
-const MAX_INTERPOLATION_DELAY_MSEC: int = 85
+## Far units are deliberately updated only every few ticks, so their buffer has
+## to be able to grow to cover that spacing. Rendering them a little further in
+## the past is invisible; running out of buffer and freezing is not.
+const MAX_INTERPOLATION_DELAY_MSEC: int = 240
 const MAX_SNAPSHOT_ENTITIES: int = 128
 const SERVER_JOIN_TIMEOUT_SECONDS: float = 90.0
 const SERVER_START_WAIT_SECONDS: float = 5.0
@@ -46,13 +49,30 @@ static func get_snapshot_interval_msec() -> int:
 	return roundi(1000.0 / SNAPSHOT_HZ)
 
 
-static func get_interpolation_delay_msec(jitter_msec: int = 0) -> int:
+## How far in the past a remote entity should be rendered.
+##
+## [param sample_spacing_msec] is how far apart that entity's own updates
+## actually arrive, which is not the snapshot rate: the server sends a commander
+## every tick, a nearby unit every second tick and a distant one every fifth, so
+## one global buffer cannot fit them all. Sized for the commander, every other
+## unit ran out of buffer between its updates — the render clock reached the
+## newest sample it had, froze, and jumped when the next one landed. A near ant
+## spent about 40% of its time frozen and a far one about 75%, which reads as
+## stutter that no amount of bandwidth or ping would fix.
+static func get_interpolation_delay_msec(jitter_msec: int = 0, sample_spacing_msec: int = 0) -> int:
 	jitter_msec = maxi(jitter_msec, 0)
-	var interval_msec: int = get_snapshot_interval_msec()
+	var interval_msec: int = maxi(sample_spacing_msec, get_snapshot_interval_msec())
+	# Jitter widens the buffer but cannot run away with it: the ceiling is tied to
+	# the entity's own cadence, so a bad connection can at most double what that
+	# entity already needs. A flat ceiling would let jitter add the far units'
+	# whole allowance to the commander, which is the one thing the player watches.
+	var ceiling_msec: int = mini(
+		interval_msec * 2 + INTERPOLATION_MARGIN_MSEC, MAX_INTERPOLATION_DELAY_MSEC
+	)
 	return clampi(
 		interval_msec + INTERPOLATION_MARGIN_MSEC + roundi(float(jitter_msec) * 1.5),
 		interval_msec,
-		MAX_INTERPOLATION_DELAY_MSEC
+		ceiling_msec
 	)
 
 

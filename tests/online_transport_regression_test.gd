@@ -66,8 +66,18 @@ func _run() -> void:
 		failures.append("Mobile snapshot budget is too large")
 	if NetworkProtocol.DEFAULT_MAX_PLAYERS != 10:
 		failures.append("Protocol capacity differs from the ten-colony match")
-	if NetworkProtocol.get_interpolation_delay_msec(1000) > 85:
+	# The buffer is sized per entity, so the guard is per cadence: even on a
+	# terrible connection the commander — the unit the player is watching — must
+	# not be pushed far into the past.
+	if NetworkProtocol.get_interpolation_delay_msec(1000, 0) > 85:
 		failures.append("Adaptive interpolation exceeds the mobile latency budget")
+	if (
+		NetworkProtocol.get_interpolation_delay_msec(
+			1000, NetworkProtocol.get_snapshot_interval_msec() * 5
+		)
+		> NetworkProtocol.MAX_INTERPOLATION_DELAY_MSEC
+	):
+		failures.append("Interpolation ceiling is not enforced for slow-cadence entities")
 
 	var proxy_scene := load("res://scenes/network/network_entity_proxy.tscn") as PackedScene
 	if proxy_scene == null:
