@@ -1,2 +1,2 @@
-bounded matchmaking join cost + cached ready endpoint
-2026-07-26T21:45:00Z
+region pooling fix: automatic region no longer splits players
+2026-07-31T13:20:00Z

@@ -29,6 +29,8 @@ var connection_state: ConnectionState = ConnectionState.IDLE
 var connection_message: String = ""
 var preferred_region_id: String = "auto"
 var selected_region_id: String = "auto"
+## True while the shown region came from the ping probe rather than the player.
+var region_is_automatic: bool = true
 var selected_region_name: String = "Otomatik"
 var active_region_short_name: String = "AUTO"
 var ping_ms: int = -1
@@ -80,14 +82,34 @@ func set_preferred_region(region_id: String) -> void:
 
 
 func select_region(
-	region_id: String, display_name: String, short_name: String, metrics: Dictionary = {}
+	region_id: String,
+	display_name: String,
+	short_name: String,
+	metrics: Dictionary = {},
+	automatic: bool = false
 ) -> void:
 	selected_region_id = region_id
 	selected_region_name = display_name
 	active_region_short_name = short_name
+	region_is_automatic = automatic
 	set_preferred_region(region_id)
 	_apply_metrics(metrics)
 	region_changed.emit(selected_region_id, selected_region_name)
+
+
+## The region the matchmaker groups this player by.
+##
+## Not the same thing as the region being displayed. The ping probe re-runs
+## every twenty seconds and, while the player is on "Otomatik", writes whichever
+## continent it measured as nearest into selected_region_id — so the menu says
+## "Otomatik — Avrupa" while the session is actually pinned to Avrupa. Two
+## phones probe independently and disagree, which quietly puts players who both
+## believe they are on automatic into different matchmaking pools.
+##
+## Automatic means "put me wherever the other automatic players are"; only a
+## deliberate pick in the region menu narrows the pool.
+func get_matchmaking_region_id() -> String:
+	return "auto" if region_is_automatic else selected_region_id
 
 
 func update_region_metrics(region_id: String, metrics: Dictionary) -> void:

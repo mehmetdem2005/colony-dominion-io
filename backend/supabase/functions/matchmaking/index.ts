@@ -671,20 +671,18 @@ async function status(requestId: string): Promise<Response> {
       lobbyId = String(lobby.id);
       lobbyRegionId = String(lobby.region_id ?? "");
       humansInLobby = Math.max(Number(lobby.human_count ?? 1), 1);
-      const target = Math.max(Number(lobby.target_humans ?? 10), 1);
+      // No queue hold. The countdown used to keep everyone waiting for the fill
+      // window to expire before they were allowed into their own match, which
+      // bought nothing: what puts two players together is sharing a lobby, not
+      // being released at the same instant. Since a match already running can be
+      // joined, holding people back only delayed the first player and made the
+      // wait look like the reason they ended up apart.
+      //
+      // So a player enters as soon as the server is up, and the lobby keeps
+      // accepting real players into that same match until it is full — each one
+      // taking a slot the bot backfill would otherwise have used. When it fills,
+      // the next player opens the next match.
       if (String(lobby.status ?? "") === "filling") {
-        const deadline = Date.parse(String(lobby.fill_deadline ?? "")) || 0;
-        const remainingMs = deadline - Date.now();
-        if (remainingMs > 0 && humansInLobby < target) {
-          return json({
-            ok: true,
-            ready: false,
-            status: "queued",
-            human_players_waiting: humansInLobby,
-            target_players: target,
-            bot_backfill_seconds_remaining: Math.ceil(remainingMs / 1000),
-          }, 200);
-        }
         await patchLobby(lobbyId, { status: "ready" });
       }
 

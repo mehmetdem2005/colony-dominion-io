@@ -91,6 +91,15 @@ func _validate_project_contract() -> void:
 	var online_services: String = FileAccess.get_file_as_string("res://autoload/online_services.gd")
 	if not online_services.contains("EdgegapMatchmakingClient"):
 		_failures.append("OnlineServices is not wired to Edgegap matchmaking")
+	# The ping probe rewrites selected_region_id every cycle while the player is
+	# on "Otomatik". Queueing on that field puts two players who both believe
+	# they are on automatic into different pools, purely because their phones
+	# measured different continents — which is invisible from the menu.
+	if not online_services.contains("NetworkSession.get_matchmaking_region_id()"):
+		_failures.append("Matchmaking queues on the probe-written region instead of the pool id")
+	var session_source: String = FileAccess.get_file_as_string("res://autoload/network_session.gd")
+	if not session_source.contains("func get_matchmaking_region_id"):
+		_failures.append("NetworkSession no longer separates display region from pool region")
 
 	var export_text: String = FileAccess.get_file_as_string("res://export_presets.cfg")
 	if not export_text.contains("permissions/internet=true"):

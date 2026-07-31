@@ -150,7 +150,7 @@ func select_region(region_id: String) -> void:
 		NetworkSession.set_preferred_region("auto")
 		var best_id: String = region_probe.get_best_region_id()
 		if best_id.is_empty():
-			NetworkSession.select_region("auto", "Otomatik", "AUTO", {})
+			NetworkSession.select_region("auto", "Otomatik", "AUTO", {}, true)
 		else:
 			_apply_region_selection(best_id, true)
 		regions_changed.emit()
@@ -266,11 +266,14 @@ func begin_matchmaking(display_name: String) -> Dictionary:
 		NetworkSession.ConnectionState.MATCHMAKING, "Uygun maç aranıyor"
 	)
 	var region_preference: String = NetworkSession.preferred_region_id
+	# Deliberately not selected_region_id: while the player is on "Otomatik" that
+	# field holds whatever continent this device's ping probe last measured, and
+	# two devices disagreeing there is enough to put them in separate matches.
 	var join_result: Dictionary = await matchmaking.join_queue(
 		auth.get_access_token(),
 		auth.get_user_id(),
 		region_preference,
-		NetworkSession.selected_region_id,
+		NetworkSession.get_matchmaking_region_id(),
 		display_name
 	)
 	if not bool(join_result.get("ok", false)):
@@ -382,7 +385,7 @@ func _on_probe_cycle_completed(best_region_id: String) -> void:
 		if not best_region_id.is_empty():
 			_apply_region_selection(best_region_id, true)
 		else:
-			NetworkSession.select_region("auto", "Otomatik", "AUTO", {})
+			NetworkSession.select_region("auto", "Otomatik", "AUTO", {}, true)
 	else:
 		_apply_region_selection(NetworkSession.preferred_region_id, false)
 	if NetworkSession.connection_state == NetworkSession.ConnectionState.PROBING:
@@ -401,16 +404,19 @@ func _on_auth_session_changed(session: Dictionary) -> void:
 func _apply_region_selection(region_id: String, automatic: bool) -> void:
 	var region: Dictionary = get_region(region_id)
 	if region.is_empty():
-		NetworkSession.select_region("auto", "Otomatik", "AUTO", {})
+		NetworkSession.select_region("auto", "Otomatik", "AUTO", {}, true)
 		return
 	var display_name: String = String(region.get("display_name", region_id))
 	if automatic:
 		display_name = "Otomatik — %s" % display_name
+	# The probe result is a label and a ping reading, not a narrowing of who this
+	# player can be matched with — see NetworkSession.get_matchmaking_region_id().
 	NetworkSession.select_region(
 		region_id,
 		display_name,
 		String(region.get("short_name", region_id.to_upper())),
-		region.get("metrics", {}) as Dictionary
+		region.get("metrics", {}) as Dictionary,
+		automatic
 	)
 	if automatic:
 		NetworkSession.set_preferred_region("auto")
