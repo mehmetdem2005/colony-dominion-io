@@ -7,7 +7,11 @@ const CHANNEL_SNAPSHOT: int = 1
 const CHANNEL_INPUT: int = 2
 const CHANNEL_TELEMETRY: int = 3
 
-const SNAPSHOT_HZ: float = 20.0
+## Snapshots are emitted one per authoritative tick, so this MUST equal the
+## server_tick_rate in the match rules resource. NetworkEntityProxy converts a
+## snapshot's tick number into milliseconds with it; if the two drift apart,
+## remote units interpolate at the wrong speed with nothing to show for it.
+const SNAPSHOT_HZ: float = 30.0
 const INPUT_HZ: float = 30.0
 const PING_INTERVAL_SECONDS: float = 1.0
 const PING_TIMEOUT_SECONDS: float = 3.0
@@ -16,8 +20,12 @@ const RECONNECT_GRACE_SECONDS: float = 60.0
 const RECONNECT_RETRY_SECONDS: float = 1.25
 const RECONNECT_PERSIST_REFRESH_SECONDS: float = 4.0
 const RECONNECT_PERSIST_TTL_SECONDS: float = 75.0
-const INTERPOLATION_DELAY_MSEC: int = 55
-const MIN_INTERPOLATION_DELAY_MSEC: int = 45
+## Remote units are rendered this far in the past so there is always a newer
+## sample to interpolate toward. The floor is one snapshot interval — below it
+## the render clock runs out of buffer and units stutter — plus a margin for
+## arrival wobble. Deriving it from SNAPSHOT_HZ means a change to the tick rate
+## carries the buffer with it instead of leaving a hand-tuned number behind.
+const INTERPOLATION_MARGIN_MSEC: int = 7
 const MAX_INTERPOLATION_DELAY_MSEC: int = 85
 const MAX_SNAPSHOT_ENTITIES: int = 128
 const SERVER_JOIN_TIMEOUT_SECONDS: float = 90.0
@@ -34,11 +42,16 @@ const TRANSPORT_WEBSOCKET: String = "websocket"
 const SERVER_PEER_ID: int = 1
 
 
+static func get_snapshot_interval_msec() -> int:
+	return roundi(1000.0 / SNAPSHOT_HZ)
+
+
 static func get_interpolation_delay_msec(jitter_msec: int = 0) -> int:
 	jitter_msec = maxi(jitter_msec, 0)
+	var interval_msec: int = get_snapshot_interval_msec()
 	return clampi(
-		INTERPOLATION_DELAY_MSEC + roundi(float(jitter_msec) * 1.5),
-		MIN_INTERPOLATION_DELAY_MSEC,
+		interval_msec + INTERPOLATION_MARGIN_MSEC + roundi(float(jitter_msec) * 1.5),
+		interval_msec,
 		MAX_INTERPOLATION_DELAY_MSEC
 	)
 

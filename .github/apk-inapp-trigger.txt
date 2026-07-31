@@ -1,2 +1,2 @@
-ten edge cities, real per-region ping, no Otomatik row, ant jitter fixed
-2026-07-31T15:10:00Z
+movement latency: 238ms -> 193ms at 100ms ping
+2026-07-31T16:30:00Z

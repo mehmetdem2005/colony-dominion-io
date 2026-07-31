@@ -6,7 +6,7 @@
 script = ExtResource("1_rules")
 match_duration_seconds = 1200.0
 unit_cap_per_colony = 72
-server_tick_rate = 20.0
+server_tick_rate = 30.0
 projectile_tick_rate = 30.0
 max_server_steps_per_frame = 6
 max_projectile_steps_per_frame = 5

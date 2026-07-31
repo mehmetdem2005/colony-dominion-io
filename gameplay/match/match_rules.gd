@@ -23,7 +23,11 @@ extends Resource
 @export_range(32, 8192, 1) var max_logical_projectiles: int = 2048
 
 @export_category("Network")
-@export_range(1, 240, 1) var max_commands_per_second: int = 45
+## Per-peer command budget. Anything past it is dropped without telling the
+## client, so it has to clear the honest traffic pattern with room to spare:
+## movement alone can reach 45/s when a stick is being swept, and an order the
+## player actually pressed must never be the thing that gets thrown away.
+@export_range(1, 240, 1) var max_commands_per_second: int = 90
 @export_range(10, 600, 1) var command_journal_capacity: int = 240
 
 

@@ -3,16 +3,25 @@ extends Node2D
 
 const PROXY_SCENE := preload("res://scenes/network/network_entity_proxy.tscn")
 const WORLD_STREAM_SCRIPT := preload("res://gameplay/world/world_stream_manager.gd")
+## How far the stick has to move before the change is worth an extra packet.
+## Small enough that any deliberate turn qualifies, large enough that stick
+## noise does not flood the command budget.
+const MOVEMENT_RESEND_EPSILON_SQUARED: float = 0.0025
+## Ceiling on movement packets per second. Sits below the server's command
+## budget so a swept stick can never starve the player's other orders.
+const MOVEMENT_MAX_SEND_HZ: float = 45.0
 
 # Mirror the authoritative server's world extents exactly (see MatchController).
 var world_bounds := MatchController.WORLD_BOUNDS
 var _world_stream: WorldStreamManager
 var _proxies: Dictionary = {}
 var _local_commander: NetworkEntityProxy = null
+var _last_sent_movement := Vector2.ZERO
 var _local_nest: NetworkEntityProxy = null
 var _movement_input := Vector2.ZERO
 var _joystick_input := Vector2.ZERO
 var _input_left: float = 0.0
+var _movement_gate_left: float = 0.0
 var _latest_player_state: Dictionary = {}
 var _latest_colony_summaries: Array[Dictionary] = []
 var _leaving: bool = false
@@ -97,8 +106,24 @@ func _physics_process(delta: float) -> void:
 	if is_instance_valid(_local_commander):
 		_local_commander.set_prediction_input(_movement_input)
 	_input_left -= delta
-	if _input_left <= 0.0:
+	_movement_gate_left -= delta
+	# A change of direction is the one thing the player is waiting on, so it goes
+	# out as soon as it happens instead of sitting in a fixed 30 Hz queue for up
+	# to another 33 ms. The timer stays as a keep-alive for held input, which is
+	# what the server needs to keep moving between changes.
+	#
+	# The gate matters: the server silently drops anything past
+	# max_commands_per_second, so an unbounded send-on-change would let a swept
+	# stick spend the whole budget on movement and get the player's next attack
+	# or gather thrown away. Movement can never exceed the gate's rate, which
+	# leaves the rest of the budget for actual orders.
+	var direction_changed: bool = (
+		_movement_input.distance_squared_to(_last_sent_movement) > MOVEMENT_RESEND_EPSILON_SQUARED
+	)
+	if (direction_changed and _movement_gate_left <= 0.0) or _input_left <= 0.0:
 		_input_left = 1.0 / NetworkProtocol.INPUT_HZ
+		_movement_gate_left = 1.0 / MOVEMENT_MAX_SEND_HZ
+		_last_sent_movement = _movement_input
 		GameTransport.send_command(&"move", {"vector": _movement_input})
 	if _input_enabled:
 		_handle_keyboard_commands()

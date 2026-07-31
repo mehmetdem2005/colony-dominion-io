@@ -61,6 +61,7 @@ var _server_match_id: String = ""
 var _server_id: String = ""
 var _server_build_id: String = ""
 var _snapshot_left: float = 0.0
+var _last_broadcast_tick: int = -1
 var _ping_left: float = 0.0
 var _ping_nonce: int = 0
 var _pending_pings: Dictionary = {}
@@ -646,8 +647,19 @@ func _server_process(delta: float) -> void:
 		else:
 			_empty_since_msec = 0
 	if _match_start_gate == null or _match_start_gate.is_started():
+		# Send a snapshot when the simulation has actually produced a new tick,
+		# not on a timer of its own.
+		#
+		# Both ran at 20 Hz but on unrelated accumulators, so their phase was
+		# arbitrary: a snapshot could be assembled moments before the tick that
+		# would have updated it, shipping state up to a full tick stale for no
+		# reason. That is 25 ms of pure latency on average, paid by every player
+		# on every command, and it is invisible in a ping reading. Following the
+		# tick removes it and cannot send faster than the simulation advances.
 		_snapshot_left -= delta
-		if _snapshot_left <= 0.0:
+		var current_tick: int = _match.get_server_tick() if is_instance_valid(_match) else 0
+		if current_tick != _last_broadcast_tick or _snapshot_left <= 0.0:
+			_last_broadcast_tick = current_tick
 			_snapshot_left = 1.0 / NetworkProtocol.SNAPSHOT_HZ
 			_broadcast_snapshots()
 	for peer_id_variant in _auth_deadlines.keys():
