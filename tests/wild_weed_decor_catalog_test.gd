@@ -44,6 +44,11 @@ func _validate_atlas(failures: PackedStringArray) -> void:
 		failures.append("Wild weed atlas must be %dx%d" % [ATLAS_SIZE.x, ATLAS_SIZE.y])
 		return
 	var image := atlas_texture.get_image()
+	# Textures import to a VRAM-compressed format, which get_pixelv() cannot read.
+	# Decompress the CPU-side copy so this check keeps working; the imported
+	# asset is untouched.
+	if image != null and image.is_compressed():
+		image.decompress()
 	if image == null or image.is_empty():
 		failures.append("Wild weed atlas image cannot be decoded")
 		return

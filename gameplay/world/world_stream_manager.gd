@@ -14,7 +14,18 @@ const CHUNK_SIZE: float = 1200.0
 const ACTIVE_RADIUS: int = 1
 const CACHE_RADIUS: int = 2
 const BASE_MAX_RESIDENT_CHUNKS: int = 18
-const MAX_RESIDENT_CHUNKS: int = 84
+## Ceiling on resident chunks.
+##
+## It has to clear what the streamer cannot trim. Every interest anchor keeps a
+## full ACTIVE ring — (2 * ACTIVE_RADIUS + 1) squared chunks — and those are
+## added unconditionally; only warm chunks can be dropped to fit. At 84 a
+## ten-colony server wanted 86 and was allowed 84, so it evicted chunks it
+## immediately needed again, every frame, for the whole match. Deriving the
+## ceiling from the worst case where no anchor's ring overlaps another's means
+## the budget can never sit below the un-trimmable set again.
+const MAX_RESIDENT_CHUNKS: int = (
+	NetworkProtocol.DEFAULT_MAX_PLAYERS * (2 * ACTIVE_RADIUS + 1) * (2 * ACTIVE_RADIUS + 1) + 6
+)
 const STREAM_PLAN_INTERVAL: float = 0.16
 const STREAM_FRAME_BUDGET_USEC: int = 1400
 const MAX_BUILD_STEPS_PER_FRAME: int = 5

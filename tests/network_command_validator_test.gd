@@ -1,17 +1,29 @@
-extends SceneTree
+extends Node
+
+# Runs as a scene, not via --script.
+#
+# A --script run compiles this file, and everything it preloads, before the
+# autoloads exist. MatchController's own preload of colony_controller.gd
+# therefore resolved to a script that could not compile — UnitCatalog was not a
+# known identifier yet — and the broken result was baked into the class
+# constant, so `new()` failed and the test sat there forever with no way to
+# recover. Loading the scene again does not help: the poisoned constant lives
+# inside the already-compiled class. Booting this as the main scene registers
+# the autoloads first, which is the only ordering that makes the gameplay stack
+# loadable at all.
 
 const CONTROLLER_SCRIPT := preload("res://gameplay/colony/colony_controller.gd")
 const VALIDATOR_SCRIPT := preload("res://gameplay/network/network_command_validator.gd")
 
 
-func _initialize() -> void:
-	call_deferred("_run_test")
+func _ready() -> void:
+	_run_test.call_deferred()
 
 
 func _run_test() -> void:
 	var controller := CONTROLLER_SCRIPT.new() as ColonyController
 	controller.owner_peer_id = 7
-	root.add_child(controller)
+	get_tree().root.add_child(controller)
 	var valid_move := {
 		"sequence": 1,
 		"client_tick": 10,
@@ -69,7 +81,7 @@ func _run_test() -> void:
 		_fail("A valid production command was rejected")
 		return
 	print("PASS network_command_validator_test")
-	quit(0)
+	get_tree().quit(0)
 
 
 func _is_valid(result: Dictionary) -> bool:
@@ -78,4 +90,4 @@ func _is_valid(result: Dictionary) -> bool:
 
 func _fail(message: String) -> void:
 	push_error(message)
-	quit(1)
+	get_tree().quit(1)

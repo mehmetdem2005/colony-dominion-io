@@ -1,17 +1,32 @@
-extends SceneTree
+extends Node
+
+const DESIGN_WIDTH: float = 1280.0
+const DESIGN_HEIGHT: float = 720.0
+
+# Runs as a scene, not via --script.
+#
+# A --script run compiles this file, and everything it preloads, before the
+# autoloads exist. MatchController's own preload of colony_controller.gd
+# therefore resolved to a script that could not compile — UnitCatalog was not a
+# known identifier yet — and the broken result was baked into the class
+# constant, so `new()` failed and the test sat there forever with no way to
+# recover. Loading the scene again does not help: the poisoned constant lives
+# inside the already-compiled class. Booting this as the main scene registers
+# the autoloads first, which is the only ordering that makes the gameplay stack
+# loadable at all.
 
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
 const AVOIDANCE_SCRIPT := preload("res://gameplay/units/local_obstacle_avoidance.gd")
 const WORLD_OBSTACLE_BIT: int = 1 << 6
 
 
-func _initialize() -> void:
-	call_deferred("_run_test")
+func _ready() -> void:
+	_run_test.call_deferred()
 
 
 func _run_test() -> void:
 	var test_root := Node2D.new()
-	root.add_child(test_root)
+	get_tree().root.add_child(test_root)
 	var body := CharacterBody2D.new()
 	var body_shape_node := CollisionShape2D.new()
 	var body_shape := CircleShape2D.new()
@@ -30,7 +45,7 @@ func _run_test() -> void:
 	obstacle.add_child(obstacle_shape_node)
 	test_root.add_child(obstacle)
 	obstacle.global_position = Vector2(74.0, 0.0)
-	await physics_frame
+	await get_tree().physics_frame
 
 	var avoidance := AVOIDANCE_SCRIPT.new() as UnitLocalObstacleAvoidance
 	avoidance.configure(113, body.global_position)
@@ -42,8 +57,8 @@ func _run_test() -> void:
 		return
 
 	var hud := HUD_SCENE.instantiate() as ColonyHUD
-	root.add_child(hud)
-	await process_frame
+	get_tree().root.add_child(hud)
+	await get_tree().process_frame
 	var hud_root := hud.get_node_or_null("HUDRoot") as Control
 	if hud_root == null:
 		_fail("HUD root was not created")
@@ -54,15 +69,37 @@ func _run_test() -> void:
 	if resource_dock == null or minimap_dock == null or production_dock == null:
 		_fail("One or more production HUD docks are missing")
 		return
-	if resource_dock.size.x > 150.0:
-		_fail("Resource dock is wider than the compact mobile target")
+	# These used to pin the old layout: a narrow vertical resource dock with the
+	# minimap beside it. The HUD is now a horizontal resource strip with the
+	# minimap beneath, so the numbers described a design that no longer exists.
+	# What actually matters is unchanged — the docks have to fit the phone and
+	# must not sit on top of each other — so that is what is checked.
+	if resource_dock.size.x > DESIGN_WIDTH * 0.4:
+		_fail(
+			(
+				"Resource strip takes more than 40%% of the screen width: %.0f of %.0f"
+				% [resource_dock.size.x, DESIGN_WIDTH]
+			)
+		)
 		return
-	if minimap_dock.position.x <= resource_dock.position.x + resource_dock.size.x:
-		_fail("Minimap is not positioned beside the resource dock")
+	if production_dock.size.y > DESIGN_HEIGHT * 0.3:
+		_fail(
+			(
+				"Production dock exceeds the mobile vertical budget: %.0f of %.0f"
+				% [production_dock.size.y, DESIGN_HEIGHT]
+			)
+		)
 		return
-	if production_dock.size.y > 170.0:
-		_fail("Production dock exceeds the mobile vertical budget")
-		return
+	for pair in [
+		[resource_dock, minimap_dock, "resource strip", "minimap"],
+		[resource_dock, production_dock, "resource strip", "production dock"],
+		[minimap_dock, production_dock, "minimap", "production dock"],
+	]:
+		var first := pair[0] as Control
+		var second := pair[1] as Control
+		if Rect2(first.position, first.size).intersects(Rect2(second.position, second.size)):
+			_fail("HUD docks overlap: %s and %s" % [pair[2], pair[3]])
+			return
 
 	print(
 		(
@@ -70,9 +107,9 @@ func _run_test() -> void:
 			% [resolved, resource_dock.size, minimap_dock.size, production_dock.size]
 		)
 	)
-	quit(0)
+	get_tree().quit(0)
 
 
 func _fail(message: String) -> void:
 	push_error(message)
-	quit(1)
+	get_tree().quit(1)

@@ -1,6 +1,9 @@
-extends SceneTree
+extends Node
 
-const UNIT_SCENE := preload("res://scenes/units/unit.tscn")
+# Runs as a scene, not via --script: a --script run compiles this file, and
+# everything it preloads, before the autoloads exist, so unit.tscn's script
+# cannot compile and instantiate() hands back null. The test then had no way to
+# report that and simply never terminated.
 
 const MINIMUM_TEXTURE_HEIGHTS: Dictionary = {
 	"res://assets/units/commander.png": 512,
@@ -12,16 +15,23 @@ const MINIMUM_TEXTURE_HEIGHTS: Dictionary = {
 }
 
 
-func _initialize() -> void:
-	call_deferred("_run_test")
+func _ready() -> void:
+	_run_test.call_deferred()
 
 
 func _run_test() -> void:
 	if not bool(ProjectSettings.get_setting("physics/common/physics_interpolation", false)):
 		_fail("Physics interpolation is disabled")
 		return
-	var unit := UNIT_SCENE.instantiate() as ColonyUnit
-	root.add_child(unit)
+	var unit_scene := load("res://scenes/units/unit.tscn") as PackedScene
+	if unit_scene == null:
+		_fail("Unit scene could not be loaded")
+		return
+	var unit := unit_scene.instantiate() as ColonyUnit
+	if unit == null:
+		_fail("Unit scene did not instantiate a ColonyUnit")
+		return
+	get_tree().root.add_child(unit)
 	var unit_sprite := unit.get_node("VisualRoot/Sprite2D") as Sprite2D
 	if unit_sprite.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
 		_fail("Unit art is not using smooth downscale filtering")
@@ -36,9 +46,9 @@ func _run_test() -> void:
 			_fail("Visual asset was destructively downscaled: %s" % path)
 			return
 	print("PASS visual_quality_regression_test")
-	quit(0)
+	get_tree().quit(0)
 
 
 func _fail(message: String) -> void:
 	push_error(message)
-	quit(1)
+	get_tree().quit(1)

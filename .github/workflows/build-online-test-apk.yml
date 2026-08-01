@@ -126,6 +126,21 @@ jobs:
             "$GODOT_BIN" --headless --path . --script "res://$test_path"
           done
 
+          # These exercise the gameplay stack, so they boot as a scene: a
+          # --script run compiles their preloads before the autoloads exist and
+          # hands back scripts that cannot instantiate.
+          scene_tests=(
+            tests/network_command_validator_test.tscn
+            tests/swarm_scheduler_cadence_test.tscn
+            tests/swarm_crowd_stress_test.tscn
+            tests/runtime_streaming_regression_test.tscn
+            tests/ai_navigation_ui_regression_test.tscn
+            tests/visual_quality_regression_test.tscn
+          )
+          for scene_path in "${scene_tests[@]}"; do
+            timeout 300 "$GODOT_BIN" --headless --path . "res://$scene_path"
+          done
+
       - name: Verify live Edgegap matchmaking boundary
         run: |
           set -euo pipefail
