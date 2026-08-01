@@ -35,7 +35,7 @@ func configure(
 	costs = unit_costs.duplicate(true)
 	# Five of these plus the upgrade slot have to fit inside the production
 	# frame's card area without the container overflowing its border.
-	custom_minimum_size = Vector2(116.0, 108.0)
+	custom_minimum_size = Vector2(112.0, 108.0)
 
 
 func _ready() -> void:

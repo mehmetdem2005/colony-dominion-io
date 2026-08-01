@@ -3,6 +3,9 @@ extends Node
 
 signal session_changed(session: Dictionary)
 signal auth_error(message: String)
+## Emitted with the result of a refresh so callers that arrived while one was
+## already running get that answer instead of racing it.
+signal refresh_completed(result: Dictionary)
 
 const SESSION_PATH: String = "user://supabase_session.vault"
 const PKCE_VERIFIER_PATTERN: String = "^[A-Za-z0-9._~-]{43,128}$"
@@ -12,6 +15,7 @@ var _publishable_key: String = ""
 var _persist_refresh_token: bool = false
 var _http: HttpJsonClient
 var _session: Dictionary = {}
+var _refresh_in_flight: bool = false
 
 
 func _ready() -> void:
@@ -180,11 +184,42 @@ func sign_in_refresh_token(refresh_token: String) -> Dictionary:
 	return _consume_auth_response(response)
 
 
+## Restore the signed-in session from the stored refresh token.
+##
+## Two callers reach this on almost every launch: the restore that starts a
+## frame after boot, and the player pressing a button that needs a session
+## before that has come back. The HTTP client is single-flight and answers the
+## second one with request_busy immediately, so a perfectly good stored session
+## was reported as "not signed in" and the Google screen appeared on a relaunch
+## the player had never signed out of. Supabase also rotates refresh tokens, so
+## firing a second request with the same token is not merely wasteful — it
+## presents an already-consumed token and can invalidate the whole session.
+##
+## A refresh already under way is therefore joined rather than repeated.
 func refresh_session() -> Dictionary:
+	if _refresh_in_flight:
+		return await refresh_completed
 	var refresh_token: String = String(_session.get("refresh_token", ""))
 	if refresh_token.is_empty():
 		return _fail("Yenileme oturumu bulunamadı")
-	return await sign_in_refresh_token(refresh_token)
+	_refresh_in_flight = true
+	var result: Dictionary = await _refresh_with_retry(refresh_token)
+	_refresh_in_flight = false
+	refresh_completed.emit(result)
+	return result
+
+
+## request_busy means another request holds the shared client this instant, not
+## that the token was rejected. Give it a moment rather than sending the player
+## back to a sign-in screen over a local collision.
+func _refresh_with_retry(refresh_token: String) -> Dictionary:
+	var result: Dictionary = {}
+	for attempt in range(3):
+		result = await sign_in_refresh_token(refresh_token)
+		if bool(result.get("ok", false)) or String(result.get("error", "")) != "request_busy":
+			return result
+		await get_tree().create_timer(0.25 * float(attempt + 1), true, false, true).timeout
+	return result
 
 
 func fetch_user() -> Dictionary:

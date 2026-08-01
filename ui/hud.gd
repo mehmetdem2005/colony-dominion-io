@@ -518,9 +518,9 @@ func _build_production_panel() -> void:
 	production_panel.anchor_top = 1.0
 	production_panel.anchor_right = 0.5
 	production_panel.anchor_bottom = 1.0
-	production_panel.offset_left = -398.0
+	production_panel.offset_left = -397.0
 	production_panel.offset_top = -188.0
-	production_panel.offset_right = 370.0
+	production_panel.offset_right = 369.0
 	production_panel.offset_bottom = -10.0
 	production_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	production_panel.z_index = 30

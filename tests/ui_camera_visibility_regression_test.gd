@@ -1,15 +1,21 @@
-extends SceneTree
+extends Node
 
-const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
-const CAMERA_SCRIPT := preload("res://gameplay/world/camera_controller.gd")
+# Runs as a scene, not via --script: a --script run compiles this file and its
+# preloads before the autoloads exist, so hud.tscn's script cannot compile and
+# instantiate() hands back null. The test then had no way to report it and did
+# not terminate.
 
 
-func _initialize() -> void:
-	call_deferred("_run_test")
+func _ready() -> void:
+	_run_test.call_deferred()
 
 
 func _run_test() -> void:
-	var camera := CAMERA_SCRIPT.new() as PlayerCameraController
+	var camera_script := load("res://gameplay/world/camera_controller.gd") as GDScript
+	if camera_script == null:
+		_fail("Camera controller script could not be loaded")
+		return
+	var camera := camera_script.new() as PlayerCameraController
 	camera.set_safe_frame_insets(Vector4(24.0, 72.0, 24.0, 190.0))
 	var viewport_size := Vector2(1280.0, 720.0)
 	var safe_rect: Rect2 = camera.get_gameplay_safe_rect_for_size(viewport_size)
@@ -33,11 +39,18 @@ func _run_test() -> void:
 		return
 	camera.free()
 
-	var hud := HUD_SCENE.instantiate() as ColonyHUD
-	root.add_child(hud)
-	await process_frame
+	var hud_scene := load("res://scenes/ui/hud.tscn") as PackedScene
+	if hud_scene == null:
+		_fail("HUD scene could not be loaded")
+		return
+	var hud := hud_scene.instantiate() as ColonyHUD
+	if hud == null:
+		_fail("HUD scene did not instantiate a ColonyHUD")
+		return
+	get_tree().root.add_child(hud)
+	await get_tree().process_frame
 	hud._apply_responsive_layout()
-	await process_frame
+	await get_tree().process_frame
 
 	var resource_rect: Rect2 = hud.resources_panel.get_global_rect()
 	var minimap_rect: Rect2 = hud.minimap_panel.get_global_rect()
@@ -48,7 +61,12 @@ func _run_test() -> void:
 		_fail("Resource dock and minimap overlap")
 		return
 	if production_rect.intersects(gather_rect) or production_rect.intersects(attack_rect):
-		_fail("Production dock overlaps right-side command controls")
+		_fail(
+			(
+				"Production dock overlaps right-side command controls: production %s, gather %s, attack %s"
+				% [production_rect, gather_rect, attack_rect]
+			)
+		)
 		return
 	var safe_insets: Vector4 = hud.get_world_safe_frame_insets()
 	if safe_insets.w < 176.0:
@@ -71,9 +89,9 @@ func _run_test() -> void:
 			% [safe_rect, moving_up_screen, production_rect]
 		)
 	)
-	quit(0)
+	get_tree().quit(0)
 
 
 func _fail(message: String) -> void:
 	push_error(message)
-	quit(1)
+	get_tree().quit(1)

@@ -1,2 +1,2 @@
-world chunk thrashing fixed; whole test suite runs green
-2026-07-31T23:10:00Z
+session restore no longer races itself; HUD production bar clears the controls
+2026-08-01T08:20:00Z

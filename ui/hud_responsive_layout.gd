@@ -114,8 +114,23 @@ func apply(context: HudLayoutContext) -> Vector4:
 	context.production_panel.scale = scale_vector
 	# Matches the framed production art in hud.gd: the card row plus the status
 	# line underneath only clear the frame's inner border at this size.
-	context.production_panel.size = Vector2(768.0, 178.0)
-	var production_visual_size: Vector2 = context.production_panel.size * ui_scale
+	# 786 is what the card row plus the upgrade slot actually measure. A
+	# PanelContainer never shrinks below its content, so assigning less than
+	# this was simply ignored — and the layout then placed the panel using the
+	# number it had asked for rather than the one it got.
+	context.production_panel.size = Vector2(766.0, 178.0)
+	# Position from the size the panel will really occupy, not the one just
+	# assigned. A PanelContainer never shrinks below what its children need, so
+	# when the cards and the upgrade slot add up to more than the assigned width
+	# it silently grows — and placing it by the assigned number pushed its right
+	# edge into the command buttons, which is how the production bar ended up
+	# under the gather control.
+	var production_minimum: Vector2 = context.production_panel.get_combined_minimum_size()
+	var production_actual_size := Vector2(
+		maxf(context.production_panel.size.x, production_minimum.x),
+		maxf(context.production_panel.size.y, production_minimum.y)
+	)
+	var production_visual_size: Vector2 = production_actual_size * ui_scale
 	var command_reserve: float = 322.0 * ui_scale
 	var production_x: float = safe_rect.end.x - command_reserve - production_visual_size.x
 	production_x = maxf(production_x, safe_rect.position.x + 190.0 * ui_scale)
