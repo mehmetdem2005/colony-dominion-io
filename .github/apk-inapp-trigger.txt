@@ -1,2 +1,2 @@
-session restore no longer races itself; HUD production bar clears the controls
-2026-08-01T08:20:00Z
+rebuild after the gradle wrapper flake
+2026-08-01T12:40:00Z

@@ -90,10 +90,26 @@ jobs:
           fi
           gradle --version
           mkdir -p "$GITHUB_WORKSPACE/android/plugins"
+          # `gradle wrapper` re-validates the distribution URL for every plugin,
+          # and services.gradle.org intermittently refuses the second request in
+          # a row — the first plugin downloads the very same archive seconds
+          # earlier and succeeds. That is a network hiccup, not a build error, so
+          # it is retried rather than failing the whole APK.
+          gradle_wrapper_with_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              if gradle wrapper --gradle-version 8.10.2 --no-daemon; then
+                return 0
+              fi
+              echo "gradle wrapper attempt $attempt failed; retrying"
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
           build_plugin() {
             local dir="$1"; local out="$2"
             ( cd "$dir"
-              gradle wrapper --gradle-version 8.10.2 --no-daemon
+              gradle_wrapper_with_retry
               ./gradlew --no-daemon --stacktrace assembleRelease
               local aar; aar="$(find build/outputs/aar -name '*.aar' | head -n1)"
               test -n "$aar"
