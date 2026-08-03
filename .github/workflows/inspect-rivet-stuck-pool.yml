@@ -1,0 +1,108 @@
+name: Inspect Rivet Stuck Pool
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'inspect-rivet-stuck-pool'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    env:
+      RIVET_CLOUD_TOKEN: ${{ secrets.RIVET_CLOUD_TOKEN }}
+      RIVET_ORGANIZATION: yOqDe3oynkJcMLHZfQ5xc1ocXMBBTjvG
+      RIVET_PROJECT: colonyio-3bo7
+      RIVET_NAMESPACE: staging-4x4s
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Inspect managed pool
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RIVET_CLOUD_TOKEN"
+          echo "::add-mask::$RIVET_CLOUD_TOKEN"
+          mkdir -p build/rivet-pool-inspection
+          ENDPOINT="https://cloud-api.rivet.dev/projects/${RIVET_PROJECT}/namespaces/${RIVET_NAMESPACE}/managed-pools/default?org=${RIVET_ORGANIZATION}"
+          HTTP_CODE="$(curl --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --output build/rivet-pool-inspection/raw.json \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $RIVET_CLOUD_TOKEN" \
+            --header 'Accept: application/json' \
+            "$ENDPOINT")"
+          echo "HTTP_CODE=$HTTP_CODE"
+          python - "$HTTP_CODE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          code = int(sys.argv[1])
+          raw_path = Path("build/rivet-pool-inspection/raw.json")
+          raw_text = raw_path.read_text(encoding="utf-8", errors="replace") if raw_path.exists() else ""
+          try:
+              payload = json.loads(raw_text) if raw_text.strip() else None
+          except json.JSONDecodeError:
+              payload = {"unparsed": raw_text[:1000]}
+
+          pool = payload.get("managedPool") if isinstance(payload, dict) else None
+          if pool is None and isinstance(payload, dict):
+              pool = payload.get("managed_pool")
+          pool = pool if isinstance(pool, dict) else {}
+          config = pool.get("config") if isinstance(pool.get("config"), dict) else {}
+          resources = config.get("resources") if isinstance(config.get("resources"), dict) else {}
+          image = config.get("image") if isinstance(config.get("image"), dict) else {}
+          error = pool.get("error")
+          if isinstance(error, dict):
+              error_summary = {
+                  "message": error.get("message"),
+                  "code": error.get("code"),
+                  "details": error.get("details"),
+              }
+          else:
+              error_summary = error
+
+          report = {
+              "http_code": code,
+              "response_shape": sorted(payload.keys()) if isinstance(payload, dict) else type(payload).__name__,
+              "status": pool.get("status"),
+              "error": error_summary,
+              "image": {
+                  "repository": image.get("repository"),
+                  "tag": image.get("tag"),
+              },
+              "resources": {
+                  "cpu": resources.get("cpu"),
+                  "memory": resources.get("memory"),
+                  "instanceRequestConcurrency": resources.get("instanceRequestConcurrency"),
+              },
+              "runner_config": config.get("runnerConfig"),
+              "environment_keys": sorted((config.get("environment") or {}).keys())
+                  if isinstance(config.get("environment"), dict)
+                  else [],
+          }
+          Path("build/rivet-pool-inspection/report.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report, indent=2, ensure_ascii=False))
+          if code != 200:
+              raise SystemExit(f"managed-pool GET returned HTTP {code}")
+          PY
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: rivet-managed-pool-inspection
+          if-no-files-found: warn
+          retention-days: 3
+          path: build/rivet-pool-inspection/report.json
