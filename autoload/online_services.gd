@@ -187,12 +187,22 @@ func select_region(region_id: String) -> void:
 ## that city is the queue. Until a region has been played it has no measurement,
 ## so the first choice falls back to the catalogue's default.
 func resolve_automatic_region() -> void:
+	# Read the ids straight from the catalogue rather than through get_regions(),
+	# which deep-copies every region and its metrics. This runs once per pong for
+	# the whole match, so it has to stay cheap.
 	var candidates := PackedStringArray()
-	for region in get_regions():
+	for region in config.regions:
+		if not bool(region.get("enabled", true)) or String(region.get("id", "")) == "auto":
+			continue
 		candidates.append(String(region.get("id", "")))
 	if candidates.is_empty():
 		return
 	var chosen: String = NetworkSession.get_auto_region_id(candidates, candidates[0])
+	# Pings are compared in coarse buckets, so the answer is the same nearly
+	# every time. Reapplying it anyway re-stored the preference, emitted a region
+	# change and made the settings file dirty once a second for a whole match.
+	if NetworkSession.region_is_automatic and chosen == NetworkSession.selected_region_id:
+		return
 	_apply_region_selection(chosen, true)
 
 

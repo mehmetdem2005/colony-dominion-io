@@ -133,6 +133,7 @@ jobs:
             tests/snapshot_cadence_phase_regression_test.tscn
             tests/match_result_winner_regression_test.tscn
             tests/region_probe_gating_regression_test.tscn
+            tests/settings_write_throttle_regression_test.tscn
             tests/network_command_validator_test.tscn
             tests/swarm_scheduler_cadence_test.tscn
             tests/swarm_crowd_stress_test.tscn

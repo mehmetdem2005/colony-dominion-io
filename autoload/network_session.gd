@@ -24,6 +24,10 @@ enum ConnectionState {
 }
 
 const SETTINGS_PATH: String = "user://network_settings.cfg"
+
+var _settings_dirty: bool = false
+var _last_settings_save_msec: int = -1_000_000
+var _settings_writes: int = 0
 ## Measured pings are compared in buckets this wide when choosing automatically,
 ## so two players in the same place agree on a region instead of being separated
 ## by a few milliseconds of measurement noise.
@@ -227,10 +231,47 @@ func _load_settings() -> void:
 		measured_region_pings = (stored as Dictionary).duplicate(true)
 
 
-func _save_settings() -> void:
+## Settings are written at most this often. In a match the region ping is
+## re-recorded on every pong, and each of those wrote the file — twice, when the
+## region is automatic, because reselecting it stores the preference again. That
+## is a synchronous flash write a couple of times a second for the whole match,
+## on the main thread, on a phone: a frame hitch on a fixed rhythm and a lot of
+## needless wear. The value is kept in memory immediately; only the write waits.
+const SETTINGS_SAVE_INTERVAL_MSEC: int = 5000
+
+
+func _notification(what: int) -> void:
+	if (
+		what == NOTIFICATION_WM_CLOSE_REQUEST
+		or what == NOTIFICATION_APPLICATION_PAUSED
+		or what == NOTIFICATION_EXIT_TREE
+	):
+		flush_settings()
+
+
+## Write anything held back by the interval. Called when the app is closing or
+## going to the background, so nothing measured is lost.
+func flush_settings() -> void:
+	if not _settings_dirty:
+		return
+	_settings_dirty = false
+	_last_settings_save_msec = Time.get_ticks_msec()
+	_settings_writes += 1
 	var config := ConfigFile.new()
 	config.set_value("network", "preferred_region", preferred_region_id)
 	config.set_value("network", "measured_region_pings", measured_region_pings)
 	var error: Error = config.save(SETTINGS_PATH)
 	if error != OK:
 		push_warning("Network settings could not be saved: %s" % error_string(error))
+
+
+## How many times the settings file has actually been written this run.
+func get_settings_write_count() -> int:
+	return _settings_writes
+
+
+func _save_settings() -> void:
+	_settings_dirty = true
+	if Time.get_ticks_msec() - _last_settings_save_msec < SETTINGS_SAVE_INTERVAL_MSEC:
+		return
+	flush_settings()
