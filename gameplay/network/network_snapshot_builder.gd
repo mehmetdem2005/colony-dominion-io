@@ -168,6 +168,7 @@ func _append_relevant_units(
 			"position": _quantize_position(unit.global_position),
 			"health": roundi(unit.get_health_ratio() * 255.0),
 			"_distance_sq": distance_squared,
+			"_interval": interval_ticks,
 			"_due": due,
 		}
 		if unit.definition.role == &"commander":
@@ -207,6 +208,7 @@ func _append_relevant_nest(
 				"health": roundi(controller.nest.get_health_ratio() * 255.0),
 				"level": controller.progression.level if controller.progression != null else 1,
 				"_distance_sq": origin.distance_squared_to(controller.nest.global_position),
+				"_interval": 10,
 				"_due": due,
 			}
 		)
@@ -242,13 +244,26 @@ func _finalize_entity_batch(
 		var entity_id: int = int(entity.get("id", 0))
 		var due: bool = bool(entity.get("_due", false))
 		if entity_id > 0 and due:
+			entity["_rank_overdue"] = _overdue_ratio(entity, viewer_team_id, server_tick)
+			entity["_rank_priority"] = _snapshot_priority(entity, viewer_team_id)
 			transmitted.append(entity)
+	# Distance decides who goes first, but only among entities that have waited
+	# the same share of their cadence. Ordering on distance alone is stable, so
+	# once a fight puts more due entities in radius than the cap can carry, the
+	# farthest ones lose the ranking every single tick and are never sent again —
+	# and being in radius, they are never despawned either, so they stand frozen
+	# at a minutes-old position for the rest of the match. Overdue-first turns
+	# that permanent loss into a queue everyone eventually reaches.
 	transmitted.sort_custom(
 		func(a: Dictionary, b: Dictionary) -> bool:
-			var priority_a: int = _snapshot_priority(a, viewer_team_id)
-			var priority_b: int = _snapshot_priority(b, viewer_team_id)
+			var priority_a: int = int(a.get("_rank_priority", 4))
+			var priority_b: int = int(b.get("_rank_priority", 4))
 			if priority_a != priority_b:
 				return priority_a < priority_b
+			var overdue_a: float = float(a.get("_rank_overdue", 1.0))
+			var overdue_b: float = float(b.get("_rank_overdue", 1.0))
+			if not is_equal_approx(overdue_a, overdue_b):
+				return overdue_a > overdue_b
 			return float(a.get("_distance_sq", INF)) < float(b.get("_distance_sq", INF))
 	)
 	if transmitted.size() > NetworkProtocol.MAX_SNAPSHOT_ENTITIES:
@@ -257,9 +272,26 @@ func _finalize_entity_batch(
 	entities.clear()
 	for entity in transmitted:
 		entity.erase("_distance_sq")
+		entity.erase("_interval")
 		entity.erase("_due")
+		entity.erase("_rank_overdue")
+		entity.erase("_rank_priority")
 		entities.append(entity)
 		_mark_entity_sent(viewer_team_id, int(entity.get("id", 0)), server_tick)
+
+
+## How long the entity has waited, measured in its own send cadence: 1.0 is
+## exactly on time, 3.0 is three cadences late. Comparing the ratio rather than
+## the raw wait keeps near units ahead of far ones, since their cadence is
+## shorter and so their ratio climbs faster.
+func _overdue_ratio(entity: Dictionary, viewer_team_id: int, server_tick: int) -> float:
+	var entity_id: int = int(entity.get("id", 0))
+	var key: int = _make_viewer_entity_key(viewer_team_id, entity_id)
+	if not _last_tick_by_viewer_entity.has(key):
+		return INF
+	var waited: int = server_tick - int(_last_tick_by_viewer_entity[key])
+	var interval: int = maxi(int(entity.get("_interval", 1)), 1)
+	return float(waited) / float(interval)
 
 
 func _snapshot_priority(entity: Dictionary, viewer_team_id: int) -> int:

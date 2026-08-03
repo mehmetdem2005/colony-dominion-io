@@ -1,4 +1,6 @@
-extends SceneTree
+extends Node
+
+# Runs as a scene so the autoloads exist before the gameplay preloads compile.
 
 const REQUIRED_RESOURCES: Array[String] = [
 	"res://network/network_protocol.gd",
@@ -16,11 +18,12 @@ const REQUIRED_RESOURCES: Array[String] = [
 ]
 
 
-func _initialize() -> void:
-	call_deferred("_run")
+func _ready() -> void:
+	_run.call_deferred()
 
 
 func _run() -> void:
+	var root: Window = get_tree().root
 	var failures: Array[String] = []
 	for path in REQUIRED_RESOURCES:
 		if not ResourceLoader.exists(path) and not FileAccess.file_exists(path):
@@ -118,8 +121,8 @@ func _run() -> void:
 
 	if failures.is_empty():
 		print("PASS online_transport_regression_test")
-		quit(0)
+		get_tree().quit(0)
 		return
 	for failure in failures:
 		push_error(failure)
-	quit(1)
+	get_tree().quit(1)

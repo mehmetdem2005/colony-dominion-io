@@ -1,4 +1,6 @@
-extends SceneTree
+extends Node
+
+# Runs as a scene so the autoloads exist before the gameplay preloads compile.
 
 ## The per-tick snapshot cap must limit what is transmitted, never what the
 ## client is told exists.
@@ -15,8 +17,8 @@ const BUILDER_SCRIPT := preload("res://gameplay/network/network_snapshot_builder
 var _failures: Array[String] = []
 
 
-func _init() -> void:
-	call_deferred("_run")
+func _ready() -> void:
+	_run.call_deferred()
 
 
 func _run() -> void:
@@ -93,7 +95,68 @@ func _run() -> void:
 			_failures.append("An entity that was not due was transmitted anyway")
 			break
 
+	_run_starvation_pass(builder)
 	_finish()
+
+
+## Fifth pass: a fight big enough that more entities are due than the cap can
+## carry must not park the same ones forever.
+##
+## Ranking due entities by distance alone is a stable order, so once demand
+## exceeds the cap the farthest units lose every tick, for the whole match. They
+## are inside the radius, so they are never despawned either — the player just
+## watches a rank of ants stand frozen at a position minutes out of date while
+## the fight moves on around them.
+func _run_starvation_pass(builder: Variant) -> void:
+	const NEAR_COUNT: int = 200
+	const FAR_COUNT: int = 400
+	const TICKS: int = 240
+	# One second at the 30 Hz snapshot rate. Demand here is 1.4x the cap, so a
+	# fair rotation stretches the 2- and 5-tick cadences to about 3 and 7.
+	const MAX_ACCEPTABLE_GAP_TICKS: int = 30
+
+	builder.reset()
+	var last_seen: Dictionary = {}
+	for tick in range(1, TICKS + 1):
+		var batch: Array[Dictionary] = []
+		for index in NEAR_COUNT + FAR_COUNT:
+			var entity_id: int = index + 1
+			var interval: int = 2 if index < NEAR_COUNT else 5
+			(
+				batch
+				. append(
+					{
+						"id": entity_id,
+						"team": 1,
+						"kind": &"worker",
+						"position": Vector2i(index, 0),
+						"health": 255,
+						"_distance_sq": float(index) * 100.0,
+						"_interval": interval,
+						"_due": builder._is_entity_due(0, entity_id, interval, tick),
+					}
+				)
+			)
+		var relevant: Dictionary = {}
+		builder._finalize_entity_batch(batch, relevant, 0, tick)
+		for entity in batch:
+			last_seen[int(entity.get("id", 0))] = tick
+
+	var worst_gap: int = 0
+	var worst_id: int = 0
+	for index in NEAR_COUNT + FAR_COUNT:
+		var entity_id: int = index + 1
+		var gap: int = TICKS - int(last_seen.get(entity_id, 0))
+		if gap > worst_gap:
+			worst_gap = gap
+			worst_id = entity_id
+	if worst_gap > MAX_ACCEPTABLE_GAP_TICKS:
+		_failures.append(
+			(
+				"Entity %d went %d ticks without an update while the cap was oversubscribed"
+				% [worst_id, worst_gap]
+			)
+		)
 
 
 func _make_batch(count: int, jitter: float) -> Array[Dictionary]:
@@ -119,8 +182,8 @@ func _make_batch(count: int, jitter: float) -> Array[Dictionary]:
 func _finish() -> void:
 	if _failures.is_empty():
 		print("PASS snapshot_entity_cap_regression_test")
-		quit(0)
+		get_tree().quit(0)
 		return
 	for failure in _failures:
 		push_error(failure)
-	quit(1)
+	get_tree().quit(1)
