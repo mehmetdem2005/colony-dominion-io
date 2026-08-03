@@ -1,6 +1,11 @@
 extends Node
 
 const SETTINGS_PATH: String = "user://audio_settings.cfg"
+## Settings are written at most this often. A volume slider reports every step
+## of a drag, and each step used to write the file: dragging one slider across
+## its range performed dozens of synchronous flash writes on the main thread,
+## which is felt as a stutter on the very device the player is adjusting.
+const SETTINGS_SAVE_INTERVAL_MSEC: int = 1500
 const BUS_PARENTS: Dictionary = {
 	&"Music": &"Master",
 	&"Ambient": &"Master",
@@ -37,6 +42,9 @@ var _ambient_duck_db: float = 0.0
 var _headless: bool = false
 var _background_muted: bool = false
 var _queen_danger_latched: bool = false
+var _settings_dirty: bool = false
+var _last_settings_save_msec: int = -1_000_000
+var _settings_writes: int = 0
 
 
 func _ready() -> void:
@@ -229,6 +237,13 @@ func _unit_interval(value: Variant, fallback: float) -> float:
 
 
 func _notification(what: int) -> void:
+	if (
+		what == NOTIFICATION_WM_CLOSE_REQUEST
+		or what == NOTIFICATION_APPLICATION_PAUSED
+		or what == NOTIFICATION_APPLICATION_FOCUS_OUT
+		or what == NOTIFICATION_EXIT_TREE
+	):
+		flush_settings()
 	if _headless:
 		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
@@ -329,13 +344,32 @@ func _load_settings() -> void:
 		_settings[setting_id] = (raw_toggle if raw_toggle is bool else DEFAULT_SETTINGS[setting_id])
 
 
-func _save_settings() -> void:
+## Write anything the interval held back. Called when the app closes, is paused
+## or loses focus, so a setting the player just changed is never lost.
+func flush_settings() -> void:
+	if not _settings_dirty:
+		return
+	_settings_dirty = false
+	_last_settings_save_msec = Time.get_ticks_msec()
+	_settings_writes += 1
 	var config := ConfigFile.new()
 	for setting_id in _settings:
 		config.set_value("audio", String(setting_id), _settings[setting_id])
 	var error: Error = config.save(SETTINGS_PATH)
 	if error != OK:
 		push_warning("Audio settings could not be saved: %s" % error_string(error))
+
+
+## How many times the audio settings file has actually been written this run.
+func get_settings_write_count() -> int:
+	return _settings_writes
+
+
+func _save_settings() -> void:
+	_settings_dirty = true
+	if Time.get_ticks_msec() - _last_settings_save_msec < SETTINGS_SAVE_INTERVAL_MSEC:
+		return
+	flush_settings()
 
 
 func _detect_headless() -> bool:

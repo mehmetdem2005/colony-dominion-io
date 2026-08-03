@@ -57,7 +57,35 @@ func _run() -> void:
 				)
 			)
 
+	_check_audio_slider_drag()
 	_finish()
+
+
+## A volume slider reports every step of a drag, and each step wrote the audio
+## settings file — dozens of synchronous flash writes for one swipe, felt as a
+## stutter on the device the player is adjusting.
+func _check_audio_slider_drag() -> void:
+	AudioSystem.flush_settings()
+	var writes_before: int = AudioSystem.get_settings_write_count()
+	for index in SAMPLES:
+		AudioSystem.set_volume(&"music", float(index) / float(SAMPLES))
+	var writes: int = AudioSystem.get_settings_write_count() - writes_before
+	if writes > 1:
+		_failures.append(
+			(
+				"%d slider steps caused %d audio settings writes, expected at most 1"
+				% [SAMPLES, writes]
+			)
+		)
+	var expected: float = float(SAMPLES - 1) / float(SAMPLES)
+	if not is_equal_approx(float(AudioSystem.get_setting(&"music")), expected):
+		_failures.append("Audio volume did not follow the slider while the write was held")
+	AudioSystem.flush_settings()
+	var stored := ConfigFile.new()
+	if stored.load(AudioSystem.SETTINGS_PATH) != OK:
+		_failures.append("Audio settings file was not written at all")
+	elif not is_equal_approx(float(stored.get_value("audio", "music", -1.0)), expected):
+		_failures.append("Flushed audio settings do not match the value in memory")
 
 
 func _finish() -> void:
