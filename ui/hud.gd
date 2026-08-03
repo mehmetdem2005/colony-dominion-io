@@ -1009,7 +1009,7 @@ func _show_toast(message: String) -> void:
 	_toast_left = 2.2
 
 
-func _on_match_ended(winner_name: String, player_won: bool) -> void:
+func _on_match_ended(winner_name: String, player_won: bool, _winner_team_id: int = -1) -> void:
 	audio_settings_panel.visible = false
 	modal_input_blocker.visible = true
 	_set_gameplay_interaction_enabled(false)

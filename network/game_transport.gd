@@ -89,6 +89,12 @@ var _metric_reconnect_success_total: int = 0
 var _metric_commands_received_total: int = 0
 var _metric_snapshots_sent_total: int = 0
 var _metric_match_result_failures_total: int = 0
+# Snapshot assembly is the one server cost that grows with both the player count
+# and the unit count — every connected player gets their own pass over every
+# colony — so it is the first thing to watch when a match starts to stutter.
+var _metric_snapshot_build_usec_total: int = 0
+var _metric_snapshot_build_batches: int = 0
+var _metric_snapshot_build_usec_max: int = 0
 var _match_start_gate: DedicatedMatchStartGate = null
 
 
@@ -449,6 +455,17 @@ func get_transport_stats() -> Dictionary:
 		"commands_received_total": _metric_commands_received_total,
 		"snapshots_sent_total": _metric_snapshots_sent_total,
 		"match_result_failures_total": _metric_match_result_failures_total,
+		"snapshot_build_avg_usec":
+		(
+			_metric_snapshot_build_usec_total / maxi(_metric_snapshot_build_batches, 1)
+			if _metric_snapshot_build_batches > 0
+			else 0
+		),
+		"snapshot_build_max_usec": _metric_snapshot_build_usec_max,
+		"process_msec": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+		"physics_process_msec": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+		"object_count": int(Performance.get_monitor(Performance.OBJECT_COUNT)),
+		"static_memory_mb": Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0,
 	}
 
 
@@ -706,6 +723,7 @@ func _on_server_match_started() -> void:
 func _broadcast_snapshots() -> void:
 	if not is_instance_valid(_match):
 		return
+	var build_started_usec: int = Time.get_ticks_usec()
 	for peer_id_variant in _peer_records.keys():
 		var peer_id: int = int(peer_id_variant)
 		var record: Dictionary = _peer_records[peer_id]
@@ -717,6 +735,10 @@ func _broadcast_snapshots() -> void:
 		snapshot["server_time_msec"] = Time.get_ticks_msec()
 		_rpc_receive_snapshot.rpc_id(peer_id, snapshot)
 		_metric_snapshots_sent_total += 1
+	var build_usec: int = Time.get_ticks_usec() - build_started_usec
+	_metric_snapshot_build_usec_total += build_usec
+	_metric_snapshot_build_batches += 1
+	_metric_snapshot_build_usec_max = maxi(_metric_snapshot_build_usec_max, build_usec)
 
 
 func _mark_participant_disconnected(player_id: String, disconnected: bool) -> void:
@@ -727,8 +749,8 @@ func _mark_participant_disconnected(player_id: String, disconnected: bool) -> vo
 	_participant_history[player_id] = entry
 
 
-func _report_match_result_and_shutdown(winner_name: String) -> void:
-	var payload: Dictionary = _build_match_result_payload(winner_name)
+func _report_match_result_and_shutdown(winner_team_id: int) -> void:
+	var payload: Dictionary = _build_match_result_payload(winner_team_id)
 	var reported: bool = false
 	var control_url: String = OS.get_environment("CONTROL_BASE_URL").trim_suffix("/")
 	var server_token: String = OS.get_environment("GAME_SERVER_AUTH_TOKEN")
@@ -764,14 +786,17 @@ func _report_match_result_and_shutdown(winner_name: String) -> void:
 	get_tree().quit(0)
 
 
-func _build_match_result_payload(winner_name: String) -> Dictionary:
+## The winning team arrives as an id, never as a name to look back up.
+##
+## The winner used to be resolved by matching the winning display name against
+## every colony. Display names come from the player and nothing makes them
+## unique, so two players called the same thing — inevitable once the game has
+## more than a handful of them, and the default name guarantees it — resolved to
+## whichever colony came last in the list. The ranked result was then written
+## against the wrong team: a player who won was recorded as having lost.
+func _build_match_result_payload(winner_team_id: int) -> Dictionary:
 	var participant_rows: Array[Dictionary] = []
-	var winner_team: int = -1
-	if is_instance_valid(_match):
-		for controller_variant in _match.controllers:
-			var controller := controller_variant as ColonyController
-			if is_instance_valid(controller) and controller.display_name == winner_name:
-				winner_team = controller.team_id
+	var winner_team: int = winner_team_id
 	var sortable: Array[Dictionary] = []
 	for player_id_variant in _participant_history.keys():
 		var player_id: String = String(player_id_variant)
@@ -874,14 +899,14 @@ func _median_sample(sorted_samples: Array[float]) -> float:
 	return (sorted_samples[middle - 1] + sorted_samples[middle]) * 0.5
 
 
-func _on_server_match_ended(winner_name: String, _player_won: bool) -> void:
+func _on_server_match_ended(winner_name: String, _player_won: bool, winner_team_id: int) -> void:
 	if not _is_server:
 		return
 	for peer_id_variant in _peer_records.keys():
 		_rpc_match_ended.rpc_id(int(peer_id_variant), winner_name)
 	if not _match_result_reporting:
 		_match_result_reporting = true
-		_report_match_result_and_shutdown.call_deferred(winner_name)
+		_report_match_result_and_shutdown.call_deferred(winner_team_id)
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)

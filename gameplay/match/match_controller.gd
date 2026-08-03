@@ -351,7 +351,7 @@ func _finish_match(winner: ColonyController) -> void:
 	set_local_input_enabled(false)
 	if not is_headless_server:
 		AudioSystem.notify_match_end(winner.is_player)
-	events.match_ended.emit(winner.display_name, winner.is_player)
+	events.match_ended.emit(winner.display_name, winner.is_player, winner.team_id)
 
 
 func restart_match() -> void:

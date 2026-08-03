@@ -15,6 +15,21 @@ var _last_tick_by_viewer_entity: Dictionary = {}
 var _known_entities_by_team: Dictionary = {}
 
 
+## Whether this viewer's periodic pass — full keyframe, colony summary, resource
+## sweep — falls on this tick.
+##
+## The phase is the viewer's own team, so the ten viewers of a full match take
+## their turn on ten different ticks. Testing `server_tick % interval` instead
+## put every viewer on the same tick: one tick in forty rebuilt a complete
+## keyframe for all ten of them at once while the other thirty-nine did almost
+## nothing. That is a server hitch on a fixed 1.3-second rhythm, and a matching
+## burst of large packets leaving for every client simultaneously.
+static func is_cadence_tick(server_tick: int, team_id: int, interval_ticks: int) -> bool:
+	if interval_ticks <= 1:
+		return true
+	return posmod(server_tick + maxi(team_id, 0), interval_ticks) == 0
+
+
 func configure(host: Node) -> void:
 	_host = host
 	reset()
@@ -38,7 +53,7 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 	var radius_squared: float = safe_radius * safe_radius
 	var entities: Array[Dictionary] = []
 	var current_relevant: Dictionary = {}
-	var full_keyframe: bool = server_tick % KEYFRAME_INTERVAL_TICKS == 0
+	var full_keyframe: bool = is_cadence_tick(server_tick, team_id, KEYFRAME_INTERVAL_TICKS)
 	for controller_variant in controllers:
 		var controller: ColonyController = controller_variant as ColonyController
 		if not is_instance_valid(controller):
@@ -53,7 +68,7 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 	_finalize_entity_batch(entities, current_relevant, team_id, server_tick)
 	var despawned: PackedInt64Array = _collect_despawns(team_id, current_relevant)
 	var colony_summaries: Array[Dictionary] = []
-	if server_tick % COLONY_SUMMARY_INTERVAL_TICKS == 0:
+	if is_cadence_tick(server_tick, team_id, COLONY_SUMMARY_INTERVAL_TICKS):
 		for controller_variant in controllers:
 			var controller: ColonyController = controller_variant as ColonyController
 			if not is_instance_valid(controller):
@@ -77,7 +92,7 @@ func build_for_team(team_id: int, radius: float = DEFAULT_RADIUS) -> Dictionary:
 				)
 			)
 	var resource_states: Array[Dictionary] = []
-	if full_keyframe or server_tick % RESOURCE_STATE_INTERVAL_TICKS == 0:
+	if full_keyframe or is_cadence_tick(server_tick, team_id, RESOURCE_STATE_INTERVAL_TICKS):
 		var world_stream := _host.get("world_stream") as WorldStreamManager
 		if is_instance_valid(world_stream):
 			resource_states = world_stream.get_network_resource_states(

@@ -6,7 +6,7 @@ signal production_queue_changed(team_id: int, queue: Array, progress: float)
 signal leaderboard_changed(entries: Array)
 signal player_commander_changed(commander: Node2D)
 signal match_time_changed(seconds_left: int)
-signal match_ended(winner_name: String, player_won: bool)
+signal match_ended(winner_name: String, player_won: bool, winner_team_id: int)
 signal toast_requested(message: String)
 signal unit_count_changed(team_id: int, counts: Dictionary)
 signal colony_progress_changed(

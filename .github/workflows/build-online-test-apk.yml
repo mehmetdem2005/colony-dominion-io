@@ -130,6 +130,8 @@ jobs:
           scene_tests=(
             tests/online_transport_regression_test.tscn
             tests/snapshot_entity_cap_regression_test.tscn
+            tests/snapshot_cadence_phase_regression_test.tscn
+            tests/match_result_winner_regression_test.tscn
             tests/network_command_validator_test.tscn
             tests/swarm_scheduler_cadence_test.tscn
             tests/swarm_crowd_stress_test.tscn
