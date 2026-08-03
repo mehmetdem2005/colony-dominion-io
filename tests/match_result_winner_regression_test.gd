@@ -72,6 +72,29 @@ func _run() -> void:
 	if int(first.get("placement", 0)) != 1:
 		_failures.append("Winning colony was not placed first")
 
+	# And the real emit has to deliver it, with the real listener arities.
+	# The receiver is an Array that the lambda appends to. A GDScript lambda
+	# captures by value, so assigning either a plain local or the array itself
+	# inside one leaves the outer variable exactly as it was.
+	var received: Array = []
+	_match.events.match_ended.connect(
+		func(name_value: String, _player_won: bool, team_value: int) -> void:
+			received.append(name_value)
+			received.append(team_value)
+	)
+	_match._finish_match(winner)
+	if (
+		received.size() != 2
+		or String(received[0]) != SHARED_NAME
+		or int(received[1]) != winner.team_id
+	):
+		_failures.append(
+			(
+				"match_ended delivered %s, expected [%s, %d]"
+				% [str(received), SHARED_NAME, winner.team_id]
+			)
+		)
+
 	# The signal the server reads the winner from has to carry the id at all.
 	var hub_signals: Array = MatchEventHub.new().get_signal_list()
 	var carries_team_id: bool = false
