@@ -1,6 +1,11 @@
 class_name HudResponsiveLayout
 extends RefCounted
 
+## Floor for the extra shrink the production bar may take on narrow screens,
+## relative to the rest of the HUD. Below this the unit cards stop being
+## readable, so the bar keeps its size and the layout accepts a tighter gap.
+const MIN_PRODUCTION_SHRINK: float = 0.7
+
 
 func get_world_safe_frame_insets(context: HudLayoutContext) -> Vector4:
 	if context == null or not is_instance_valid(context.viewport):
@@ -110,37 +115,66 @@ func apply(context: HudLayoutContext) -> Vector4:
 	)
 	context.audio_settings_panel.position = audio_panel_position
 
+	# The controls go down first: the production bar is sized from the gap they
+	# leave, so it cannot be placed before they are.
+	_layout_mobile_controls(context, safe_rect, ui_scale)
+	_layout_production_bar(context, safe_rect, ui_scale)
+	_layout_overlay_panels(context, safe_rect, ui_scale)
+	return get_world_safe_frame_insets(context)
+
+
+func _layout_production_bar(context: HudLayoutContext, safe_rect: Rect2, ui_scale: float) -> void:
 	context.production_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	context.production_panel.scale = scale_vector
 	# Matches the framed production art in hud.gd: the card row plus the status
 	# line underneath only clear the frame's inner border at this size.
-	# 786 is what the card row plus the upgrade slot actually measure. A
+	# 766 is what the card row plus the upgrade slot actually measure. A
 	# PanelContainer never shrinks below its content, so assigning less than
 	# this was simply ignored — and the layout then placed the panel using the
 	# number it had asked for rather than the one it got.
 	context.production_panel.size = Vector2(766.0, 178.0)
-	# Position from the size the panel will really occupy, not the one just
-	# assigned. A PanelContainer never shrinks below what its children need, so
-	# when the cards and the upgrade slot add up to more than the assigned width
-	# it silently grows — and placing it by the assigned number pushed its right
-	# edge into the command buttons, which is how the production bar ended up
-	# under the gather control.
+	# Measure from the size the panel will really occupy, not the one just
+	# assigned, for the same reason.
 	var production_minimum: Vector2 = context.production_panel.get_combined_minimum_size()
-	var production_actual_size := Vector2(
+	var production_size := Vector2(
 		maxf(context.production_panel.size.x, production_minimum.x),
 		maxf(context.production_panel.size.y, production_minimum.y)
 	)
-	var production_visual_size: Vector2 = production_actual_size * ui_scale
-	var command_reserve: float = 322.0 * ui_scale
-	var production_x: float = safe_rect.end.x - command_reserve - production_visual_size.x
-	production_x = maxf(production_x, safe_rect.position.x + 190.0 * ui_scale)
+
+	# The bar shares the bottom band with the joystick on its left and the
+	# command cluster on its right, so the width it may take is whatever those
+	# two leave — never a fixed reserve. A fixed one held on 16:9 and broke on
+	# 4:3: at 960x720 the left clamp, the bar and a 322 px reserve wanted 1032 px
+	# of a 960 px screen, the clamp won, and the bar slid under HASAT and
+	# GERİ ÇAĞIR.
+	var gap: float = 8.0 * ui_scale
+	var left_bound: float = maxf(
+		safe_rect.position.x + 14.0 * ui_scale,
+		context.stick.position.x + context.stick.size.x * ui_scale + gap
+	)
+	var right_bound: float = _command_cluster_left_edge(context, safe_rect) - gap
+	var available_width: float = maxf(right_bound - left_bound, 1.0)
+	var production_scale: float = ui_scale
+	if production_size.x * production_scale > available_width:
+		production_scale = maxf(
+			available_width / production_size.x, ui_scale * MIN_PRODUCTION_SHRINK
+		)
+	context.production_panel.scale = Vector2.ONE * production_scale
+
+	var production_visual_size: Vector2 = production_size * production_scale
+	var production_x: float = maxf(right_bound - production_visual_size.x, left_bound)
 	context.production_panel.position = Vector2(
 		production_x, safe_rect.end.y - 10.0 * ui_scale - production_visual_size.y
 	)
 
-	_layout_mobile_controls(context, safe_rect, ui_scale)
-	_layout_overlay_panels(context, safe_rect, ui_scale)
-	return get_world_safe_frame_insets(context)
+
+## Left edge of the buttons that sit at the production bar's own height. The
+## BÖL/DAĞIT/BİRLEŞ row is above the bar, so it never constrains its width.
+func _command_cluster_left_edge(context: HudLayoutContext, safe_rect: Rect2) -> float:
+	var edge: float = safe_rect.end.x
+	for button: Control in [context.gather_button, context.rally_button, context.attack_button]:
+		if is_instance_valid(button):
+			edge = minf(edge, button.position.x)
+	return edge
 
 
 func _layout_mobile_controls(context: HudLayoutContext, safe_rect: Rect2, ui_scale: float) -> void:

@@ -138,6 +138,7 @@ jobs:
             tests/visual_quality_regression_test.tscn
             tests/session_restore_regression_test.tscn
             tests/ui_camera_visibility_regression_test.tscn
+            tests/hud_layout_fit_regression_test.tscn
           )
           for scene_path in "${scene_tests[@]}"; do
             timeout 300 "$GODOT_BIN" --headless --path . "res://$scene_path"
