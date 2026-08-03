@@ -13,6 +13,7 @@ var _cycle_generation: int = 0
 var _pending_count: int = 0
 var _metrics: Dictionary = {}
 var _best_region_id: String = ""
+var _requests_issued: int = 0
 
 
 func configure(regions: Array[Dictionary], timeout_seconds: float) -> void:
@@ -47,6 +48,18 @@ func get_best_region_id() -> String:
 	return _best_region_id
 
 
+## Bumped by every configure() and probe_all(); a probe belongs to the cycle it
+## started in and stops as soon as that number moves on.
+func get_cycle_generation() -> int:
+	return _cycle_generation
+
+
+## Total probe requests this service has put on the wire, for tests and for
+## anyone checking that a stale cycle really stopped.
+func get_requests_issued() -> int:
+	return _requests_issued
+
+
 func _probe_region(region: Dictionary, generation: int) -> void:
 	var region_id: String = String(region.get("id", ""))
 	var probe_url: String = String(region.get("probe_url", ""))
@@ -72,6 +85,15 @@ func _probe_region(region: Dictionary, generation: int) -> void:
 	var failures: int = 0
 	var total_requests: int = WARMUP_SAMPLE_COUNT + MEASURED_SAMPLE_COUNT
 	for sample_index in total_requests:
+		# A cycle that has been superseded stops here instead of finishing its
+		# samples. Its results are discarded either way, and a cycle that takes
+		# longer than the probe interval — which is exactly what happens on the
+		# bad connections this is meant to measure — would otherwise still be
+		# issuing requests when the next two cycles start, so the client ends up
+		# hammering ten hosts at once on the connection least able to take it.
+		if generation != _cycle_generation:
+			client.queue_free()
+			return
 		var separator: String = "&" if probe_url.contains("?") else "?"
 		var sample_url: String = (
 			"%s%st=%d&s=%d"
@@ -82,9 +104,13 @@ func _probe_region(region: Dictionary, generation: int) -> void:
 				sample_index,
 			]
 		)
+		_requests_issued += 1
 		var response: Dictionary = await client.request_json(
 			HTTPClient.METHOD_GET, sample_url, PackedStringArray(["Cache-Control: no-cache"])
 		)
+		if generation != _cycle_generation:
+			client.queue_free()
+			return
 		if sample_index < WARMUP_SAMPLE_COUNT:
 			continue
 		if bool(response.get("ok", false)):

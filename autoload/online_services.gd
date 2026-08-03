@@ -111,7 +111,7 @@ func get_region(region_id: String) -> Dictionary:
 
 
 func refresh_region_catalog() -> void:
-	if _catalog_refresh_in_progress:
+	if _catalog_refresh_in_progress or is_region_probe_blocked():
 		return
 	_catalog_refresh_in_progress = true
 	if matchmaking.is_configured():
@@ -136,8 +136,30 @@ func refresh_region_catalog() -> void:
 	probe_regions()
 
 
+## Connection states during which the client has somewhere better to put its
+## radio than measuring regions it is not about to choose.
+const PROBE_BLOCKING_STATES: Array[int] = [
+	NetworkSession.ConnectionState.AUTHENTICATING,
+	NetworkSession.ConnectionState.MATCHMAKING,
+	NetworkSession.ConnectionState.CONNECTING,
+	NetworkSession.ConnectionState.CONNECTED,
+	NetworkSession.ConnectionState.RECONNECTING,
+]
+
+
+## True while the player is in, or on their way into, a match.
+##
+## The probe timer never stopped, so every twelve seconds a player in a match
+## opened a fresh HTTPS connection to each of the ten regions, four requests
+## apiece, on the same phone radio carrying the match's own traffic — and then
+## overwrote the connection state with "Bölgeler ölçülüyor". Both of those hurt
+## most on a weak connection, which is the connection least able to absorb it.
+func is_region_probe_blocked() -> bool:
+	return PROBE_BLOCKING_STATES.has(NetworkSession.connection_state)
+
+
 func probe_regions() -> void:
-	if not is_instance_valid(region_probe):
+	if not is_instance_valid(region_probe) or is_region_probe_blocked():
 		return
 	NetworkSession.set_connection_state(
 		NetworkSession.ConnectionState.PROBING, "Bölgeler ölçülüyor"
