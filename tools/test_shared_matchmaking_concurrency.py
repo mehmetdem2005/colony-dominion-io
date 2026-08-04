@@ -29,6 +29,7 @@ MIGRATIONS = (
     "202607270012_matchmaking_compatibility_lock.sql",
     "202607270013_matchmaking_lobby_scale.sql",
     "202607280014_matchmaking_sweep_skip_locked.sql",
+    "202607280016_lobby_outlives_match.sql",
 )
 
 
@@ -353,6 +354,61 @@ def claim_under_sequential_scan(
     return str(row[0])
 
 
+def assert_a_live_match_keeps_its_lobby(database_url: str) -> None:
+    """A lobby has to stay recognisable for as long as its match can run.
+
+    The row used to be retired sixteen minutes after creation, because the
+    container was believed to stop at fifteen; a match runs twenty. From minute
+    sixteen a live match's lobby was closed underneath it, so a player who
+    dropped and came back was no longer a member of it — matchmaking opened them
+    a brand new lobby and a brand new server, alone, while their match carried
+    on without them. leave_match_lobby could not find it either, so the human
+    count never came down.
+    """
+    player_id = uuid.uuid4()
+    region = "lifetime-region"
+    build = "lifetime-build"
+    lobby_id, _ = claim(
+        database_url, barrier=None, region=region, player_id=player_id, build_id=build
+    )
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        # Twenty minutes in: the match is still running, and its server was
+        # deployed, so the lobby carries a request id.
+        connection.execute(
+            """
+            update public.match_lobbies
+            set created_at = now() - interval '20 minutes',
+                fill_deadline = now() - interval '19 minutes',
+                request_id = 'lifetime-request',
+                status = 'ready'
+            where id = %s
+            """,
+            (lobby_id,),
+        )
+        rejoined = connection.execute(
+            """
+            select id::text
+            from public.claim_match_lobby(%s, %s, %s, %s, %s, %s)
+            """,
+            (region, player_id, "Rejoiner", 10, 20, build),
+        ).fetchone()
+        assert rejoined is not None, "rejoining a live match returned no lobby"
+        assert str(rejoined[0]) == lobby_id, (
+            f"a player rejoining their own 20-minute match was given a different lobby: "
+            f"{rejoined[0]} instead of {lobby_id}"
+        )
+
+        left = connection.execute(
+            "select id::text, human_count from public.leave_match_lobby(%s)",
+            (player_id,),
+        ).fetchone()
+        assert left is not None and left[0] is not None, (
+            "leaving a live 20-minute match found no lobby, so a cancel cannot tell "
+            "whether anyone is left in it"
+        )
+        assert str(left[0]) == lobby_id
+
+
 def main() -> int:
     database_url = parse_args().database_url
     install_schema(database_url)
@@ -361,6 +417,7 @@ def main() -> int:
     assert_running_match_accepts_late_joiner(database_url)
     assert_retries_are_idempotent(database_url)
     assert_region_and_build_isolation(database_url)
+    assert_a_live_match_keeps_its_lobby(database_url)
     assert_a_held_sweep_does_not_block_another_region(database_url)
     assert_concurrent_claims_survive_a_backlog(database_url)
     print("PASS shared matchmaking PostgreSQL concurrency contract")

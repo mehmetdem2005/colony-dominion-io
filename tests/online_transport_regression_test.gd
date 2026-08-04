@@ -63,6 +63,23 @@ func _run() -> void:
 	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
 		failures.append("Ranked assignment containing bots was accepted")
 
+	# A container's lifetime cap is a safety net for a hung server, so it has to
+	# outlast the match it protects. It did not: deployments were told fifteen
+	# minutes while a match runs twenty, so a match still going at minute fifteen
+	# had its container killed underneath it — every player dropped, no winner,
+	# no result, no rating.
+	var rules: MatchRules = MatchController.DEFAULT_MATCH_RULES
+	var match_minutes: float = rules.match_duration_seconds / 60.0
+	if not is_equal_approx(
+		NetworkProtocol.DEFAULT_MATCH_DURATION_SECONDS, rules.match_duration_seconds
+	):
+		failures.append("Protocol match duration drifted from the match rules resource")
+	var minimum_lifetime: int = GameTransport._minimum_server_lifetime_minutes()
+	if float(minimum_lifetime) <= match_minutes:
+		failures.append("Server lifetime floor does not outlast a full match")
+	if NetworkProtocol.DEFAULT_SERVER_LIFETIME_MINUTES < minimum_lifetime:
+		failures.append("Default server lifetime is shorter than a match needs")
+
 	# The resume file must be rewritten often enough to stay valid, and no more
 	# often than that: every rewrite is an encrypted write on the main thread.
 	if (

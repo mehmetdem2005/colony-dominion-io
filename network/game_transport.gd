@@ -160,11 +160,19 @@ func start_dedicated_server() -> Dictionary:
 	_server_build_id = OS.get_environment("BUILD_ID").strip_edges()
 	_server_started_unix_msec = roundi(Time.get_unix_time_from_system() * 1000.0)
 	# Absolute lifetime cap from boot: no container can bill past this age even if
-	# the match logic hangs. Defaults to 15 min, clamped to a sane range.
+	# the match logic hangs.
 	var max_match_minutes: int = DedicatedMatchStartGate.read_int_environment(
-		"MAX_MATCH_MINUTES", 15, 5, 180
+		"MAX_MATCH_MINUTES", NetworkProtocol.DEFAULT_SERVER_LIFETIME_MINUTES, 5, 180
 	)
-	_hard_shutdown_msec = Time.get_ticks_msec() + max_match_minutes * 60000
+	# The cap is a safety net for a hung container, so it must sit above the
+	# match it is protecting. It did not: the deployment set it to 15 minutes
+	# while a match runs 20, so any match still going at minute 15 had its
+	# container killed underneath it — every player dropped with "connection
+	# lost", no winner, no result reported, no rating. Refuse a cap that would
+	# end the match early, whatever the environment says.
+	_hard_shutdown_msec = (
+		Time.get_ticks_msec() + maxi(max_match_minutes, _minimum_server_lifetime_minutes()) * 60000
+	)
 	if _server_build_id.is_empty():
 		_server_build_id = "PHASE-05.5-GOOGLE-BOT-BACKFILL"
 	if not OS.is_debug_build() and (_server_match_id.is_empty() or _server_id.is_empty()):
@@ -1387,6 +1395,17 @@ func _persist_reconnect_session() -> void:
 	_last_reconnect_persist_msec = Time.get_ticks_msec()
 	if not saved:
 		push_warning("Reconnect session could not be persisted; retrying at the usual interval")
+
+
+## The shortest container life that can still hold a whole match: the match
+## itself, plus the shutdown delay and the result-reporting retries that follow
+## it, rounded up to the next minute with a minute to spare.
+func _minimum_server_lifetime_minutes() -> int:
+	var match_seconds: float = NetworkProtocol.DEFAULT_MATCH_DURATION_SECONDS
+	if is_instance_valid(_match) and _match.match_rules != null:
+		match_seconds = _match.match_rules.match_duration_seconds
+	var tail_seconds: float = SERVER_SHUTDOWN_DELAY_SECONDS + float(MATCH_RESULT_RETRY_COUNT) * 8.0
+	return ceili((match_seconds + tail_seconds) / 60.0) + 1
 
 
 func _detect_server_mode() -> bool:

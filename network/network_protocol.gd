@@ -16,6 +16,14 @@ const INPUT_HZ: float = 30.0
 const PING_INTERVAL_SECONDS: float = 1.0
 const PING_TIMEOUT_SECONDS: float = 3.0
 const AUTH_TIMEOUT_SECONDS: float = 10.0
+## What a match is meant to last, mirrored from data/match/default_match_rules.tres
+## so the transport can size a server's lifetime before a match is loaded.
+const DEFAULT_MATCH_DURATION_SECONDS: float = 1200.0
+## Container lifetime cap handed to a deployment when nothing overrides it. It
+## has to outlast a full match plus its shutdown, or the container kills the
+## match it is there to protect.
+const DEFAULT_SERVER_LIFETIME_MINUTES: int = 25
+
 const RECONNECT_GRACE_SECONDS: float = 60.0
 const RECONNECT_RETRY_SECONDS: float = 1.25
 ## How often the client rewrites its resume file while connected. The file's

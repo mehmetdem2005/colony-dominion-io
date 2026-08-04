@@ -410,9 +410,16 @@ function gameMaxPlayers(): number {
 
 // Absolute server lifetime cap (minutes). The game server self-terminates at
 // this age no matter what, so a hung or runaway container can never keep billing.
+// The container's absolute lifetime. It is a safety net for a hung server, so it
+// has to outlast the match it is protecting: a match runs twenty minutes, and
+// this used to default to fifteen — so any match still going at minute fifteen
+// had its container killed underneath it. Every player was dropped with
+// "connection lost", with no winner, no result and no rating change. The game
+// server refuses a cap below its own match length now as well, so a stale
+// override cannot bring this back.
 function gameMaxMatchMinutes(): number {
   const configured = Number.parseInt(env("GAME_MAX_MATCH_MINUTES"), 10);
-  if (!Number.isInteger(configured)) return 15;
+  if (!Number.isInteger(configured)) return 25;
   return Math.min(Math.max(configured, 5), 180);
 }
 
@@ -833,14 +840,27 @@ async function cancel(requestId: string, request: Request): Promise<Response> {
   }
   // In a shared lobby only the last player out turns off the lights — cancelling
   // must never tear down a server the other players are still waiting on.
+  //
+  // And "we could not tell" is not "the lobby is empty". Leaving mid-match with
+  // an expired access token, or hitting a blip on the leave call, or leaving a
+  // match whose lobby row has already aged out, all produced a null row here —
+  // and the old code read that as permission to stop the deployment, killing the
+  // match for everyone still in it. Only a positively empty lobby stops a
+  // server now. When it cannot be established, the server is left alone: it
+  // quits by itself about a minute after its last human leaves, and has an
+  // absolute lifetime cap behind that, so nothing keeps billing either way.
   if (lobbiesEnabled()) {
     const playerId = await authenticatedUserId(request);
-    if (playerId) {
-      const left = await rpc("leave_match_lobby", { p_player: playerId });
-      const row = (Array.isArray(left) ? left[0] : left) as Record<string, unknown> | null;
-      if (row?.id && Number(row.human_count ?? 0) > 0) {
-        return json({ ok: true, kept_running: true });
-      }
+    if (!playerId) {
+      return json({ ok: true, kept_running: true, reason: "unidentified_caller" });
+    }
+    const left = await rpc("leave_match_lobby", { p_player: playerId });
+    const row = (Array.isArray(left) ? left[0] : left) as Record<string, unknown> | null;
+    if (!row?.id) {
+      return json({ ok: true, kept_running: true, reason: "lobby_unknown" });
+    }
+    if (Number(row.human_count ?? 0) > 0) {
+      return json({ ok: true, kept_running: true });
     }
   }
   await fetch(`${EDGEGAP_API}/stop/${encodeURIComponent(requestId)}`, {

@@ -21,14 +21,14 @@ ve **faturalama durur**:
 2. **Herkes ayrılırsa**: maç başladıktan sonra bağlı **insan kalmazsa**, yeniden
    bağlanma penceresinden ~15 sn sonra (toplam ~75 sn) sunucu kapanır
    (`EMPTY_SHUTDOWN_GRACE_SECONDS`, `game_transport.gd`).
-3. **Sert üst sınır**: sunucu her hâlükârda `MAX_MATCH_MINUTES` (varsayılan 15 dk)
+3. **Sert üst sınır**: sunucu her hâlükârda `MAX_MATCH_MINUTES` (varsayılan 25 dk)
    dolunca kapanır — takılan/kaçak bir container bile sonsuza dek çalışamaz.
 
 Ek olarak istemci maçtan düzgün çıkınca Supabase fonksiyonu Edgegap'e
 `DELETE /stop` gönderip deployment'ı anında durdurur.
 
 > **Belt-and-suspenders:** Edgegap panelinde uygulama sürümüne ayrıca bir
-> "max deployment duration" (örn. 60 dk) koy. Kod zaten 15 dk'da kapanır; bu
+> "max deployment duration" (örn. 60 dk) koy. Kod zaten 25 dk'da kapanır; bu
 > panel ayarı son güvenlik ağıdır.
 
 ---
@@ -85,7 +85,7 @@ supabase secrets set \
   EDGEGAP_APP_NAME="colony-dominion" \
   EDGEGAP_APP_VERSION="v1" \
   GAME_MAX_PLAYERS="10" \
-  GAME_MAX_MATCH_MINUTES="15"
+  GAME_MAX_MATCH_MINUTES="25"
 
 supabase functions deploy matchmaking
 ```
@@ -117,7 +117,7 @@ doğru projeyi gösterdiği sürece "ÇOK OYUNCULU" bu akışı kullanır.
 ### Maliyet doğrulaması
 - Kimse oynamıyorken **Deployments listesi boş** olmalı → 0 maliyet.
 - Bir maç açıp herkes çıkınca deployment ~75 sn içinde kaybolmalı.
-- Hiçbir deployment 15 dk'yı geçmemeli.
+- Hiçbir deployment 25 dk'yı geçmemeli.
 
 ---
 
