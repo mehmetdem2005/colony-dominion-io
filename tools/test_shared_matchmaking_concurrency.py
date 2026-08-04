@@ -28,6 +28,7 @@ MIGRATIONS = (
     "202607260011_matchmaking_lobby_grants.sql",
     "202607270012_matchmaking_compatibility_lock.sql",
     "202607270013_matchmaking_lobby_scale.sql",
+    "202607280014_matchmaking_sweep_skip_locked.sql",
 )
 
 
@@ -240,6 +241,118 @@ def assert_region_and_build_isolation(database_url: str) -> None:
     assert len({base_lobby, other_build_lobby, other_region_lobby}) == 3
 
 
+def seed_stale_backlog(database_url: str, *, rows: int, regions: int) -> None:
+    """A table of lobbies whose containers stopped long ago.
+
+    Every claim retires a bounded slice of these, so this is the state the
+    retirement sweep runs against in production.
+    """
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        connection.execute(
+            """
+            insert into public.match_lobbies (
+                region_id, build_id, status, human_count, target_humans,
+                fill_deadline, created_at
+            )
+            select 'sweep-region-' || (i %% %s), 'sweep-build', 'filling', 1, 10,
+                   now() - interval '20 minutes', now() - interval '30 minutes'
+            from generate_series(1, %s) i
+            """,
+            (regions, rows),
+        )
+
+
+def assert_a_held_sweep_does_not_block_another_region(database_url: str) -> None:
+    """One player joining must never make another player's join wait.
+
+    Every claim retires a bounded slice of the whole table before it reaches its
+    own region's rows, and that slice is the same oldest rows for everybody. So
+    a claim still in flight in one region holds row locks that a claim in an
+    unrelated region then queues behind — and once the sweep's plan is a
+    sequential scan, which is what a busy table between autovacuums gets, the
+    two can take those locks in opposite orders and deadlock outright. A
+    deadlock here is a player being told their match could not be started, for a
+    reason that has nothing to do with them.
+
+    Holding one claim open and timing a second one out is the deterministic form
+    of that: with SKIP LOCKED the second caller steps over the locked rows and
+    finishes, without it there is nothing else it can do but wait.
+    """
+    seed_stale_backlog(database_url, rows=4000, regions=4)
+    holder = psycopg.connect(database_url, autocommit=False)
+    try:
+        holder.execute("set enable_indexscan = off")
+        holder.execute("set enable_bitmapscan = off")
+        holder.execute(
+            "select id from public.claim_match_lobby(%s, %s, %s, %s, %s, %s)",
+            ("sweep-region-0", uuid.uuid4(), "Holder", 10, 20, "sweep-build"),
+        ).fetchone()
+        # holder stays open, so its slice of the sweep is still locked.
+        with psycopg.connect(database_url, autocommit=True) as other:
+            other.execute("set enable_indexscan = off")
+            other.execute("set enable_bitmapscan = off")
+            other.execute("set statement_timeout = '4000ms'")
+            row = other.execute(
+                "select id from public.claim_match_lobby(%s, %s, %s, %s, %s, %s)",
+                ("sweep-region-1", uuid.uuid4(), "Other", 10, 20, "sweep-build"),
+            ).fetchone()
+            assert row is not None, "a second region's claim returned no lobby"
+    finally:
+        holder.rollback()
+        holder.close()
+
+
+def assert_concurrent_claims_survive_a_backlog(database_url: str) -> None:
+    """The same contention under real concurrency, as a smoke test.
+
+    Index scans are disabled so the sweep gets the sequential-scan plan a busy
+    production table gets between autovacuums, which is the plan whose lock
+    order differs between callers.
+    """
+    seed_stale_backlog(database_url, rows=8000, regions=16)
+    workers = 8
+    rounds = 20
+    for _ in range(rounds):
+        barrier = threading.Barrier(workers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [
+                executor.submit(
+                    claim_under_sequential_scan,
+                    database_url,
+                    barrier=barrier,
+                    region=f"sweep-region-{index}",
+                    player_id=uuid.uuid4(),
+                )
+                for index in range(workers)
+            ]
+            for future in futures:
+                # A deadlock surfaces here as psycopg.errors.DeadlockDetected.
+                future.result(timeout=60)
+
+
+def claim_under_sequential_scan(
+    database_url: str,
+    *,
+    barrier: threading.Barrier,
+    region: str,
+    player_id: uuid.UUID,
+) -> str:
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        connection.execute("set enable_indexscan = off")
+        connection.execute("set enable_bitmapscan = off")
+        barrier.wait(timeout=30)
+        row = connection.execute(
+            """
+            select id::text
+            from public.claim_match_lobby(%s, %s, %s, %s, %s, %s)
+            """,
+            (region, player_id, "Sweeper", 10, 20, "sweep-build"),
+        ).fetchone()
+    if row is None:
+        raise AssertionError("claim_match_lobby returned no lobby")
+    return str(row[0])
+
+
 def main() -> int:
     database_url = parse_args().database_url
     install_schema(database_url)
@@ -248,6 +361,8 @@ def main() -> int:
     assert_running_match_accepts_late_joiner(database_url)
     assert_retries_are_idempotent(database_url)
     assert_region_and_build_isolation(database_url)
+    assert_a_held_sweep_does_not_block_another_region(database_url)
+    assert_concurrent_claims_survive_a_backlog(database_url)
     print("PASS shared matchmaking PostgreSQL concurrency contract")
     return 0
 
