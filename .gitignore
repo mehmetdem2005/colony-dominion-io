@@ -11,3 +11,7 @@ config/backend_config.local.json
 # Generated at import time from project.godot's [importer_defaults].
 *.import
 *.uid
+
+# Scratch benches and Python caches never belong in the repo.
+tools/__pycache__/
+tests/tmp_*
