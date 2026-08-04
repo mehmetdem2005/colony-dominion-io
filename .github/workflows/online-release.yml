@@ -85,6 +85,10 @@ jobs:
         env:
           MATCHMAKING_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
         run: python tools/test_shared_matchmaking_concurrency.py
+      - name: Test account deletion contract in PostgreSQL
+        env:
+          MATCHMAKING_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: python tools/test_account_deletion_contract.py
       - name: Lint project GDScript
         shell: bash
         run: |
