@@ -171,12 +171,38 @@ async function rpc(name: string, args: Record<string, unknown>): Promise<unknown
   return await response.json().catch(() => null);
 }
 
-async function patchLobby(id: string, patch: Record<string, unknown>): Promise<void> {
-  await fetch(`${supabaseBase()}/rest/v1/match_lobbies?id=eq.${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    headers: { ...serviceHeaders(), prefer: "return=minimal" },
-    body: JSON.stringify(patch),
-  }).catch(() => undefined);
+// Returns whether the write actually landed. It used to swallow every failure,
+// which is harmless for the endpoint cache and the status flip — both are
+// retried by the next poll — but not for the write that records which
+// deployment a lobby belongs to. See the call site after deployServer.
+async function patchLobby(
+  id: string,
+  patch: Record<string, unknown>,
+  attempts = 1,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const response = await fetch(
+      `${supabaseBase()}/rest/v1/match_lobbies?id=eq.${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        headers: { ...serviceHeaders(), prefer: "return=minimal" },
+        body: JSON.stringify(patch),
+      },
+    ).catch(() => null);
+    if (response?.ok) return true;
+    if (response) {
+      console.error(
+        "patchLobby failed",
+        id,
+        response.status,
+        await response.text().catch(() => ""),
+      );
+    }
+    if (attempt + 1 < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  return false;
 }
 
 // Is this deployment still running? Used before a player is put into a lobby
@@ -563,11 +589,24 @@ async function claimLobbyOnce(
       await patchLobby(lobbyId, { deploy_claim: null });
       return json({ ok: false, error: "deploy_failed" }, 502);
     }
-    await patchLobby(lobbyId, {
+    // This is the write everyone else in the lobby is waiting for. Losing it
+    // silently means the server is up and running with only its deployer on
+    // board, while every other player in the lobby waits out the loop below and
+    // is told matchmaking is unavailable — the friends this lobby exists to
+    // keep together get split, and the deployer never sees a problem.
+    const recorded = await patchLobby(lobbyId, {
       request_id: requestId,
       match_id: matchId,
       server_id: serverId,
-    });
+    }, 3);
+    if (!recorded) {
+      // Hand the claim back and send everyone, this player included, around
+      // again: a retry lands the whole lobby on one healthy server. The
+      // deployment just made is orphaned, and shuts itself down on its own
+      // "no authenticated player joined" watchdog, so nothing keeps billing.
+      await patchLobby(lobbyId, { deploy_claim: null }, 3);
+      return json({ ok: false, error: "matchmaking_unavailable" }, 503);
+    }
   }
 
   // Someone else is deploying for this lobby: wait for the identity to land.

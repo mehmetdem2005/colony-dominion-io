@@ -63,6 +63,15 @@ func _run() -> void:
 	if bool(NetworkProtocol.validate_assignment(future_assignment).get("ok", false)):
 		failures.append("Ranked assignment containing bots was accepted")
 
+	# The resume file must be rewritten often enough to stay valid, and no more
+	# often than that: every rewrite is an encrypted write on the main thread.
+	if (
+		NetworkProtocol.RECONNECT_PERSIST_REFRESH_SECONDS * 3.0
+		> NetworkProtocol.RECONNECT_PERSIST_TTL_SECONDS
+	):
+		failures.append("Resume file refresh leaves too little margin before it expires")
+	if NetworkProtocol.RECONNECT_PERSIST_REFRESH_SECONDS < 5.0:
+		failures.append("Resume file is rewritten more often than its content changes")
 	if NetworkProtocol.ENET_CHANNEL_COUNT < 4:
 		failures.append("Transport must expose four logical channels")
 	if NetworkProtocol.MAX_SNAPSHOT_ENTITIES > 160:

@@ -240,6 +240,12 @@ func connect_to_assignment(
 	_local_team_id = -1
 	_command_sequence = 0
 	_last_ack_sequence = -1
+	# Each match is a fresh server whose tick starts at zero, and the snapshot
+	# guard drops anything older than the last tick seen. The accept RPC resets
+	# this too, but it travels on a different ENet channel from the snapshots,
+	# so without clearing it here the first snapshots of a second match can be
+	# discarded because the first match's clock had run further.
+	_last_server_tick = 0
 	_pending_pings.clear()
 	_ping_samples.clear()
 	_sent_ping_count = 0
@@ -1373,8 +1379,14 @@ func _persist_reconnect_session() -> void:
 			}
 		)
 	)
-	if saved:
-		_last_reconnect_persist_msec = Time.get_ticks_msec()
+	# Back off on failure too. This runs from _client_process, and leaving the
+	# timestamp alone when the write fails means the next frame tries again — so
+	# a device that cannot write at all (no space left, most likely) gets a
+	# failing encrypted write and a warning sixty times a second, for the whole
+	# match, on the main thread.
+	_last_reconnect_persist_msec = Time.get_ticks_msec()
+	if not saved:
+		push_warning("Reconnect session could not be persisted; retrying at the usual interval")
 
 
 func _detect_server_mode() -> bool:

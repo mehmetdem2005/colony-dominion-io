@@ -18,7 +18,12 @@ const PING_TIMEOUT_SECONDS: float = 3.0
 const AUTH_TIMEOUT_SECONDS: float = 10.0
 const RECONNECT_GRACE_SECONDS: float = 60.0
 const RECONNECT_RETRY_SECONDS: float = 1.25
-const RECONNECT_PERSIST_REFRESH_SECONDS: float = 4.0
+## How often the client rewrites its resume file while connected. The file's
+## only changing field is its own expiry, so refreshing far more often than the
+## TTL needs buys nothing and costs an encrypted write on the main thread each
+## time. Keep this well under RECONNECT_PERSIST_TTL_SECONDS — the assertion in
+## online_transport_regression_test holds it to a third.
+const RECONNECT_PERSIST_REFRESH_SECONDS: float = 20.0
 const RECONNECT_PERSIST_TTL_SECONDS: float = 75.0
 ## Remote units are rendered this far in the past so there is always a newer
 ## sample to interpolate toward. The floor is one snapshot interval — below it
