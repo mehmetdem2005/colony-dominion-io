@@ -15,3 +15,6 @@ config/backend_config.local.json
 # Scratch benches and Python caches never belong in the repo.
 tools/__pycache__/
 tests/tmp_*
+
+# Locally generated debug signing key — never commit a keystore.
+colony-debug.keystore
